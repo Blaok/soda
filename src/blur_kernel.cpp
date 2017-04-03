@@ -23,54 +23,19 @@
 #define P(tile_index_dim0,i) ((tile_index_dim0)*((TILE_SIZE_DIM0)-(STENCIL_DIM0)+1)+(i))
 #define Q(tile_index_dim1,j) ((tile_index_dim1)*((TILE_SIZE_DIM1)-(STENCIL_DIM1)+1)+(j))
 
-void load(bool load_flag, ap_uint<BURST_WIDTH> to[TILE_SIZE_BURST], ap_uint<BURST_WIDTH>* from, size_t tile_index)
+void load(bool load_flag, uint16_t to[TILE_SIZE_DIM0*TILE_SIZE_DIM1], uint16_t* from, size_t tile_index)
 {
     if(load_flag)
     {
-        memcpy(to, from + tile_index*TILE_SIZE_BURST, TILE_SIZE_DIM0*TILE_SIZE_DIM1*sizeof(uint16_t));
+        memcpy(to, from + tile_index*TILE_SIZE_DIM0*TILE_SIZE_DIM1, TILE_SIZE_DIM0*TILE_SIZE_DIM1*sizeof(uint16_t));
     }
 }
 
-void unpack(bool unpack_flag, uint16_t to[TILE_SIZE_DIM0*TILE_SIZE_DIM1], ap_uint<BURST_WIDTH> from[TILE_SIZE_BURST])
-{
-    if(unpack_flag)
-    {
-        for(int i = 0; i < TILE_SIZE_BURST; ++i)
-        {
-#pragma HLS pipeline II=1
-            ap_uint<BURST_WIDTH> tmp(from[i]);
-            for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH; ++j)
-            {
-#pragma HLS unroll
-                to[i*BURST_WIDTH/PIXEL_WIDTH+j] = tmp((j+1)*PIXEL_WIDTH-1, j*PIXEL_WIDTH);
-            }
-        }
-    }
-}
-
-void pack(bool pack_flag, ap_uint<BURST_WIDTH> to[TILE_SIZE_BURST], uint16_t from[TILE_SIZE_DIM0*TILE_SIZE_DIM1])
-{
-    if(pack_flag)
-    {
-        for(int i = 0; i < TILE_SIZE_BURST; ++i)
-        {
-#pragma HLS pipeline II=1
-            ap_uint<BURST_WIDTH> tmp;
-            for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH; ++j)
-            {
-#pragma HLS unroll
-                tmp((j+1)*PIXEL_WIDTH-1, j*PIXEL_WIDTH) = from[i*BURST_WIDTH/PIXEL_WIDTH+j];
-            }
-            to[i] = tmp;
-        }
-    }
-}
-
-void store(bool store_flag, ap_uint<BURST_WIDTH>* to, ap_uint<BURST_WIDTH> from[TILE_SIZE_BURST], size_t tile_index)
+void store(bool store_flag, uint16_t* to, uint16_t from[TILE_SIZE_DIM0*TILE_SIZE_DIM1], size_t tile_index)
 {
     if(store_flag)
     {
-        memcpy(to + tile_index*TILE_SIZE_BURST, from, TILE_SIZE_DIM0*TILE_SIZE_DIM1*sizeof(uint16_t));
+        memcpy(to + tile_index*TILE_SIZE_DIM0*TILE_SIZE_DIM1, from, TILE_SIZE_DIM0*TILE_SIZE_DIM1*sizeof(uint16_t));
     }
 }
 
@@ -163,10 +128,10 @@ void compute(bool compute_flag, uint16_t output[TILE_SIZE_DIM0*TILE_SIZE_DIM1], 
 extern "C"
 {
 
-void blur_kernel(size_t tile_num_dim0_ptr[1], size_t tile_num_dim1_ptr[1], size_t var_blur_y_extent_0_ptr[1], size_t var_blur_y_extent_1_ptr[1], size_t var_blur_y_min_0_ptr[1], size_t var_blur_y_min_1_ptr[1], ap_uint<BURST_WIDTH>* var_blur_y, ap_uint<BURST_WIDTH>* var_p0)
+void blur_kernel(size_t tile_num_dim0_ptr[1], size_t tile_num_dim1_ptr[1], size_t var_blur_y_extent_0_ptr[1], size_t var_blur_y_extent_1_ptr[1], size_t var_blur_y_min_0_ptr[1], size_t var_blur_y_min_1_ptr[1], uint16_t* var_blur_y, uint16_t* var_p0)
 {
-#pragma HLS INTERFACE m_axi port=var_blur_y offset=slave depth=512 bundle=gmem1
-#pragma HLS INTERFACE m_axi port=var_p0 offset=slave depth=512 bundle=gmem2
+#pragma HLS INTERFACE m_axi port=var_blur_y offset=slave depth=8192 bundle=gmem1
+#pragma HLS INTERFACE m_axi port=var_p0 offset=slave depth=8192 bundle=gmem2
 
 #pragma HLS INTERFACE s_axilite port=tile_num_dim0_ptr bundle=control
 #pragma HLS INTERFACE s_axilite port=tile_num_dim1_ptr bundle=control
@@ -186,10 +151,6 @@ void blur_kernel(size_t tile_num_dim0_ptr[1], size_t tile_num_dim1_ptr[1], size_
     size_t var_blur_y_min_1 = var_blur_y_min_1_ptr[0];
     printf("var_blur_y_min_0 = %lu, var_blur_y_min_1 = %lu\n", var_blur_y_min_0, var_blur_y_min_1);
 
-    ap_uint<BURST_WIDTH>  load_0[TILE_SIZE_BURST];
-    ap_uint<BURST_WIDTH>  load_1[TILE_SIZE_BURST];
-    ap_uint<BURST_WIDTH> store_0[TILE_SIZE_BURST];
-    ap_uint<BURST_WIDTH> store_1[TILE_SIZE_BURST];
     uint16_t  input_0[TILE_SIZE_DIM0*TILE_SIZE_DIM1];
     uint16_t  input_1[TILE_SIZE_DIM0*TILE_SIZE_DIM1];
     uint16_t output_0[TILE_SIZE_DIM0*TILE_SIZE_DIM1];
@@ -202,33 +163,25 @@ void blur_kernel(size_t tile_num_dim0_ptr[1], size_t tile_num_dim1_ptr[1], size_
     int total_tile_num = tile_num_dim0*tile_num_dim1;
     int tile_index;
     bool    load_flag;
-    bool  unpack_flag;
     bool compute_flag;
-    bool    pack_flag;
     bool   store_flag;
 
-    for (tile_index = 0; tile_index < total_tile_num+4; ++tile_index)
+    for (tile_index = 0; tile_index < total_tile_num+2; ++tile_index)
     {
            load_flag =                   tile_index < total_tile_num;
-         unpack_flag = tile_index > 0 && tile_index < total_tile_num+1;
-        compute_flag = tile_index > 1 && tile_index < total_tile_num+2;
-           pack_flag = tile_index > 2 && tile_index < total_tile_num+3;
-          store_flag = tile_index > 3;
+        compute_flag = tile_index > 0 && tile_index < total_tile_num+1;
+          store_flag = tile_index > 1;
         if(tile_index%2==0)
         {
-            load(load_flag, load_0, var_p0, tile_index);
-            unpack(unpack_flag, input_1, load_1);
-            compute(compute_flag, output_0, input_0, tile_index-2, tile_num_dim0, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1);
-            pack(pack_flag, store_1, output_1);
-            store(store_flag, var_blur_y, store_0, tile_index-4);
+            load(load_flag, input_0, var_p0, tile_index);
+            compute(compute_flag, output_1, input_1, tile_index-1, tile_num_dim0, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1);
+            store(store_flag, var_blur_y, output_0, tile_index-2);
         }
         else
         {
-            load(load_flag, load_1, var_p0, tile_index);
-            unpack(unpack_flag, input_0, load_0);
-            compute(compute_flag, output_1, input_1, tile_index-2, tile_num_dim0, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1);
-            pack(pack_flag, store_0, output_0);
-            store(store_flag, var_blur_y, store_1, tile_index-4);
+            load(load_flag, input_1, var_p0, tile_index);
+            compute(compute_flag, output_0, input_0, tile_index-1, tile_num_dim0, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1);
+            store(store_flag, var_blur_y, output_1, tile_index-2);
         }
     }
 }
