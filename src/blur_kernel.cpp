@@ -61,11 +61,11 @@ void compute(bool compute_flag, uint16_t output[TILE_SIZE_DIM0*TILE_SIZE_DIM1], 
                     stencil_buf[STENCIL_DISTANCE+stencil_index] = input[input_index*UNROLL_FACTOR+stencil_index];
                 }
             }
-            if(input_index >= STENCIL_DISTANCE/UNROLL_FACTOR)
+            for(size_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)
             {
-                for(size_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)
-                {
 #pragma HLS unroll
+                if(input_index >= STENCIL_DISTANCE/UNROLL_FACTOR)
+                {
                     size_t output_index = (input_index-STENCIL_DISTANCE/UNROLL_FACTOR)*UNROLL_FACTOR+unroll_index-STENCIL_DISTANCE%UNROLL_FACTOR;
                     if((input_index-STENCIL_DISTANCE/UNROLL_FACTOR)*UNROLL_FACTOR+unroll_index >= STENCIL_DISTANCE%UNROLL_FACTOR &&
                         output_index < TILE_SIZE_DIM0*TILE_SIZE_DIM1)
@@ -113,8 +113,8 @@ void compute(bool compute_flag, uint16_t output[TILE_SIZE_DIM0*TILE_SIZE_DIM1], 
                             output[output_index] = assign_128;
                         }
                     }
-                } // for output_index
-            } // if input_index >= STENCIL_DISTANCE
+                } // if input_index >= STENCIL_DISTANCE
+            } // for output_index
             for(size_t stencil_index = 0; stencil_index < STENCIL_DISTANCE; ++stencil_index)
             {
 #pragma HLS unroll
