@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw
+.PHONY: csim cosim hw mktemp
 
 CSIM_XCLBIN = blur-csim.xclbin
 COSIM_XCLBIN = blur-cosim.xclbin
@@ -13,6 +13,7 @@ SRC = src
 OBJ = obj
 BIN = bin
 BIT = bit
+RPT = rpt
 
 CXX ?= g++
 CLCXX ?= xocc
@@ -25,10 +26,10 @@ HOST_CFLAGS = -g -Wall -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/incl
 HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0
 
 XDEVICE = xilinx:adm-pcie-7v3:1ddr:3.0
-HOST_CFLAGS += -DTARGET_DEVICE=\"${XDEVICE}\"
+HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
 
-CLCXX_OPT = $(CLCXX_OPT_LEVEL) ${DEVICE_REPO_OPT} --xdevice ${XDEVICE} ${KERNEL_DEFS} ${KERNEL_INCS}
-CLCXX_OPT += --kernel ${KERNEL_NAME}
+CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --xdevice $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
+CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
@@ -42,6 +43,9 @@ cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
 	$(WITH_SDACCEL) $^
+
+mktemp:
+	@TMP=$$(mktemp -d);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile $${TMP};echo $${TMP}
 
 $(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%.o)
 	@mkdir -p $(BIN)
@@ -57,14 +61,21 @@ $(OBJ)/%.o: $(SRC)/%.cpp
 $(BIT)/$(CSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	@mkdir -p $(BIT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_CSIM_OPT) $(CLCXX_OPT) -o $@ $<
+	@$(RM) -rf .Xil
 
 $(BIT)/$(COSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	@mkdir -p $(BIT)
+	@mkdir -p $(RPT)
+	@ln -sf ../_xocc_$(KERNEL_NAME)_$(COSIM_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/cosim
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
+	@$(RM) -rf .Xil
 
 $(BIT)/$(HW_XCLBIN): $(SRC)/$(KERNEL_SRCS)
 	@mkdir -p $(BIT)
+	@mkdir -p $(RPT)
+	@ln -sf ../_xocc_$(KERNEL_NAME)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/hw
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -o $@ $<
+	@$(RM) -rf .Xil
 
 $(BIN)/emconfig.json:
-	$(WITH_SDACCEL) emconfigutil --xdevice ${XDEVICE} ${DEVICE_REPO_OPT} --od .
+	cd $(BIN);$(WITH_SDACCEL) emconfigutil --xdevice $(XDEVICE) $(DEVICE_REPO_OPT) --od .
