@@ -45,7 +45,7 @@ hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
 	$(WITH_SDACCEL) $^
 
 mktemp:
-	@TMP=$$(mktemp -d);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile $${TMP};echo $${TMP}
+	@TMP=$$(mktemp -d);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} -i\nrm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
 $(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%.o)
 	@mkdir -p $(BIN)
