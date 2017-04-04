@@ -316,8 +316,8 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         }
 
         // allocate buffer for tiled input/output
-        size_t tile_num_dim0 = (var_p0_extent_0+TILE_SIZE_DIM0-STENCIL_DIM0)/(TILE_SIZE_DIM0-STENCIL_DIM0+1);
-        size_t tile_num_dim1 = (var_p0_extent_1+TILE_SIZE_DIM1-STENCIL_DIM1)/(TILE_SIZE_DIM1-STENCIL_DIM1+1);
+        int32_t tile_num_dim0 = (var_p0_extent_0+TILE_SIZE_DIM0-STENCIL_DIM0)/(TILE_SIZE_DIM0-STENCIL_DIM0+1);
+        int32_t tile_num_dim1 = (var_p0_extent_1+TILE_SIZE_DIM1-STENCIL_DIM1)/(TILE_SIZE_DIM1-STENCIL_DIM1+1);
         uint16_t* var_blur_y_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
         uint16_t* var_p0_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
 
@@ -549,21 +549,14 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         printf("host: var_blur_y_extent_0 = %llu, var_blur_y_extent_1 = %llu\n", var_blur_y_extent_0, var_blur_y_extent_1);
         printf("host: var_blur_y_min_0 = %llu, var_blur_y_min_1 = %llu\n", var_blur_y_min_0, var_blur_y_min_1);
 
-        size_t params[6];
-        params[0] = tile_num_dim0;
-        params[1] = tile_num_dim1;
-        params[2] = var_blur_y_extent_0;
-        params[3] = var_blur_y_extent_1;
-        params[4] = var_blur_y_min_0;
-        params[5] = var_blur_y_min_1;
-        err |= clSetKernelArg(kernel, 0, sizeof(size_t), params+0);
-        err |= clSetKernelArg(kernel, 1, sizeof(size_t), params+1);
-        err |= clSetKernelArg(kernel, 2, sizeof(size_t), params+2);
-        err |= clSetKernelArg(kernel, 3, sizeof(size_t), params+3);
-        err |= clSetKernelArg(kernel, 4, sizeof(size_t), params+4);
-        err |= clSetKernelArg(kernel, 5, sizeof(size_t), params+5);
-        err |= clSetKernelArg(kernel, 6, sizeof(cl_mem), &var_blur_y_cl);
-        err |= clSetKernelArg(kernel, 7, sizeof(cl_mem), &var_p0_cl);
+        err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &var_blur_y_cl);
+        err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &var_p0_cl);
+        err |= clSetKernelArg(kernel, 2, sizeof(tile_num_dim0), &tile_num_dim0);
+        err |= clSetKernelArg(kernel, 3, sizeof(tile_num_dim1), &tile_num_dim1);
+        err |= clSetKernelArg(kernel, 4, sizeof(var_blur_y_extent_0), &var_blur_y_extent_0);
+        err |= clSetKernelArg(kernel, 5, sizeof(var_blur_y_extent_1), &var_blur_y_extent_1);
+        err |= clSetKernelArg(kernel, 6, sizeof(var_blur_y_min_0), &var_blur_y_min_0);
+        err |= clSetKernelArg(kernel, 7, sizeof(var_blur_y_min_1), &var_blur_y_min_1);
         if (err != CL_SUCCESS)
         {
             printf("Error: Failed to set kernel arguments! %d\n", err);
