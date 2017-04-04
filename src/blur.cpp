@@ -564,11 +564,17 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
             exit(EXIT_FAILURE);
         }
 
+        cl_event execute;
+        for(int i = 0; i<100; ++i)
+        {
+            err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
+            clWaitForEvents(1, &execute);
+        }
+
         // Execute the kernel over the entire range of our 1d input data set
         // using the maximum number of work group items for this device
         //
         timespec execute_begin, execute_end;
-        cl_event execute;
         clock_gettime(CLOCK_REALTIME, &execute_begin);
         err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
         if (err)
