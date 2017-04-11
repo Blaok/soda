@@ -1,19 +1,24 @@
 .PHONY: csim cosim hw mktemp
 
-CSIM_XCLBIN = blur-csim.xclbin
-COSIM_XCLBIN = blur-cosim.xclbin
-HW_XCLBIN = blur-hw.xclbin
+CSIM_XCLBIN ?= curved-csim.xclbin
+COSIM_XCLBIN ?= curved-cosim.xclbin
+HW_XCLBIN ?= curved-hw.xclbin
 
-KERNEL_SRCS = blur_kernel.cpp
-KERNEL_NAME = blur_kernel
-HOST_SRCS = blur.cpp halide_run.cpp
-HOST_BIN = blur
+KERNEL_SRCS ?= curved_kernel.cpp
+KERNEL_NAME ?= curved_kernel
+HOST_SRCS ?= process.cpp curved.cpp
+HOST_ARGS ?= ~/git/Halide/apps/images/bayer_raw.png 3700 2.0 50 1 out.png
+HOST_BIN ?= curved
 
-SRC = src
-OBJ = obj
-BIN = bin
-BIT = bit
-RPT = rpt
+TILE_SIZE_DIM0 ?= 128
+TILE_SIZE_DIM1 ?= 128
+UNROLL_FACTOR ?= 32
+
+SRC ?= src
+OBJ ?= obj
+BIN ?= bin
+BIT ?= bit
+RPT ?= rpt
 
 CXX ?= g++
 CLCXX ?= xocc
@@ -22,27 +27,29 @@ SDA_VER ?= 2016.3
 XILINX_SDACCEL ?= /opt/tools/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
 
-HOST_CFLAGS = -g -Wall -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/include/1_2
-HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0
+HOST_CFLAGS = -std=c++0x -g -Wall -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/include/1_2
+HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0 -ldl -lpthread -lz $(shell libpng-config --ldflags) #~/git/Halide/apps/camera_pipe/curved.a
 
 XDEVICE = xilinx:adm-pcie-7v3:1ddr:3.0
 HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
+HOST_CFLAGS += -DTILE_SIZE_DIM0=$(TILE_SIZE_DIM0) -DTILE_SIZE_DIM1=$(TILE_SIZE_DIM1)
 
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --xdevice $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g
+CLCXX_OPT += -DTILE_SIZE_DIM0=$(TILE_SIZE_DIM0) -DTILE_SIZE_DIM1=$(TILE_SIZE_DIM1) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
 
 csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN)
-	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^
+	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
-	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^
+	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
-	$(WITH_SDACCEL) $^
+	$(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 mktemp:
 	@TMP=$$(mktemp -d);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} -i && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
