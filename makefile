@@ -73,14 +73,14 @@ $(BIT)/$(CSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 $(BIT)/$(COSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
-	@ln -sf ../_xocc_$(KERNEL_NAME)_$(COSIM_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/cosim
+	@ln -Tsf ../_xocc_$(KERNEL_NAME)_$(COSIM_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/cosim
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
 	@$(RM) -rf .Xil
 
 $(BIT)/$(HW_XCLBIN): $(SRC)/$(KERNEL_SRCS)
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
-	@ln -sf ../_xocc_$(KERNEL_NAME)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/hw
+	@ln -Tsf ../_xocc_$(KERNEL_NAME)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/hw
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -o $@ $<
 	@$(RM) -rf .Xil
 
