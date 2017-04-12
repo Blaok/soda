@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     }
 
     fprintf(stderr, "input: %s\n", argc < 2 ? "~/git/Halide/apps/images/bayer_raw.png" : argv[2]);
-    Image<uint16_t> input = load_imageargc < 2 ? "~/git/Halide/apps/images/bayer_raw.png" : (argv[2]);
+    Image<uint16_t> input = load_image(argc < 2 ? "~/git/Halide/apps/images/bayer_raw.png" : argv[2]);
     fprintf(stderr, "       %d %d\n", input.width(), input.height());
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
@@ -44,7 +44,7 @@ int main(int argc, char **argv)
     float color_temp = atof( argc < 2 ? "3700" : argv[3]);
     float gamma = atof(argc < 2 ? "2.0" : argv[4]);
     float contrast = atof( argc < 2 ? "50" : argv[5]);
-    int timing_iterations = atoi( argc < 2 ? 5 : argv[6]);
+    int timing_iterations = atoi( argc < 2 ? "5" : argv[6]);
     int blackLevel = 25;
     int whiteLevel = 1023;
 
