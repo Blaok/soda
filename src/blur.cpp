@@ -569,10 +569,18 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         }
 
         cl_event execute;
-        for(int i = 0; i<100; ++i)
+        if(getenv("XCL_EMULATION_MODE")==NULL)
         {
-            err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
-            clWaitForEvents(1, &execute);
+            printf("Info: FPGA warm up.\n");
+            for(int i = 0; i<100; ++i)
+            {
+                err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
+                clWaitForEvents(1, &execute);
+            }
+        }
+        else
+        {
+            printf("Info: Emulation mode.\n");
         }
 
         // Execute the kernel over the entire range of our 1d input data set
