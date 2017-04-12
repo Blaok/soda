@@ -17,8 +17,12 @@
 
 #include "blur.h"
 
+#ifndef TILE_SIZE_DIM0
 #define TILE_SIZE_DIM0 (128)
+#endif//TILE_SIZE_DIM0
+#ifndef TILE_SIZE_DIM1
 #define TILE_SIZE_DIM1 (128)
+#endif//TILE_SIZE_DIM1
 #define STENCIL_DIM0 (3)
 #define STENCIL_DIM1 (3)
 

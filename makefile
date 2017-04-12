@@ -1,14 +1,14 @@
 .PHONY: csim cosim hw mktemp
 
-CSIM_XCLBIN ?= curved-csim.xclbin
-COSIM_XCLBIN ?= curved-cosim.xclbin
-HW_XCLBIN ?= curved-hw.xclbin
+CSIM_XCLBIN ?= blur-csim.xclbin
+COSIM_XCLBIN ?= blur-cosim.xclbin
+HW_XCLBIN ?= blur-hw.xclbin
 
-KERNEL_SRCS ?= curved_kernel.cpp
-KERNEL_NAME ?= curved_kernel
-HOST_SRCS ?= process.cpp curved.cpp
-HOST_ARGS ?= ~/git/Halide/apps/images/bayer_raw.png 3700 2.0 50 1 out.png
-HOST_BIN ?= curved
+KERNEL_SRCS ?= blur_kernel.cpp
+KERNEL_NAME ?= blur_kernel
+HOST_SRCS ?= blur_run.cpp blur.cpp
+HOST_ARGS ?=
+HOST_BIN ?= blur
 
 TILE_SIZE_DIM0 ?= 128
 TILE_SIZE_DIM1 ?= 128
