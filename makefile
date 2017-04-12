@@ -28,7 +28,7 @@ XILINX_SDACCEL ?= /opt/tools/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
 
 HOST_CFLAGS = -std=c++0x -g -Wall -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/include/1_2
-HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0 -ldl -lpthread -lz $(shell libpng-config --ldflags) #~/git/Halide/apps/camera_pipe/curved.a
+HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0 -ldl -lpthread -lz $(shell libpng-config --ldflags)
 
 XDEVICE = xilinx:adm-pcie-7v3:1ddr:3.0
 HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
