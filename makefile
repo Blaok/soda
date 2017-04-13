@@ -85,4 +85,5 @@ $(BIT)/$(HW_XCLBIN): $(SRC)/$(KERNEL_SRCS)
 	@$(RM) -rf .Xil
 
 $(BIN)/emconfig.json:
+	@mkdir -p $(BIN)
 	cd $(BIN);$(WITH_SDACCEL) emconfigutil --xdevice $(XDEVICE) $(DEVICE_REPO_OPT) --od .
