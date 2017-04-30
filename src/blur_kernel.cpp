@@ -72,7 +72,7 @@ void compute(bool compute_flag, uint16_t output[TILE_SIZE_DIM0*TILE_SIZE_DIM1], 
         int32_t tile_index_dim1 = TILE_INDEX_DIM1(tile_index);
 
         uint16_t stencil_buf[STENCIL_DISTANCE+UNROLL_FACTOR];
-#pragma HLS array_partition variable=stencil_buf cyclic factor=UNROLL_FACTOR dim=1
+#pragma HLS array_partition variable=stencil_buf complete dim=1
 
         // produce blur_y
         for (int32_t input_index = 0; input_index < (STENCIL_DISTANCE+TILE_SIZE_DIM0*TILE_SIZE_DIM1+UNROLL_FACTOR-1)/UNROLL_FACTOR; ++input_index)
@@ -172,10 +172,10 @@ void blur_kernel(ap_uint<BURST_WIDTH>* var_blur_y, ap_uint<BURST_WIDTH>* var_p0,
     uint16_t  input_1[TILE_SIZE_DIM0*TILE_SIZE_DIM1];
     uint16_t output_0[TILE_SIZE_DIM0*TILE_SIZE_DIM1];
     uint16_t output_1[TILE_SIZE_DIM0*TILE_SIZE_DIM1];
-#pragma HLS array_partition variable=input_0  cyclic factor=UNROLL_FACTOR dim=1
-#pragma HLS array_partition variable=input_1  cyclic factor=UNROLL_FACTOR dim=1
-#pragma HLS array_partition variable=output_0 cyclic factor=UNROLL_FACTOR dim=1
-#pragma HLS array_partition variable=output_1 cyclic factor=UNROLL_FACTOR dim=1
+#pragma HLS array_partition variable=input_0 cyclic factor=KI dim=1
+#pragma HLS array_partition variable=input_1 cyclic factor=KI dim=1
+#pragma HLS array_partition variable=output_0 cyclic factor=KO dim=1
+#pragma HLS array_partition variable=output_1 cyclic factor=KO dim=1
 
     int32_t total_tile_num = tile_num_dim0*tile_num_dim1;
     int32_t tile_index;

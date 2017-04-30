@@ -37,7 +37,7 @@
 #define TILE_INDEX_DIM0(tile_index) ((tile_index)%(tile_num_dim0))
 #define TILE_INDEX_DIM1(tile_index) ((tile_index)/(tile_num_dim0))
 #define  INPUT_TILE_SIZE_BURST ((TILE_SIZE_DIM0)*(TILE_SIZE_DIM1)/((BURST_WIDTH)/( INPUT_PIXEL_WIDTH)))
-#define OUTPUT_TILE_SIZE_BURST ((TILE_SIZE_DIM0)*(TILE_SIZE_DIM1)/((BURST_WIDTH)/(OUTPUT_PIXEL_WIDTH)/3))
+#define OUTPUT_TILE_SIZE_BURST ((TILE_SIZE_DIM0)*(TILE_SIZE_DIM1)/((BURST_WIDTH)/(OUTPUT_PIXEL_WIDTH)))
 #define P(tile_index_dim0,i) ((tile_index_dim0)*((TILE_SIZE_DIM0)-(STENCIL_DIM0)+1)+(i))
 #define Q(tile_index_dim1,j) ((tile_index_dim1)*((TILE_SIZE_DIM1)-(STENCIL_DIM1)+1)+(j))
 
@@ -65,18 +65,16 @@ void store(bool store_flag, ap_uint<BURST_WIDTH>* to, uint8_t from[3][TILE_SIZE_
 {
     if(store_flag)
     {
-        for(int i = 0; i < OUTPUT_TILE_SIZE_BURST; ++i)
+        for(int i = 0; i < OUTPUT_TILE_SIZE_BURST*3; ++i)
         {
 #pragma HLS pipeline II=1
             ap_uint<BURST_WIDTH> tmp;
-            for(int j = 0; j < BURST_WIDTH/OUTPUT_PIXEL_WIDTH/3; ++j)
+            for(int j = 0; j < BURST_WIDTH/OUTPUT_PIXEL_WIDTH; ++j)
             {
 #pragma HLS unroll
-                tmp((j*3+1)*OUTPUT_PIXEL_WIDTH-1, (j*3+0)*OUTPUT_PIXEL_WIDTH) = from[0][i*(BURST_WIDTH/OUTPUT_PIXEL_WIDTH/3)+j];
-                tmp((j*3+2)*OUTPUT_PIXEL_WIDTH-1, (j*3+1)*OUTPUT_PIXEL_WIDTH) = from[1][i*(BURST_WIDTH/OUTPUT_PIXEL_WIDTH/3)+j];
-                tmp((j*3+3)*OUTPUT_PIXEL_WIDTH-1, (j*3+2)*OUTPUT_PIXEL_WIDTH) = from[2][i*(BURST_WIDTH/OUTPUT_PIXEL_WIDTH/3)+j];
+                tmp((j+1)*OUTPUT_PIXEL_WIDTH-1, j*OUTPUT_PIXEL_WIDTH) = from[i/OUTPUT_TILE_SIZE_BURST][(i%OUTPUT_TILE_SIZE_BURST)*(BURST_WIDTH/OUTPUT_PIXEL_WIDTH)+j];
             }
-            to[i+tile_index*OUTPUT_TILE_SIZE_BURST] = tmp;
+            to[i+tile_index*OUTPUT_TILE_SIZE_BURST*3] = tmp;
         }
     }
 }
@@ -1246,8 +1244,8 @@ extern "C"
 
 void curved_kernel(volatile int16_t* var_matrix, volatile uint8_t* var_curve, ap_uint<BURST_WIDTH>* var_processed, ap_uint<BURST_WIDTH>* var_input, int32_t tile_num_dim0, int32_t tile_num_dim1, int32_t var_processed_extent_0, int32_t var_processed_extent_1, int32_t var_processed_min_0, int32_t var_processed_min_1)
 {
-#pragma HLS INTERFACE m_axi port=var_processed offset=slave depth=202752 bundle=gmem1 latency=120
-#pragma HLS INTERFACE m_axi port=var_input offset=slave depth=304128 bundle=gmem2 latency=120
+#pragma HLS INTERFACE m_axi port=var_processed offset=slave depth=351000 bundle=gmem1 latency=120
+#pragma HLS INTERFACE m_axi port=var_input offset=slave depth=115200 bundle=gmem2 latency=120
 #pragma HLS INTERFACE m_axi port=var_matrix offset=slave depth=12 bundle=gmem3 latency=120
 #pragma HLS INTERFACE m_axi port=var_curve offset=slave depth=1024 bundle=gmem3 latency=120
 
@@ -1267,12 +1265,12 @@ void curved_kernel(volatile int16_t* var_matrix, volatile uint8_t* var_curve, ap
     uint16_t  input_1[TILE_SIZE_DIM0*TILE_SIZE_DIM1];
     uint8_t output_0[3][TILE_SIZE_DIM0*TILE_SIZE_DIM1];
     uint8_t output_1[3][TILE_SIZE_DIM0*TILE_SIZE_DIM1];
-#pragma HLS array_partition variable=input_0  cyclic factor=UNROLL_FACTOR
-#pragma HLS array_partition variable=input_1  cyclic factor=UNROLL_FACTOR
+#pragma HLS array_partition variable=input_0 cyclic factor=KI
+#pragma HLS array_partition variable=input_1 cyclic factor=KI
 #pragma HLS array_partition variable=output_0 complete dim=1
 #pragma HLS array_partition variable=output_1 complete dim=1
-#pragma HLS array_partition variable=output_0 cyclic factor=UNROLL_FACTOR dim=2
-#pragma HLS array_partition variable=output_1 cyclic factor=UNROLL_FACTOR dim=2
+#pragma HLS array_partition variable=output_0 cyclic factor=KO dim=2
+#pragma HLS array_partition variable=output_1 cyclic factor=KO dim=2
 
     int32_t total_tile_num = tile_num_dim0*tile_num_dim1;
     int32_t tile_index;

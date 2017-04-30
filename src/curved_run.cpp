@@ -14,12 +14,12 @@ int main(int argc, char **argv)
     if (argc < 2)
     {
         printf("Usage:   %s xclbin [raw.png color_temp gamma contrast timing_iterations output.png]\n"
-               "Default: %s xclbin ~/git/Halide/apps/images/bayer_raw.png 3700 2.0 50 5 out.png\n", argv[0], argv[0]);
+               "Default: %s xclbin ~/git/Halide/apps/images/bayer_raw.png 3700 2.0 50 1 out.png\n", argv[0], argv[0]);
         return 0;
     }
 
-    fprintf(stderr, "input: %s\n", argc < 2 ? "~/git/Halide/apps/images/bayer_raw.png" : argv[2]);
-    Image<uint16_t> input = load_image(argc < 2 ? "~/git/Halide/apps/images/bayer_raw.png" : argv[2]);
+    fprintf(stderr, "input: %s\n", argc < 3 ? "/curr/blaok/git/Halide/apps/images/bayer_raw.png" : argv[2]);
+    Image<uint16_t> input = load_image(argc < 3 ? "/curr/blaok/git/Halide/apps/images/bayer_raw.png" : argv[2]);
     fprintf(stderr, "       %d %d\n", input.width(), input.height());
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
@@ -41,10 +41,10 @@ int main(int argc, char **argv)
         }
     }
 
-    float color_temp = atof( argc < 2 ? "3700" : argv[3]);
-    float gamma = atof(argc < 2 ? "2.0" : argv[4]);
-    float contrast = atof( argc < 2 ? "50" : argv[5]);
-    int timing_iterations = atoi( argc < 2 ? "5" : argv[6]);
+    float color_temp = atof( argc < 4 ? "3700" : argv[3]);
+    float gamma = atof(argc < 5 ? "2.0" : argv[4]);
+    float contrast = atof( argc < 6 ? "50" : argv[5]);
+    int timing_iterations = atoi( argc < 7 ? "1" : argv[6]);
     int blackLevel = 25;
     int whiteLevel = 1023;
 
@@ -57,8 +57,8 @@ int main(int argc, char **argv)
                output, argv[1]);
     }
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
-    fprintf(stderr, "output: %s\n", argc < 2 ? "out.png" : argv[7]);
-    save_image(output, argc < 2 ? "out.png" : argv[7]);
+    fprintf(stderr, "output: %s\n", argc < 8 ? "out.png" : argv[7]);
+    save_image(output, argc < 8 ? "out.png" : argv[7]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
     return 0;

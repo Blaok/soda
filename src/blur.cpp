@@ -320,8 +320,8 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         }
 
         // allocate buffer for tiled input/output
-        int32_t tile_num_dim0 = (var_p0_extent_0+TILE_SIZE_DIM0-STENCIL_DIM0)/(TILE_SIZE_DIM0-STENCIL_DIM0+1);
-        int32_t tile_num_dim1 = (var_p0_extent_1+TILE_SIZE_DIM1-STENCIL_DIM1)/(TILE_SIZE_DIM1-STENCIL_DIM1+1);
+        int32_t tile_num_dim0 = (var_blur_y_extent_0+TILE_SIZE_DIM0-STENCIL_DIM0)/(TILE_SIZE_DIM0-STENCIL_DIM0+1);
+        int32_t tile_num_dim1 = (var_blur_y_extent_1+TILE_SIZE_DIM1-STENCIL_DIM1)/(TILE_SIZE_DIM1-STENCIL_DIM1+1);
         uint16_t* var_blur_y_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
         uint16_t* var_p0_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
 
@@ -620,6 +620,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         printf("PCIe write time: %lf us\n", elapsed_time);
         elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;
         printf("Kernel run time: %lf us\n", elapsed_time);
+        printf("Throughput: %lf GB/s\n", var_blur_y_extent_0*var_blur_y_extent_1*var_blur_y_elem_size/elapsed_time/1e3);
         elapsed_time = (double(read_end.tv_sec-read_begin.tv_sec)+(read_end.tv_nsec-read_begin.tv_nsec)/1e9)*1e6;
         printf("PCIe read  time: %lf us\n", elapsed_time);
         elapsed_time = (double(read_end.tv_sec-write_begin.tv_sec)+(read_end.tv_nsec-write_begin.tv_nsec)/1e9)*1e6;

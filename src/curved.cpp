@@ -403,7 +403,7 @@ static int curved_wrapped(float var_color_temp, float var_gamma, float var_contr
         // allocate buffer for tiled input/output
         int32_t tile_num_dim0 = (var_processed_extent_0+(TILE_SIZE_DIM0)-(STENCIL_DIM0))/((TILE_SIZE_DIM0)-(STENCIL_DIM0)+1);
         int32_t tile_num_dim1 = (var_processed_extent_1+(TILE_SIZE_DIM1)-(STENCIL_DIM1))/((TILE_SIZE_DIM1)-(STENCIL_DIM1)+1);
-        uint8_t* var_processed_buf = new uint8_t[tile_num_dim0*tile_num_dim1*((TILE_SIZE_DIM0)*(TILE_SIZE_DIM1)/21*64)/*channels*/];
+        uint8_t* var_processed_buf = new uint8_t[tile_num_dim0*tile_num_dim1*((TILE_SIZE_DIM0)*(TILE_SIZE_DIM1)*3)/*channels*/];
         uint16_t* var_input_buf = new uint16_t[tile_num_dim0*tile_num_dim1*(TILE_SIZE_DIM0)*(TILE_SIZE_DIM1)];
 
         // tiling
@@ -685,7 +685,7 @@ static int curved_wrapped(float var_color_temp, float var_gamma, float var_contr
         var_matrix_cl    = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * 12, NULL, NULL);
         var_curve_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint8_t) * 1024, NULL, NULL);
         var_input_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, NULL, NULL);
-        var_processed_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint8_t) * tile_num_dim0*tile_num_dim1*(TILE_SIZE_DIM0*TILE_SIZE_DIM1/21*64), NULL, NULL);
+        var_processed_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint8_t) * tile_num_dim0*tile_num_dim1*(TILE_SIZE_DIM0*TILE_SIZE_DIM1*3), NULL, NULL);
         if (!var_input_cl || !var_processed_cl)
         {
             printf("Error: Failed to allocate device memory!\n");
@@ -768,7 +768,7 @@ static int curved_wrapped(float var_color_temp, float var_gamma, float var_contr
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer( commands, var_processed_cl, CL_TRUE, 0, sizeof(uint8_t) * tile_num_dim0*tile_num_dim1*(TILE_SIZE_DIM0*TILE_SIZE_DIM1/21*64), var_processed_buf, 0, NULL, &readevent );  
+        err = clEnqueueReadBuffer( commands, var_processed_cl, CL_TRUE, 0, sizeof(uint8_t) * tile_num_dim0*tile_num_dim1*(TILE_SIZE_DIM0*TILE_SIZE_DIM1*3), var_processed_buf, 0, NULL, &readevent );  
         if (err != CL_SUCCESS)
         {
             printf("Error: Failed to read output array! %d\n", err);
@@ -819,7 +819,7 @@ static int curved_wrapped(float var_color_temp, float var_gamma, float var_contr
                             uint32_t p = tile_index_dim0*((TILE_SIZE_DIM0)-(STENCIL_DIM0)+1)+i;
                             uint32_t q = tile_index_dim1*((TILE_SIZE_DIM1)-(STENCIL_DIM1)+1)+j;
                             uint32_t r = k;
-                            uint32_t tiled_offset = (tile_index_dim1*tile_num_dim0+tile_index_dim0)*((TILE_SIZE_DIM1)*(TILE_SIZE_DIM0)/21*64)+(j*(TILE_SIZE_DIM0)+i)/21*64+((j*(TILE_SIZE_DIM0)+i)%21)*3+k;
+                            uint32_t tiled_offset = ((tile_index_dim1*tile_num_dim0+tile_index_dim0)*3+k)*(TILE_SIZE_DIM1)*(TILE_SIZE_DIM0)+j*(TILE_SIZE_DIM0)+i;
                             uint32_t original_offset = p*var_processed_stride_0+q*var_processed_stride_1+r*var_processed_stride_2;
                             var_processed[original_offset] = var_processed_buf[tiled_offset];
                         }

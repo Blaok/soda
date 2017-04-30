@@ -1,7 +1,7 @@
 #!/bin/bash
 ALLTMPFILE=$(mktemp --suffix=-alltmps-$$)
 
-TASKS=$(for BITSTREAM in bit/*-cosim-*.xclbin
+TASKS=$(for BITSTREAM in bit/$1*-cosim-*.xclbin
 do
     TMP=${BITSTREAM//-cosim-*/}
     BENCHMARK=${TMP//bit\//}
@@ -30,5 +30,5 @@ function ctrl_c()
 trap ctrl_c INT
 trap ctrl_c TERM
 
-echo "${TASKS}"|parallel --no-notice
+echo "${TASKS}"|parallel --no-notice $2
 

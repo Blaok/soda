@@ -1,18 +1,21 @@
 .PHONY: csim cosim hw mktemp
 
-CSIM_XCLBIN ?= blur-csim.xclbin
-COSIM_XCLBIN ?= blur-cosim.xclbin
-HW_XCLBIN ?= blur-hw.xclbin
+CSIM_XCLBIN ?= curved-csim.xclbin
+COSIM_XCLBIN ?= curved-cosim.xclbin
+HW_XCLBIN ?= curved-hw.xclbin
 
-KERNEL_SRCS ?= blur_kernel.cpp
-KERNEL_NAME ?= blur_kernel
-HOST_SRCS ?= blur_run.cpp blur.cpp
+KERNEL_SRCS ?= curved_kernel.cpp
+KERNEL_NAME ?= curved_kernel
+HOST_SRCS ?= curved_run.cpp curved.cpp
 HOST_ARGS ?=
-HOST_BIN ?= blur
+HOST_BIN ?= curved
 
-TILE_SIZE_DIM0 ?= 128
-TILE_SIZE_DIM1 ?= 128
-UNROLL_FACTOR ?= 32
+TILE_SIZE_DIM0 ?= 256
+TILE_SIZE_DIM1 ?= 256
+UNROLL_FACTOR ?= 16
+KI ?= 16
+KO ?= 32
+RM = :
 
 SRC ?= src
 OBJ ?= obj
@@ -37,7 +40,7 @@ HOST_CFLAGS += -DTILE_SIZE_DIM0=$(TILE_SIZE_DIM0) -DTILE_SIZE_DIM1=$(TILE_SIZE_D
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --xdevice $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g
-CLCXX_OPT += -DTILE_SIZE_DIM0=$(TILE_SIZE_DIM0) -DTILE_SIZE_DIM1=$(TILE_SIZE_DIM1) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
+CLCXX_OPT += -DTILE_SIZE_DIM0=$(TILE_SIZE_DIM0) -DTILE_SIZE_DIM1=$(TILE_SIZE_DIM1) -DUNROLL_FACTOR=$(UNROLL_FACTOR) -DKI=${KI} -DKO=${KO}
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
@@ -73,14 +76,14 @@ $(BIT)/$(CSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 $(BIT)/$(COSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
-	@ln -Tsf ../_xocc_$(KERNEL_NAME)_$(COSIM_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/cosim
+	@ln -Tsf ../_xocc_$(KERNEL_SRCS:%.cpp=%)_$(COSIM_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/cosim
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
 	@$(RM) -rf .Xil
 
 $(BIT)/$(HW_XCLBIN): $(SRC)/$(KERNEL_SRCS)
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
-	@ln -Tsf ../_xocc_$(KERNEL_NAME)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/hw
+	@ln -Tsf ../_xocc_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/hw
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -o $@ $<
 	@$(RM) -rf .Xil
 
