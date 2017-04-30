@@ -1,1 +1,0 @@
-make-blur.sh
