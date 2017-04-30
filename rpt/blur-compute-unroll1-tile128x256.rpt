@@ -1,0 +1,478 @@
+
+
+================================================================
+== Vivado HLS Report for 'compute'
+================================================================
+* Date:           Wed Apr 12 23:26:43 2017
+
+* Version:        2016.3 (Build 1721985 on Tue Nov 29 18:45:36 MST 2016)
+* Project:        blur_kernel
+* Solution:       solution_OCL_REGION_0
+* Product family: virtex7
+* Target device:  xc7vx690tffg1157-2
+
+
+================================================================
+== Performance Estimates
+================================================================
++ Timing (ns): 
+    * Summary: 
+    +--------+-------+----------+------------+
+    |  Clock | Target| Estimated| Uncertainty|
+    +--------+-------+----------+------------+
+    |ap_clk  |   5.00|      3.42|        1.35|
+    +--------+-------+----------+------------+
+
++ Latency (clock cycles): 
+    * Summary: 
+    +-----+---------+-----+---------+---------+
+    |    Latency    |    Interval   | Pipeline|
+    | min |   max   | min |   max   |   Type  |
+    +-----+---------+-----+---------+---------+
+    |    1|  8950083|    1|  8950083|   none  |
+    +-----+---------+-----+---------+---------+
+
+    + Detail: 
+        * Instance: 
+        N/A
+
+        * Loop: 
+        +----------+---------+---------+-----------+-----------+-----------+-------+----------+
+        |          |      Latency      | Iteration |  Initiation Interval  |  Trip |          |
+        | Loop Name|   min   |   max   |  Latency  |  achieved |   target  | Count | Pipelined|
+        +----------+---------+---------+-----------+-----------+-----------+-------+----------+
+        |- Loop 1  |  8619786|  8950046| 261 ~ 271 |          -|          -|  33026|    no    |
+        +----------+---------+---------+-----------+-----------+-----------+-------+----------+
+
+
+
+================================================================
+== Utilization Estimates
+================================================================
+* Summary: 
++-----------------+---------+-------+--------+--------+
+|       Name      | BRAM_18K| DSP48E|   FF   |   LUT  |
++-----------------+---------+-------+--------+--------+
+|DSP              |        -|      -|       -|       -|
+|Expression       |        -|      -|       0|     394|
+|FIFO             |        -|      -|       -|       -|
+|Instance         |        -|      4|     576|     640|
+|Memory           |        1|      -|       0|       0|
+|Multiplexer      |        -|      -|       -|    3442|
+|Register         |        -|      -|    4864|       -|
++-----------------+---------+-------+--------+--------+
+|Total            |        1|      4|    5440|    4476|
++-----------------+---------+-------+--------+--------+
+|Available        |     2940|   3600|  866400|  433200|
++-----------------+---------+-------+--------+--------+
+|Utilization (%)  |    ~0   |   ~0  |   ~0   |       1|
++-----------------+---------+-------+--------+--------+
+
++ Detail: 
+    * Instance: 
+    +-----------------------------------------+--------------------------------------+---------+-------+-----+-----+
+    |                 Instance                |                Module                | BRAM_18K| DSP48E|  FF | LUT |
+    +-----------------------------------------+--------------------------------------+---------+-------+-----+-----+
+    |blur_kernel_mul_16ns_18ns_34_3_U8        |blur_kernel_mul_16ns_18ns_34_3        |        0|      1|    0|    0|
+    |blur_kernel_mul_16ns_18ns_34_3_U9        |blur_kernel_mul_16ns_18ns_34_3        |        0|      1|    0|    0|
+    |blur_kernel_mul_16ns_18ns_34_3_U10       |blur_kernel_mul_16ns_18ns_34_3        |        0|      1|    0|    0|
+    |blur_kernel_mul_16ns_18ns_34_3_U11       |blur_kernel_mul_16ns_18ns_34_3        |        0|      1|    0|    0|
+    |blur_kernel_sdiv_32ns_32ns_32_36_seq_U7  |blur_kernel_sdiv_32ns_32ns_32_36_seq  |        0|      0|  288|  320|
+    |blur_kernel_srem_32ns_32ns_32_36_seq_U6  |blur_kernel_srem_32ns_32ns_32_36_seq  |        0|      0|  288|  320|
+    +-----------------------------------------+--------------------------------------+---------+-------+-----+-----+
+    |Total                                    |                                      |        0|      4|  576|  640|
+    +-----------------------------------------+--------------------------------------+---------+-------+-----+-----+
+
+    * DSP48: 
+    N/A
+
+    * Memory: 
+    +---------------+---------------------+---------+---+----+------+-----+------+-------------+
+    |     Memory    |        Module       | BRAM_18K| FF| LUT| Words| Bits| Banks| W*Bits*Banks|
+    +---------------+---------------------+---------+---+----+------+-----+------+-------------+
+    |stencil_buf_U  |compute_stencil_buf  |        1|  0|   0|   259|   16|     1|         4144|
+    +---------------+---------------------+---------+---+----+------+-----+------+-------------+
+    |Total          |                     |        1|  0|   0|   259|   16|     1|         4144|
+    +---------------+---------------------+---------+---+----+------+-----+------+-------------+
+
+    * FIFO: 
+    N/A
+
+    * Expression: 
+    +--------------------------+----------+-------+---+----+------------+------------+
+    |       Variable Name      | Operation| DSP48E| FF| LUT| Bitwidth P0| Bitwidth P1|
+    +--------------------------+----------+-------+---+----+------------+------------+
+    |input_index_1_fu_2579_p2  |     +    |      0|  0|  16|          16|           1|
+    |p_fu_2634_p2              |     +    |      0|  0|  32|          32|          32|
+    |q_fu_2688_p2              |     +    |      0|  0|  32|          32|          32|
+    |tmp3_fu_2737_p2           |     +    |      0|  0|   8|          16|          16|
+    |tmp4_fu_2749_p2           |     +    |      0|  0|   8|          16|          16|
+    |tmp5_fu_2758_p2           |     +    |      0|  0|   8|          16|          16|
+    |tmp6_fu_2825_p2           |     +    |      0|  0|   8|          16|          16|
+    |tmp_12_fu_2743_p2         |     +    |      0|  0|   8|          16|          16|
+    |tmp_14_fu_2753_p2         |     +    |      0|  0|   8|          16|          16|
+    |tmp_15_fu_2763_p2         |     +    |      0|  0|   8|          16|          16|
+    |tmp_16_fu_2829_p2         |     +    |      0|  0|   8|          16|          16|
+    |tmp_4_cast7_fu_2608_p2    |     +    |      0|  0|   7|           3|           7|
+    |tmp_4_fu_2639_p2          |     +    |      0|  0|  16|          10|          16|
+    |tmp_5_fu_2565_p2          |     +    |      0|  0|  32|          32|          32|
+    |tmp_6_fu_2569_p2          |     +    |      0|  0|  32|          32|          32|
+    |p_neg_fu_2618_p2          |     -    |      0|  0|  16|           9|          16|
+    |p_neg_t_fu_2656_p2        |     -    |      0|  0|  10|           1|          10|
+    |tmp_fu_2543_p2            |     -    |      0|  0|  32|          32|          32|
+    |tmp_s_fu_2559_p2          |     -    |      0|  0|  32|          32|          32|
+    |or_cond9_fu_2731_p2       |    and   |      0|  0|   1|           1|           1|
+    |tmp1_fu_2720_p2           |    and   |      0|  0|   1|           1|           1|
+    |tmp2_fu_2726_p2           |    and   |      0|  0|   1|           1|           1|
+    |exitcond6_fu_2573_p2      |   icmp   |      0|  0|   6|          16|          16|
+    |slt1_fu_2706_p2           |   icmp   |      0|  0|  11|          32|          32|
+    |slt_fu_2693_p2            |   icmp   |      0|  0|  11|          32|          32|
+    |tmp_10_fu_2697_p2         |   icmp   |      0|  0|  11|          32|          32|
+    |tmp_11_fu_2716_p2         |   icmp   |      0|  0|  11|          32|          32|
+    |tmp_9_fu_2598_p2          |   icmp   |      0|  0|   6|          16|           9|
+    |tmp_3_fu_2676_p3          |  select  |      0|  0|  10|           1|          10|
+    |rev1_fu_2710_p2           |    xor   |      0|  0|   2|           1|           2|
+    |rev_fu_2701_p2            |    xor   |      0|  0|   2|           1|           2|
+    +--------------------------+----------+-------+---+----+------------+------------+
+    |Total                     |          |      0|  0| 394|         525|         540|
+    +--------------------------+----------+-------+---+----+------------+------------+
+
+    * Multiplexer: 
+    +---------------------------------+-----+-----------+-----+-----------+
+    |               Name              | LUT | Input Size| Bits| Total Bits|
+    +---------------------------------+-----+-----------+-----+-----------+
+    |ap_NS_fsm                        |  900|        309|    1|        309|
+    |input_index_reg_2486             |   16|          2|   16|         32|
+    |reg_2509                         |   16|          2|   16|         32|
+    |reg_2515                         |   16|          2|   16|         32|
+    |stencil_buf_addr_1_loc_reg_2498  |   16|          2|   16|         32|
+    |stencil_buf_address0             |  567|        195|    9|       1755|
+    |stencil_buf_address1             |  567|        195|    9|       1755|
+    |stencil_buf_d0                   |  672|        130|   16|       2080|
+    |stencil_buf_d1                   |  672|        129|   16|       2064|
+    +---------------------------------+-----+-----------+-----+-----------+
+    |Total                            | 3442|        966|  115|       8091|
+    +---------------------------------+-----+-----------+-----+-----------+
+
+    * Register: 
+    +---------------------------------+-----+----+-----+-----------+
+    |               Name              |  FF | LUT| Bits| Const Bits|
+    +---------------------------------+-----+----+-----+-----------+
+    |ap_CS_fsm                        |  308|   0|  308|          0|
+    |div1_reg_4484                    |   16|   0|   16|          0|
+    |div2_reg_4489                    |   16|   0|   16|          0|
+    |div3_reg_4504                    |   16|   0|   16|          0|
+    |div_reg_4479                     |   16|   0|   16|          0|
+    |input_index_1_reg_4354           |   16|   0|   16|          0|
+    |input_index_reg_2486             |   16|   0|   16|          0|
+    |input_load_reg_4373              |   16|   0|   16|          0|
+    |or_cond9_reg_4445                |    1|   0|    1|          0|
+    |p_reg_4418                       |   32|   0|   32|          0|
+    |q_reg_4429                       |   32|   0|   32|          0|
+    |reg_2509                         |   16|   0|   16|          0|
+    |reg_2515                         |   16|   0|   16|          0|
+    |slt_reg_4435                     |    1|   0|    1|          0|
+    |stencil_buf_addr_1_loc_reg_2498  |   16|   0|   16|          0|
+    |stencil_buf_load_100_reg_4964    |   16|   0|   16|          0|
+    |stencil_buf_load_101_reg_4969    |   16|   0|   16|          0|
+    |stencil_buf_load_102_reg_4974    |   16|   0|   16|          0|
+    |stencil_buf_load_103_reg_4979    |   16|   0|   16|          0|
+    |stencil_buf_load_104_reg_4984    |   16|   0|   16|          0|
+    |stencil_buf_load_105_reg_4989    |   16|   0|   16|          0|
+    |stencil_buf_load_106_reg_4994    |   16|   0|   16|          0|
+    |stencil_buf_load_107_reg_4999    |   16|   0|   16|          0|
+    |stencil_buf_load_108_reg_5004    |   16|   0|   16|          0|
+    |stencil_buf_load_109_reg_5009    |   16|   0|   16|          0|
+    |stencil_buf_load_10_reg_4514     |   16|   0|   16|          0|
+    |stencil_buf_load_110_reg_5014    |   16|   0|   16|          0|
+    |stencil_buf_load_111_reg_5019    |   16|   0|   16|          0|
+    |stencil_buf_load_112_reg_5024    |   16|   0|   16|          0|
+    |stencil_buf_load_113_reg_5029    |   16|   0|   16|          0|
+    |stencil_buf_load_114_reg_5034    |   16|   0|   16|          0|
+    |stencil_buf_load_115_reg_5039    |   16|   0|   16|          0|
+    |stencil_buf_load_116_reg_5044    |   16|   0|   16|          0|
+    |stencil_buf_load_117_reg_5049    |   16|   0|   16|          0|
+    |stencil_buf_load_118_reg_5054    |   16|   0|   16|          0|
+    |stencil_buf_load_119_reg_5059    |   16|   0|   16|          0|
+    |stencil_buf_load_11_reg_4519     |   16|   0|   16|          0|
+    |stencil_buf_load_120_reg_5064    |   16|   0|   16|          0|
+    |stencil_buf_load_121_reg_5069    |   16|   0|   16|          0|
+    |stencil_buf_load_122_reg_5074    |   16|   0|   16|          0|
+    |stencil_buf_load_123_reg_5079    |   16|   0|   16|          0|
+    |stencil_buf_load_124_reg_5084    |   16|   0|   16|          0|
+    |stencil_buf_load_125_reg_5089    |   16|   0|   16|          0|
+    |stencil_buf_load_126_reg_5094    |   16|   0|   16|          0|
+    |stencil_buf_load_127_reg_5099    |   16|   0|   16|          0|
+    |stencil_buf_load_128_reg_5104    |   16|   0|   16|          0|
+    |stencil_buf_load_129_reg_5109    |   16|   0|   16|          0|
+    |stencil_buf_load_12_reg_4524     |   16|   0|   16|          0|
+    |stencil_buf_load_130_reg_5114    |   16|   0|   16|          0|
+    |stencil_buf_load_131_reg_5119    |   16|   0|   16|          0|
+    |stencil_buf_load_132_reg_5124    |   16|   0|   16|          0|
+    |stencil_buf_load_133_reg_5129    |   16|   0|   16|          0|
+    |stencil_buf_load_134_reg_5134    |   16|   0|   16|          0|
+    |stencil_buf_load_135_reg_5139    |   16|   0|   16|          0|
+    |stencil_buf_load_136_reg_5144    |   16|   0|   16|          0|
+    |stencil_buf_load_137_reg_5149    |   16|   0|   16|          0|
+    |stencil_buf_load_138_reg_5154    |   16|   0|   16|          0|
+    |stencil_buf_load_139_reg_5159    |   16|   0|   16|          0|
+    |stencil_buf_load_13_reg_4529     |   16|   0|   16|          0|
+    |stencil_buf_load_140_reg_5164    |   16|   0|   16|          0|
+    |stencil_buf_load_141_reg_5169    |   16|   0|   16|          0|
+    |stencil_buf_load_142_reg_5174    |   16|   0|   16|          0|
+    |stencil_buf_load_143_reg_5179    |   16|   0|   16|          0|
+    |stencil_buf_load_144_reg_5184    |   16|   0|   16|          0|
+    |stencil_buf_load_145_reg_5189    |   16|   0|   16|          0|
+    |stencil_buf_load_146_reg_5194    |   16|   0|   16|          0|
+    |stencil_buf_load_147_reg_5199    |   16|   0|   16|          0|
+    |stencil_buf_load_148_reg_5204    |   16|   0|   16|          0|
+    |stencil_buf_load_149_reg_5209    |   16|   0|   16|          0|
+    |stencil_buf_load_14_reg_4534     |   16|   0|   16|          0|
+    |stencil_buf_load_150_reg_5214    |   16|   0|   16|          0|
+    |stencil_buf_load_151_reg_5219    |   16|   0|   16|          0|
+    |stencil_buf_load_152_reg_5224    |   16|   0|   16|          0|
+    |stencil_buf_load_153_reg_5229    |   16|   0|   16|          0|
+    |stencil_buf_load_154_reg_5234    |   16|   0|   16|          0|
+    |stencil_buf_load_155_reg_5239    |   16|   0|   16|          0|
+    |stencil_buf_load_156_reg_5244    |   16|   0|   16|          0|
+    |stencil_buf_load_157_reg_5249    |   16|   0|   16|          0|
+    |stencil_buf_load_158_reg_5254    |   16|   0|   16|          0|
+    |stencil_buf_load_159_reg_5259    |   16|   0|   16|          0|
+    |stencil_buf_load_15_reg_4539     |   16|   0|   16|          0|
+    |stencil_buf_load_160_reg_5264    |   16|   0|   16|          0|
+    |stencil_buf_load_161_reg_5269    |   16|   0|   16|          0|
+    |stencil_buf_load_162_reg_5274    |   16|   0|   16|          0|
+    |stencil_buf_load_163_reg_5279    |   16|   0|   16|          0|
+    |stencil_buf_load_164_reg_5284    |   16|   0|   16|          0|
+    |stencil_buf_load_165_reg_5289    |   16|   0|   16|          0|
+    |stencil_buf_load_166_reg_5294    |   16|   0|   16|          0|
+    |stencil_buf_load_167_reg_5299    |   16|   0|   16|          0|
+    |stencil_buf_load_168_reg_5304    |   16|   0|   16|          0|
+    |stencil_buf_load_169_reg_5309    |   16|   0|   16|          0|
+    |stencil_buf_load_16_reg_4544     |   16|   0|   16|          0|
+    |stencil_buf_load_170_reg_5314    |   16|   0|   16|          0|
+    |stencil_buf_load_171_reg_5319    |   16|   0|   16|          0|
+    |stencil_buf_load_172_reg_5324    |   16|   0|   16|          0|
+    |stencil_buf_load_173_reg_5329    |   16|   0|   16|          0|
+    |stencil_buf_load_174_reg_5334    |   16|   0|   16|          0|
+    |stencil_buf_load_175_reg_5339    |   16|   0|   16|          0|
+    |stencil_buf_load_176_reg_5344    |   16|   0|   16|          0|
+    |stencil_buf_load_177_reg_5349    |   16|   0|   16|          0|
+    |stencil_buf_load_178_reg_5354    |   16|   0|   16|          0|
+    |stencil_buf_load_179_reg_5359    |   16|   0|   16|          0|
+    |stencil_buf_load_17_reg_4549     |   16|   0|   16|          0|
+    |stencil_buf_load_180_reg_5364    |   16|   0|   16|          0|
+    |stencil_buf_load_181_reg_5369    |   16|   0|   16|          0|
+    |stencil_buf_load_182_reg_5374    |   16|   0|   16|          0|
+    |stencil_buf_load_183_reg_5379    |   16|   0|   16|          0|
+    |stencil_buf_load_184_reg_5384    |   16|   0|   16|          0|
+    |stencil_buf_load_185_reg_5389    |   16|   0|   16|          0|
+    |stencil_buf_load_186_reg_5394    |   16|   0|   16|          0|
+    |stencil_buf_load_187_reg_5399    |   16|   0|   16|          0|
+    |stencil_buf_load_188_reg_5404    |   16|   0|   16|          0|
+    |stencil_buf_load_189_reg_5409    |   16|   0|   16|          0|
+    |stencil_buf_load_18_reg_4554     |   16|   0|   16|          0|
+    |stencil_buf_load_190_reg_5414    |   16|   0|   16|          0|
+    |stencil_buf_load_191_reg_5419    |   16|   0|   16|          0|
+    |stencil_buf_load_192_reg_5424    |   16|   0|   16|          0|
+    |stencil_buf_load_193_reg_5429    |   16|   0|   16|          0|
+    |stencil_buf_load_194_reg_5434    |   16|   0|   16|          0|
+    |stencil_buf_load_195_reg_5439    |   16|   0|   16|          0|
+    |stencil_buf_load_196_reg_5444    |   16|   0|   16|          0|
+    |stencil_buf_load_197_reg_5449    |   16|   0|   16|          0|
+    |stencil_buf_load_198_reg_5454    |   16|   0|   16|          0|
+    |stencil_buf_load_199_reg_5459    |   16|   0|   16|          0|
+    |stencil_buf_load_19_reg_4559     |   16|   0|   16|          0|
+    |stencil_buf_load_200_reg_5464    |   16|   0|   16|          0|
+    |stencil_buf_load_201_reg_5469    |   16|   0|   16|          0|
+    |stencil_buf_load_202_reg_5474    |   16|   0|   16|          0|
+    |stencil_buf_load_203_reg_5479    |   16|   0|   16|          0|
+    |stencil_buf_load_204_reg_5484    |   16|   0|   16|          0|
+    |stencil_buf_load_205_reg_5489    |   16|   0|   16|          0|
+    |stencil_buf_load_206_reg_5494    |   16|   0|   16|          0|
+    |stencil_buf_load_207_reg_5499    |   16|   0|   16|          0|
+    |stencil_buf_load_208_reg_5504    |   16|   0|   16|          0|
+    |stencil_buf_load_209_reg_5509    |   16|   0|   16|          0|
+    |stencil_buf_load_20_reg_4564     |   16|   0|   16|          0|
+    |stencil_buf_load_210_reg_5514    |   16|   0|   16|          0|
+    |stencil_buf_load_211_reg_5519    |   16|   0|   16|          0|
+    |stencil_buf_load_212_reg_5524    |   16|   0|   16|          0|
+    |stencil_buf_load_213_reg_5529    |   16|   0|   16|          0|
+    |stencil_buf_load_214_reg_5534    |   16|   0|   16|          0|
+    |stencil_buf_load_215_reg_5539    |   16|   0|   16|          0|
+    |stencil_buf_load_216_reg_5544    |   16|   0|   16|          0|
+    |stencil_buf_load_217_reg_5549    |   16|   0|   16|          0|
+    |stencil_buf_load_218_reg_5554    |   16|   0|   16|          0|
+    |stencil_buf_load_219_reg_5559    |   16|   0|   16|          0|
+    |stencil_buf_load_21_reg_4569     |   16|   0|   16|          0|
+    |stencil_buf_load_220_reg_5564    |   16|   0|   16|          0|
+    |stencil_buf_load_221_reg_5569    |   16|   0|   16|          0|
+    |stencil_buf_load_222_reg_5574    |   16|   0|   16|          0|
+    |stencil_buf_load_223_reg_5579    |   16|   0|   16|          0|
+    |stencil_buf_load_224_reg_5584    |   16|   0|   16|          0|
+    |stencil_buf_load_225_reg_5589    |   16|   0|   16|          0|
+    |stencil_buf_load_226_reg_5594    |   16|   0|   16|          0|
+    |stencil_buf_load_227_reg_5599    |   16|   0|   16|          0|
+    |stencil_buf_load_228_reg_5604    |   16|   0|   16|          0|
+    |stencil_buf_load_229_reg_5609    |   16|   0|   16|          0|
+    |stencil_buf_load_22_reg_4574     |   16|   0|   16|          0|
+    |stencil_buf_load_230_reg_5614    |   16|   0|   16|          0|
+    |stencil_buf_load_231_reg_5619    |   16|   0|   16|          0|
+    |stencil_buf_load_232_reg_5624    |   16|   0|   16|          0|
+    |stencil_buf_load_233_reg_5629    |   16|   0|   16|          0|
+    |stencil_buf_load_234_reg_5634    |   16|   0|   16|          0|
+    |stencil_buf_load_235_reg_5639    |   16|   0|   16|          0|
+    |stencil_buf_load_236_reg_5644    |   16|   0|   16|          0|
+    |stencil_buf_load_237_reg_5649    |   16|   0|   16|          0|
+    |stencil_buf_load_238_reg_5654    |   16|   0|   16|          0|
+    |stencil_buf_load_239_reg_5659    |   16|   0|   16|          0|
+    |stencil_buf_load_23_reg_4579     |   16|   0|   16|          0|
+    |stencil_buf_load_240_reg_5664    |   16|   0|   16|          0|
+    |stencil_buf_load_241_reg_5669    |   16|   0|   16|          0|
+    |stencil_buf_load_242_reg_5674    |   16|   0|   16|          0|
+    |stencil_buf_load_243_reg_5679    |   16|   0|   16|          0|
+    |stencil_buf_load_244_reg_5684    |   16|   0|   16|          0|
+    |stencil_buf_load_245_reg_5689    |   16|   0|   16|          0|
+    |stencil_buf_load_246_reg_5694    |   16|   0|   16|          0|
+    |stencil_buf_load_247_reg_5699    |   16|   0|   16|          0|
+    |stencil_buf_load_248_reg_5704    |   16|   0|   16|          0|
+    |stencil_buf_load_249_reg_5709    |   16|   0|   16|          0|
+    |stencil_buf_load_24_reg_4584     |   16|   0|   16|          0|
+    |stencil_buf_load_250_reg_5714    |   16|   0|   16|          0|
+    |stencil_buf_load_251_reg_5719    |   16|   0|   16|          0|
+    |stencil_buf_load_252_reg_5724    |   16|   0|   16|          0|
+    |stencil_buf_load_253_reg_5729    |   16|   0|   16|          0|
+    |stencil_buf_load_254_reg_5734    |   16|   0|   16|          0|
+    |stencil_buf_load_255_reg_5739    |   16|   0|   16|          0|
+    |stencil_buf_load_256_reg_5744    |   16|   0|   16|          0|
+    |stencil_buf_load_25_reg_4589     |   16|   0|   16|          0|
+    |stencil_buf_load_26_reg_4594     |   16|   0|   16|          0|
+    |stencil_buf_load_27_reg_4599     |   16|   0|   16|          0|
+    |stencil_buf_load_28_reg_4604     |   16|   0|   16|          0|
+    |stencil_buf_load_29_reg_4609     |   16|   0|   16|          0|
+    |stencil_buf_load_2_reg_4379      |   16|   0|   16|          0|
+    |stencil_buf_load_30_reg_4614     |   16|   0|   16|          0|
+    |stencil_buf_load_31_reg_4619     |   16|   0|   16|          0|
+    |stencil_buf_load_32_reg_4624     |   16|   0|   16|          0|
+    |stencil_buf_load_33_reg_4629     |   16|   0|   16|          0|
+    |stencil_buf_load_34_reg_4634     |   16|   0|   16|          0|
+    |stencil_buf_load_35_reg_4639     |   16|   0|   16|          0|
+    |stencil_buf_load_36_reg_4644     |   16|   0|   16|          0|
+    |stencil_buf_load_37_reg_4649     |   16|   0|   16|          0|
+    |stencil_buf_load_38_reg_4654     |   16|   0|   16|          0|
+    |stencil_buf_load_39_reg_4659     |   16|   0|   16|          0|
+    |stencil_buf_load_3_reg_4385      |   16|   0|   16|          0|
+    |stencil_buf_load_40_reg_4664     |   16|   0|   16|          0|
+    |stencil_buf_load_41_reg_4669     |   16|   0|   16|          0|
+    |stencil_buf_load_42_reg_4674     |   16|   0|   16|          0|
+    |stencil_buf_load_43_reg_4679     |   16|   0|   16|          0|
+    |stencil_buf_load_44_reg_4684     |   16|   0|   16|          0|
+    |stencil_buf_load_45_reg_4689     |   16|   0|   16|          0|
+    |stencil_buf_load_46_reg_4694     |   16|   0|   16|          0|
+    |stencil_buf_load_47_reg_4699     |   16|   0|   16|          0|
+    |stencil_buf_load_48_reg_4704     |   16|   0|   16|          0|
+    |stencil_buf_load_49_reg_4709     |   16|   0|   16|          0|
+    |stencil_buf_load_4_reg_4391      |   16|   0|   16|          0|
+    |stencil_buf_load_50_reg_4714     |   16|   0|   16|          0|
+    |stencil_buf_load_51_reg_4719     |   16|   0|   16|          0|
+    |stencil_buf_load_52_reg_4724     |   16|   0|   16|          0|
+    |stencil_buf_load_53_reg_4729     |   16|   0|   16|          0|
+    |stencil_buf_load_54_reg_4734     |   16|   0|   16|          0|
+    |stencil_buf_load_55_reg_4739     |   16|   0|   16|          0|
+    |stencil_buf_load_56_reg_4744     |   16|   0|   16|          0|
+    |stencil_buf_load_57_reg_4749     |   16|   0|   16|          0|
+    |stencil_buf_load_58_reg_4754     |   16|   0|   16|          0|
+    |stencil_buf_load_59_reg_4759     |   16|   0|   16|          0|
+    |stencil_buf_load_5_reg_4397      |   16|   0|   16|          0|
+    |stencil_buf_load_60_reg_4764     |   16|   0|   16|          0|
+    |stencil_buf_load_61_reg_4769     |   16|   0|   16|          0|
+    |stencil_buf_load_62_reg_4774     |   16|   0|   16|          0|
+    |stencil_buf_load_63_reg_4779     |   16|   0|   16|          0|
+    |stencil_buf_load_64_reg_4784     |   16|   0|   16|          0|
+    |stencil_buf_load_65_reg_4789     |   16|   0|   16|          0|
+    |stencil_buf_load_66_reg_4794     |   16|   0|   16|          0|
+    |stencil_buf_load_67_reg_4799     |   16|   0|   16|          0|
+    |stencil_buf_load_68_reg_4804     |   16|   0|   16|          0|
+    |stencil_buf_load_69_reg_4809     |   16|   0|   16|          0|
+    |stencil_buf_load_6_reg_4403      |   16|   0|   16|          0|
+    |stencil_buf_load_70_reg_4814     |   16|   0|   16|          0|
+    |stencil_buf_load_71_reg_4819     |   16|   0|   16|          0|
+    |stencil_buf_load_72_reg_4824     |   16|   0|   16|          0|
+    |stencil_buf_load_73_reg_4829     |   16|   0|   16|          0|
+    |stencil_buf_load_74_reg_4834     |   16|   0|   16|          0|
+    |stencil_buf_load_75_reg_4839     |   16|   0|   16|          0|
+    |stencil_buf_load_76_reg_4844     |   16|   0|   16|          0|
+    |stencil_buf_load_77_reg_4849     |   16|   0|   16|          0|
+    |stencil_buf_load_78_reg_4854     |   16|   0|   16|          0|
+    |stencil_buf_load_79_reg_4859     |   16|   0|   16|          0|
+    |stencil_buf_load_80_reg_4864     |   16|   0|   16|          0|
+    |stencil_buf_load_81_reg_4869     |   16|   0|   16|          0|
+    |stencil_buf_load_82_reg_4874     |   16|   0|   16|          0|
+    |stencil_buf_load_83_reg_4879     |   16|   0|   16|          0|
+    |stencil_buf_load_84_reg_4884     |   16|   0|   16|          0|
+    |stencil_buf_load_85_reg_4889     |   16|   0|   16|          0|
+    |stencil_buf_load_86_reg_4894     |   16|   0|   16|          0|
+    |stencil_buf_load_87_reg_4899     |   16|   0|   16|          0|
+    |stencil_buf_load_88_reg_4904     |   16|   0|   16|          0|
+    |stencil_buf_load_89_reg_4909     |   16|   0|   16|          0|
+    |stencil_buf_load_90_reg_4914     |   16|   0|   16|          0|
+    |stencil_buf_load_91_reg_4919     |   16|   0|   16|          0|
+    |stencil_buf_load_92_reg_4924     |   16|   0|   16|          0|
+    |stencil_buf_load_93_reg_4929     |   16|   0|   16|          0|
+    |stencil_buf_load_94_reg_4934     |   16|   0|   16|          0|
+    |stencil_buf_load_95_reg_4939     |   16|   0|   16|          0|
+    |stencil_buf_load_96_reg_4944     |   16|   0|   16|          0|
+    |stencil_buf_load_97_reg_4949     |   16|   0|   16|          0|
+    |stencil_buf_load_98_reg_4954     |   16|   0|   16|          0|
+    |stencil_buf_load_99_reg_4959     |   16|   0|   16|          0|
+    |stencil_buf_load_9_reg_4509      |   16|   0|   16|          0|
+    |tile_index_dim0_reg_2895         |   32|   0|   32|          0|
+    |tile_index_dim1_reg_2901         |   32|   0|   32|          0|
+    |tmp_10_reg_4440                  |    1|   0|    1|          0|
+    |tmp_12_reg_4449                  |   16|   0|   16|          0|
+    |tmp_14_reg_4454                  |   16|   0|   16|          0|
+    |tmp_15_reg_4459                  |   16|   0|   16|          0|
+    |tmp_16_reg_4494                  |   16|   0|   16|          0|
+    |tmp_20_reg_4359                  |    1|   0|    1|          0|
+    |tmp_22_reg_4413                  |    9|   0|    9|          0|
+    |tmp_4_reg_4424                   |   16|   0|   16|          0|
+    |tmp_5_reg_2966                   |   32|   0|   32|          0|
+    |tmp_6_reg_2971                   |   32|   0|   32|          0|
+    |tmp_9_reg_4409                   |    1|   0|    1|          0|
+    |tmp_reg_2918                     |   31|   0|   32|          1|
+    |tmp_s_reg_2923                   |   31|   0|   32|          1|
+    +---------------------------------+-----+----+-----+-----------+
+    |Total                            | 4864|   0| 4866|          2|
+    +---------------------------------+-----+----+-----+-----------+
+
+
+
+================================================================
+== Interface
+================================================================
+* Summary: 
++---------------------+-----+-----+------------+---------------------+--------------+
+|      RTL Ports      | Dir | Bits|  Protocol  |    Source Object    |    C Type    |
++---------------------+-----+-----+------------+---------------------+--------------+
+|ap_clk               |  in |    1| ap_ctrl_hs |       compute       | return value |
+|ap_rst               |  in |    1| ap_ctrl_hs |       compute       | return value |
+|ap_start             |  in |    1| ap_ctrl_hs |       compute       | return value |
+|ap_done              | out |    1| ap_ctrl_hs |       compute       | return value |
+|ap_idle              | out |    1| ap_ctrl_hs |       compute       | return value |
+|ap_ready             | out |    1| ap_ctrl_hs |       compute       | return value |
+|compute_flag         |  in |    1|   ap_none  |     compute_flag    |    scalar    |
+|output_r_address0    | out |   15|  ap_memory |       output_r      |     array    |
+|output_r_ce0         | out |    1|  ap_memory |       output_r      |     array    |
+|output_r_we0         | out |    1|  ap_memory |       output_r      |     array    |
+|output_r_d0          | out |   16|  ap_memory |       output_r      |     array    |
+|input_r_address0     | out |   15|  ap_memory |       input_r       |     array    |
+|input_r_ce0          | out |    1|  ap_memory |       input_r       |     array    |
+|input_r_q0           |  in |   16|  ap_memory |       input_r       |     array    |
+|tile_index           |  in |   32|   ap_none  |      tile_index     |    scalar    |
+|tile_num_dim0        |  in |   32|   ap_none  |    tile_num_dim0    |    scalar    |
+|var_blur_y_extent_0  |  in |   32|   ap_none  | var_blur_y_extent_0 |    scalar    |
+|var_blur_y_extent_1  |  in |   32|   ap_none  | var_blur_y_extent_1 |    scalar    |
+|var_blur_y_min_0     |  in |   32|   ap_none  |   var_blur_y_min_0  |    scalar    |
+|var_blur_y_min_1     |  in |   32|   ap_none  |   var_blur_y_min_1  |    scalar    |
++---------------------+-----+-----+------------+---------------------+--------------+
+

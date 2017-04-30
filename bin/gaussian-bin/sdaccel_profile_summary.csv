@@ -1,0 +1,83 @@
+SDAccel Profile Summary
+Generated on: 2017-04-18 14:20:47
+Msec since Epoch: 1492550447038
+Profiled application: gaussian-tile128x128
+Target platform: Xilinx
+Target devices: xilinx:adm-pcie-7v3:1ddr:3.0-0
+Flow mode: Hardware Emulation
+Tool version: 2016.3
+
+OpenCL API Calls
+API Name,Number Of Calls,Total Time (ms),Minimum Time (ms),Average Time (ms),Maximum Time (ms),
+clWaitForEvents,3,1.00755e+06,0.002387,335851,1.00755e+06,
+clCreateProgramWithBinary,1,569.066,569.066,569.066,569.066,
+clEnqueueReadBuffer,1,29.3822,29.3822,29.3822,29.3822,
+clEnqueueWriteBuffer,1,4.97627,4.97627,4.97627,4.97627,
+clCreateBuffer,2,3.96263,1.00592,1.98132,2.95671,
+clEnqueueTask,1,0.832823,0.832823,0.832823,0.832823,
+clEnqueueNDRangeKernel,1,0.8251,0.8251,0.8251,0.8251,
+clReleaseProgram,1,0.016452,0.016452,0.016452,0.016452,
+clCreateKernel,1,0.01469,0.01469,0.01469,0.01469,
+clSetKernelArg,8,0.011628,0.000868,0.0014535,0.004251,
+clBuildProgram,1,0.007986,0.007986,0.007986,0.007986,
+clCreateContext,1,0.00694,0.00694,0.00694,0.00694,
+clGetPlatformIDs,2,0.00691,0.001247,0.003455,0.005663,
+clGetDeviceInfo,1,0.005863,0.005863,0.005863,0.005863,
+clReleaseMemObject,2,0.004857,0.00118,0.0024285,0.003677,
+clCreateCommandQueue,1,0.002795,0.002795,0.002795,0.002795,
+clGetDeviceIDs,2,0.002574,0.000832,0.001287,0.001742,
+clReleaseContext,1,0.002383,0.002383,0.002383,0.002383,
+clGetPlatformInfo,1,0.002087,0.002087,0.002087,0.002087,
+clReleaseCommandQueue,1,0.002065,0.002065,0.002065,0.002065,
+clReleaseKernel,1,0.001965,0.001965,0.001965,0.001965,
+
+
+Kernel Execution (includes estimated device times)
+Kernel,Number Of Enqueues,Total Time (ms),Minimum Time (ms),Average Time (ms),Maximum Time (ms),
+gaussian_kernel,1,12.9732,12.9732,12.9732,12.9732,
+
+
+Compute Unit Utilization (includes estimated device times)
+Device,Compute Unit,Kernel,Global Work Size,Local Work Size,Number Of Calls,Total Time (ms),Minimum Time (ms),Average Time (ms),Maximum Time (ms),
+xilinx:adm-pcie-7v3:1ddr:3.0-0,gaussian_kernel_1,gaussian_kernel,1:1:1,1:1:1,1,12.9732,12.9732,12.9732,12.9732,
+
+
+Data Transfer: Host and Global Memory
+Context:Number of Devices,Transfer Type,Number Of Transfers,Transfer Rate (MB/s),Average Bandwidth Utilization (%),Average Size (KB),Total Time (ms),Average Time (ms),
+context0:1,READ,1,N/A,N/A,5013.5,N/A,N/A,
+context0:1,WRITE,1,N/A,N/A,5013.5,N/A,N/A,
+
+
+Data Transfer: Kernels and Global Memory
+Device,Transfer Type,Number Of Transfers,Transfer Rate (MB/s),Average Bandwidth Utilization (%),Average Size (KB),Average Time (ns),
+xilinx:adm-pcie-7v3:1ddr:3.0-0,READ,4896,386.452,3.35462,1.024,662.693,
+xilinx:adm-pcie-7v3:1ddr:3.0-0,WRITE,4896,386.452,3.35462,1.024,563.756,
+
+
+Top Data Transfer: Kernels and Global Memory
+Device,Kernel Name,Number of Transfers,Average Bytes per Transfer,Transfer Efficiency (%),Total Data Transfer (MB),Total Write (MB),Total Read (MB),Transfer Rate (MB/s),Average Bandwidth Utilization (%),
+xilinx:adm-pcie-7v3:1ddr:3.0-0,ALL,9792,1024,25,10.027,5.0135,5.0135,386.452,3.35462,
+
+
+Top Kernel Execution
+Kernel Instance Address,Kernel,Context ID,Command Queue ID,Device Name,Start Time (ms),Duration (ms),Global Work Size,Local Work Size,
+36211928,gaussian_kernel,0,0,xilinx:adm-pcie-7v3:1ddr:3.0-0,9.7e-05,12.9732,1:1:1,1:1:1,
+
+
+Top Buffer Writes
+Buffer Address,Context ID,Command Queue ID,Start Time (ms),Duration (ms),Buffer Size (KB),Writing Rate(MB/s),
+36164464,0,0,749.579,N/A,5013.5,N/A,
+
+
+Top Buffer Reads
+Buffer Address,Context ID,Command Queue ID,Start Time (ms),Duration (ms),Buffer Size (KB),Reading Rate(MB/s),
+36164768,0,0,1.00831e+06,N/A,5013.5,N/A,
+
+
+PRC Parameters
+Parameter,Element,Value,
+DEVICE_EXEC_TIME,xilinx:adm-pcie-7v3:1ddr:3.0-0,12.973160,
+CU_CALLS,xilinx:adm-pcie-7v3:1ddr:3.0-0|gaussian_kernel_1,1,
+MEMORY_BIT_WIDTH,xilinx:adm-pcie-7v3:1ddr:3.0-0,512,
+
+

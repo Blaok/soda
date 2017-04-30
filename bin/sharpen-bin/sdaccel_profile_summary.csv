@@ -1,0 +1,83 @@
+SDAccel Profile Summary
+Generated on: 2017-04-18 14:20:47
+Msec since Epoch: 1492550447125
+Profiled application: sharpen-tile128x128
+Target platform: Xilinx
+Target devices: xilinx:adm-pcie-7v3:1ddr:3.0-0
+Flow mode: Hardware Emulation
+Tool version: 2016.3
+
+OpenCL API Calls
+API Name,Number Of Calls,Total Time (ms),Minimum Time (ms),Average Time (ms),Maximum Time (ms),
+clWaitForEvents,3,781749,0.00225,260583,781749,
+clCreateProgramWithBinary,1,550.396,550.396,550.396,550.396,
+clEnqueueReadBuffer,1,24.3942,24.3942,24.3942,24.3942,
+clEnqueueWriteBuffer,1,4.87355,4.87355,4.87355,4.87355,
+clCreateBuffer,2,3.13347,0.856615,1.56673,2.27685,
+clEnqueueTask,1,0.655028,0.655028,0.655028,0.655028,
+clEnqueueNDRangeKernel,1,0.630729,0.630729,0.630729,0.630729,
+clReleaseProgram,1,0.016094,0.016094,0.016094,0.016094,
+clCreateKernel,1,0.015297,0.015297,0.015297,0.015297,
+clSetKernelArg,8,0.009419,0.000655,0.00117738,0.003975,
+clBuildProgram,1,0.007983,0.007983,0.007983,0.007983,
+clCreateContext,1,0.006015,0.006015,0.006015,0.006015,
+clGetPlatformIDs,2,0.005493,0.001046,0.0027465,0.004447,
+clGetDeviceInfo,1,0.004925,0.004925,0.004925,0.004925,
+clReleaseMemObject,2,0.004683,0.00138,0.0023415,0.003303,
+clGetDeviceIDs,2,0.002251,0.000697,0.0011255,0.001554,
+clCreateCommandQueue,1,0.002212,0.002212,0.002212,0.002212,
+clReleaseContext,1,0.002154,0.002154,0.002154,0.002154,
+clReleaseCommandQueue,1,0.00214,0.00214,0.00214,0.00214,
+clReleaseKernel,1,0.001847,0.001847,0.001847,0.001847,
+clGetPlatformInfo,1,0.0018,0.0018,0.0018,0.0018,
+
+
+Kernel Execution (includes estimated device times)
+Kernel,Number Of Enqueues,Total Time (ms),Minimum Time (ms),Average Time (ms),Maximum Time (ms),
+sharpen_kernel,1,10.6879,10.6879,10.6879,10.6879,
+
+
+Compute Unit Utilization (includes estimated device times)
+Device,Compute Unit,Kernel,Global Work Size,Local Work Size,Number Of Calls,Total Time (ms),Minimum Time (ms),Average Time (ms),Maximum Time (ms),
+xilinx:adm-pcie-7v3:1ddr:3.0-0,sharpen_kernel_1,sharpen_kernel,1:1:1,1:1:1,1,10.6879,10.6879,10.6879,10.6879,
+
+
+Data Transfer: Host and Global Memory
+Context:Number of Devices,Transfer Type,Number Of Transfers,Transfer Rate (MB/s),Average Bandwidth Utilization (%),Average Size (KB),Total Time (ms),Average Time (ms),
+context0:1,READ,1,N/A,N/A,4194.3,N/A,N/A,
+context0:1,WRITE,1,N/A,N/A,4194.3,N/A,N/A,
+
+
+Data Transfer: Kernels and Global Memory
+Device,Transfer Type,Number Of Transfers,Transfer Rate (MB/s),Average Bandwidth Utilization (%),Average Size (KB),Average Time (ns),
+xilinx:adm-pcie-7v3:1ddr:3.0-0,READ,4096,392.436,3.40656,1.024,662.639,
+xilinx:adm-pcie-7v3:1ddr:3.0-0,WRITE,4096,392.436,3.40656,1.024,562.659,
+
+
+Top Data Transfer: Kernels and Global Memory
+Device,Kernel Name,Number of Transfers,Average Bytes per Transfer,Transfer Efficiency (%),Total Data Transfer (MB),Total Write (MB),Total Read (MB),Transfer Rate (MB/s),Average Bandwidth Utilization (%),
+xilinx:adm-pcie-7v3:1ddr:3.0-0,ALL,8192,1024,25,8.38861,4.1943,4.1943,392.436,3.40656,
+
+
+Top Kernel Execution
+Kernel Instance Address,Kernel,Context ID,Command Queue ID,Device Name,Start Time (ms),Duration (ms),Global Work Size,Local Work Size,
+9671528,sharpen_kernel,0,0,xilinx:adm-pcie-7v3:1ddr:3.0-0,9.7e-05,10.6879,1:1:1,1:1:1,
+
+
+Top Buffer Writes
+Buffer Address,Context ID,Command Queue ID,Start Time (ms),Duration (ms),Buffer Size (KB),Writing Rate(MB/s),
+9672912,0,0,732.797,N/A,4194.3,N/A,
+
+
+Top Buffer Reads
+Buffer Address,Context ID,Command Queue ID,Start Time (ms),Duration (ms),Buffer Size (KB),Reading Rate(MB/s),
+9719664,0,0,782487,N/A,4194.3,N/A,
+
+
+PRC Parameters
+Parameter,Element,Value,
+DEVICE_EXEC_TIME,xilinx:adm-pcie-7v3:1ddr:3.0-0,10.687880,
+CU_CALLS,xilinx:adm-pcie-7v3:1ddr:3.0-0|sharpen_kernel_1,1,
+MEMORY_BIT_WIDTH,xilinx:adm-pcie-7v3:1ddr:3.0-0,512,
+
+
