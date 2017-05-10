@@ -1,14 +1,16 @@
 .PHONY: csim cosim hw mktemp
 
-CSIM_XCLBIN ?= curved-csim.xclbin
-COSIM_XCLBIN ?= curved-cosim.xclbin
-HW_XCLBIN ?= curved-hw.xclbin
+APP ?= blur
 
-KERNEL_SRCS ?= curved_kernel.cpp
-KERNEL_NAME ?= curved_kernel
-HOST_SRCS ?= curved_run.cpp curved.cpp
+CSIM_XCLBIN ?= $(APP)-csim.xclbin
+COSIM_XCLBIN ?= $(APP)-cosim.xclbin
+HW_XCLBIN ?= $(APP)-hw.xclbin
+
+KERNEL_SRCS ?= $(APP)_kernel.cpp
+KERNEL_NAME ?= $(APP)_kernel
+HOST_SRCS ?= $(APP)_run.cpp $(APP).cpp
 HOST_ARGS ?=
-HOST_BIN ?= curved
+HOST_BIN ?= $(APP)
 
 TILE_SIZE_DIM0 ?= 256
 TILE_SIZE_DIM1 ?= 256
