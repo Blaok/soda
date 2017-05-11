@@ -72,24 +72,24 @@ $(OBJ)/%.o: $(SRC)/%.cpp
 $(BIT)/$(CSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	@mkdir -p $(BIT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_CSIM_OPT) $(CLCXX_OPT) -o $@ $<
-	@getchild(){ for PID in $$(ps --ppid $$1 --no-headers -o pid);do grep 'Name:\s*xocc' /proc/$$PID/status -qs && echo -n "$$PID ";getchild $$PID;done; };EXCLUDED=$$(getchild $$PPID);rm -rf $$(ls -d .Xil/*|grep -vE "\-($${EXCLUDED// /|})-")
-	@rmdir .Xil --ignore-fail-on-non-empty
+	@getchild(){ for PID in $$(ps --ppid $$1 --no-headers -o pid);do grep 'Name:\s*xocc' /proc/$$PID/status -qs && echo -n "$$PID ";getchild $$PID;done; };EXCLUDED=$$(getchild $$PPID);rm -rf $$(ls -d .Xil/*|grep -vE "\-($${EXCLUDED// /|})-" 2>/dev/null)
+	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null
 
 $(BIT)/$(COSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
 	@ln -Tsf ../_xocc_$(KERNEL_SRCS:%.cpp=%)_$(COSIM_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/cosim
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
-	@getchild(){ for PID in $$(ps --ppid $$1 --no-headers -o pid);do grep 'Name:\s*xocc' /proc/$$PID/status -qs && echo -n "$$PID ";getchild $$PID;done; };EXCLUDED=$$(getchild $$PPID);rm -rf $$(ls -d .Xil/*|grep -vE "\-($${EXCLUDED// /|})-")
-	@rmdir .Xil --ignore-fail-on-non-empty
+	@getchild(){ for PID in $$(ps --ppid $$1 --no-headers -o pid);do grep 'Name:\s*xocc' /proc/$$PID/status -qs && echo -n "$$PID ";getchild $$PID;done; };EXCLUDED=$$(getchild $$PPID);rm -rf $$(ls -d .Xil/*|grep -vE "\-($${EXCLUDED// /|})-" 2>/dev/null)
+	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null
 
 $(BIT)/$(HW_XCLBIN): $(SRC)/$(KERNEL_SRCS)
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
 	@ln -Tsf ../_xocc_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report $(RPT)/hw
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -o $@ $<
-	@getchild(){ for PID in $$(ps --ppid $$1 --no-headers -o pid);do grep 'Name:\s*xocc' /proc/$$PID/status -qs && echo -n "$$PID ";getchild $$PID;done; };EXCLUDED=$$(getchild $$PPID);rm -rf $$(ls -d .Xil/*|grep -vE "\-($${EXCLUDED// /|})-")
-	@rmdir .Xil --ignore-fail-on-non-empty
+	@getchild(){ for PID in $$(ps --ppid $$1 --no-headers -o pid);do grep 'Name:\s*xocc' /proc/$$PID/status -qs && echo -n "$$PID ";getchild $$PID;done; };EXCLUDED=$$(getchild $$PPID);rm -rf $$(ls -d .Xil/*|grep -vE "\-($${EXCLUDED// /|})-" 2>/dev/null)
+	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null
 
 $(BIN)/emconfig.json:
 	@mkdir -p $(BIN)
