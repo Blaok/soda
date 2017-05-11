@@ -1,22 +1,21 @@
 .PHONY: csim cosim hw mktemp
 
 APP ?= blur
+TILE_SIZE_DIM0 ?= 256
+TILE_SIZE_DIM1 ?= 256
+UNROLL_FACTOR ?= 32
+KI ?= 32
+KO ?= 32
 
-CSIM_XCLBIN ?= $(APP)-csim.xclbin
-COSIM_XCLBIN ?= $(APP)-cosim.xclbin
-HW_XCLBIN ?= $(APP)-hw.xclbin
+CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM0)x$(TILE_SIZE_DIM1)-unroll$(UNROLL_FACTOR).xclbin
+COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM0)x$(TILE_SIZE_DIM1)-unroll$(UNROLL_FACTOR)-ki$(KI)-ko$(KO).xclbin
+HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM0)x$(TILE_SIZE_DIM1)-unroll$(UNROLL_FACTOR)-ki$(KI)-ko$(KO).xclbin
 
 KERNEL_SRCS ?= $(APP)_kernel.cpp
 KERNEL_NAME ?= $(APP)_kernel
 HOST_SRCS ?= $(APP)_run.cpp $(APP).cpp
 HOST_ARGS ?=
-HOST_BIN ?= $(APP)
-
-TILE_SIZE_DIM0 ?= 256
-TILE_SIZE_DIM1 ?= 256
-UNROLL_FACTOR ?= 16
-KI ?= 16
-KO ?= 32
+HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM0)x$(TILE_SIZE_DIM1)
 
 SRC ?= src
 OBJ ?= obj
