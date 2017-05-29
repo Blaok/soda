@@ -6,13 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <fcntl.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
 #include <CL/opencl.h>
 
 #include "blur.h"
@@ -26,11 +24,13 @@
 #define STENCIL_DIM0 (3)
 #define STENCIL_DIM1 (3)
 
+#define STENCIL_DISTANCE ((TILE_SIZE_DIM0)*2+2)
+
 int load_file_to_memory(const char *filename, char **result)
 { 
     size_t size = 0;
     FILE *f = fopen(filename, "rb");
-    if (f == NULL)
+    if (NULL == f)
     {
         *result = NULL;
         return -1;
@@ -322,7 +322,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         // allocate buffer for tiled input/output
         int32_t tile_num_dim0 = (var_blur_y_extent_0+TILE_SIZE_DIM0-STENCIL_DIM0)/(TILE_SIZE_DIM0-STENCIL_DIM0+1);
         int32_t tile_num_dim1 = (var_blur_y_extent_1+TILE_SIZE_DIM1-STENCIL_DIM1)/(TILE_SIZE_DIM1-STENCIL_DIM1+1);
-        uint16_t* var_blur_y_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
+        uint16_t* var_blur_y_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1+STENCIL_DISTANCE];
         uint16_t* var_p0_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
 
         // tiling
@@ -353,9 +353,9 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
 
         // prepare for opencl
 #if defined(SDA_PLATFORM) && !defined(TARGET_DEVICE)
-  #define STR_VALUE(arg)      #arg
-  #define GET_STRING(name) STR_VALUE(name)
-  #define TARGET_DEVICE GET_STRING(SDA_PLATFORM)
+#define STR_VALUE(arg)      #arg
+#define GET_STRING(name) STR_VALUE(name)
+#define TARGET_DEVICE GET_STRING(SDA_PLATFORM)
 #endif
         const char *target_device_name = TARGET_DEVICE;
         int err;                            // error code returned from api calls
@@ -374,180 +374,136 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         cl_mem var_p0_cl;                   // device memory used for the input array
         cl_mem var_blur_y_cl;               // device memory used for the output array
    
-        // Get all platforms and then select Xilinx platform
         err = clGetPlatformIDs(16, platforms, &platform_count);
         if (err != CL_SUCCESS)
             {
-                printf("Error: Failed to find an OpenCL platform!\n");
-                printf("Test failed\n");
+                printf("Fatal: Failed to find an OpenCL platform\n");
                 exit(EXIT_FAILURE);
             }
-        printf("INFO: Found %d platforms\n", platform_count);
+        printf("Info: Found %d platforms\n", platform_count);
 
-        // Find Xilinx Plaftorm
         int platform_found = 0;
-        for (unsigned int iplat=0; iplat<platform_count; iplat++) {
+        for (unsigned iplat = 0; iplat<platform_count; iplat++) {
             err = clGetPlatformInfo(platforms[iplat], CL_PLATFORM_VENDOR, 1000, (void *)cl_platform_vendor,NULL);
             if (err != CL_SUCCESS) {
-                printf("Error: clGetPlatformInfo(CL_PLATFORM_VENDOR) failed!\n");
-                printf("Test failed\n");
+                printf("Fatal: clGetPlatformInfo(CL_PLATFORM_VENDOR) failed\n");
                 exit(EXIT_FAILURE);
             }
             if (strcmp(cl_platform_vendor, "Xilinx") == 0) {
-                printf("INFO: Selected platform %d from %s\n", iplat, cl_platform_vendor);
+                printf("Info: Selected platform %d from %s\n", iplat, cl_platform_vendor);
                 platform_id = platforms[iplat];
                 platform_found = 1;
             }
         }
         if (!platform_found) {
-            printf("ERROR: Platform Xilinx not found. Exit.\n");
+            printf("Fatal: Platform Xilinx not found\n");
             exit(EXIT_FAILURE);
         }
       
-        // Connect to a compute device
-        // find all devices and then select the target device
-        cl_device_id devices[16];  // compute device id 
+        cl_device_id devices[16];
         cl_uint device_count;
         unsigned int device_found = 0;
         char cl_device_name[1001];
         err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ACCELERATOR,
                              16, devices, &device_count);
         if (err != CL_SUCCESS) {
-            printf("Error: Failed to create a device group!\n");
-            printf("Test failed\n");
+            printf("Fatal: Failed to create a device group\n");
             exit(EXIT_FAILURE);
         }
 
-        //iterate all devices to select the target device. 
         for (int i=0; i<device_count; i++) {
             err = clGetDeviceInfo(devices[i], CL_DEVICE_NAME, 1024, cl_device_name, 0);
             if (err != CL_SUCCESS) {
-                printf("Error: Failed to get device name for device %d!\n", i);
-                printf("Test failed\n");
+                printf("Fatal: Failed to get device name for device %d\n", i);
                 exit(EXIT_FAILURE);
             }
             //printf("CL_DEVICE_NAME %s\n", cl_device_name);
             if(strcmp(cl_device_name, target_device_name) == 0) {
                 device_id = devices[i];
                 device_found = 1;
-                printf("INFO: Selected %s as the target device\n", cl_device_name);
+                printf("Info: Selected %s as the target device\n", cl_device_name);
             }
         }
         
         if (!device_found) {
-            printf("ERROR: Target device %s not found. Exit.\n", target_device_name);
+            printf("Fatal: Target device %s not found\n", target_device_name);
             exit(EXIT_FAILURE);
         }
 
 
         err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ACCELERATOR,
                              1, &device_id, NULL);
-        if (err != CL_SUCCESS)
-            {
-                printf("Error: Failed to create a device group!\n");
-                printf("Test failed\n");
-                exit(EXIT_FAILURE);
-            }
+        if (err != CL_SUCCESS) {
+            printf("Fatal: Failed to create a device group\n");
+            exit(EXIT_FAILURE);
+        }
       
-        // Create a compute context 
-        //
         context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
-        if (!context)
-            {
-                printf("Error: Failed to create a compute context!\n");
-                printf("Test failed\n");
-                exit(EXIT_FAILURE);
-            }
+        if (!context) {
+            printf("Fatal: Failed to create a compute context\n");
+            exit(EXIT_FAILURE);
+        }
 
-        // Create a command commands
-        //
         commands = clCreateCommandQueue(context, device_id, 0, &err);
-        if (!commands)
-            {
-                printf("Error: Failed to create a command commands!\n");
-                printf("Error: code %i\n",err);
-                printf("Test failed\n");
-                exit(EXIT_FAILURE);
-            }
+        if (!commands) {
+            printf("Fatal: Failed to create a command commands %i\n",err);
+            exit(EXIT_FAILURE);
+        }
 
         int status;
 
-        // Create Program Objects
-        //
-      
-        // Load binary from disk
         unsigned char *kernelbinary;
-        printf("INFO: Loading %s\n", xclbin);
+        printf("Info: Loading %s\n", xclbin);
         int n_i = load_file_to_memory(xclbin, (char **) &kernelbinary);
         if (n_i < 0) {
-            printf("failed to load kernel from xclbin: %s\n", xclbin);
-            printf("Test failed\n");
+            printf("Fatal: Failed to load kernel from xclbin: %s\n", xclbin);
             exit(EXIT_FAILURE);
         }
         size_t n = n_i;
-        // Create the compute program from offline
         program = clCreateProgramWithBinary(context, 1, &device_id, &n,
-                                            (const unsigned char **) &kernelbinary, &status, &err);
+                                           (const unsigned char **) &kernelbinary, &status, &err);
         if ((!program) || (err!=CL_SUCCESS)) {
-            printf("Error: Failed to create compute program from binary %d!\n", err);
-            printf("Test failed\n");
+            printf("Fatal: Failed to create compute program from binary %d\n", err);
             exit(EXIT_FAILURE);
         }
 
-        // Build the program executable
-        //
         err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
-        if (err != CL_SUCCESS)
-            {
-                size_t len;
-                char buffer[2048];
+        if (err != CL_SUCCESS) {
+            size_t len;
+            char buffer[2048];
+            printf("Fatal: Failed to build program executable\n");
+            clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+            printf("%s\n", buffer);
+            exit(EXIT_FAILURE);
+        }
 
-                printf("Error: Failed to build program executable!\n");
-                clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
-                printf("%s\n", buffer);
-                printf("Test failed\n");
-                exit(EXIT_FAILURE);
-            }
-
-        // Create the compute kernel in the program we wish to run
-        //
         kernel = clCreateKernel(program, "blur_kernel", &err);
-        if (!kernel || err != CL_SUCCESS)
-            {
-                printf("Error: Failed to create compute kernel %d!\n", err);
-                printf("Test failed\n");
-                exit(EXIT_FAILURE);
-            }
+        if (!kernel || err != CL_SUCCESS) {
+            printf("Fatal: Failed to create compute kernel %d\n", err);
+            exit(EXIT_FAILURE);
+        }
 
-        // Create the input and output arrays in device memory for our calculation
-        //
         var_p0_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, NULL, NULL);
-        var_blur_y_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, NULL, NULL);
+        var_blur_y_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint16_t) * (tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1+STENCIL_DISTANCE), NULL, NULL);
         if (!var_p0_cl || !var_blur_y_cl)
         {
-            printf("Error: Failed to allocate device memory!\n");
-            printf("Test failed\n");
+            printf("Fatal: Failed to allocate device memory\n");
             exit(EXIT_FAILURE);
         }
         
-        // Write our data set into the input array in device memory 
-        //
         timespec write_begin, write_end;
         cl_event writeevent;
         clock_gettime(CLOCK_REALTIME, &write_begin);
         err = clEnqueueWriteBuffer(commands, var_p0_cl, CL_TRUE, 0, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, var_p0_buf, 0, NULL, &writeevent);
         if (err != CL_SUCCESS)
         {
-            printf("Error: Failed to write to source array a!\n");
-            printf("Test failed\n");
+            printf("Fatal: Failed to write to p0 !\n");
             exit(EXIT_FAILURE);
         }
 
         clWaitForEvents(1, &writeevent);
         clock_gettime(CLOCK_REALTIME, &write_end);
 
-        // Set the arguments to our compute kernel
-        //
         err = 0;
         printf("host: tile_num_dim0 = %llu, tile_num_dim1 = %llu\n", tile_num_dim0, tile_num_dim1);
         printf("host: var_blur_y_extent_0 = %llu, var_blur_y_extent_1 = %llu\n", var_blur_y_extent_0, var_blur_y_extent_1);
@@ -563,16 +519,16 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         err |= clSetKernelArg(kernel, 7, sizeof(var_blur_y_min_1), &var_blur_y_min_1);
         if (err != CL_SUCCESS)
         {
-            printf("Error: Failed to set kernel arguments! %d\n", err);
-            printf("Test failed\n");
+            printf("Fatal: Failed to set kernel arguments\n");
+            printf("Error code: %d\n", err);
             exit(EXIT_FAILURE);
         }
 
         cl_event execute;
-        if(getenv("XCL_EMULATION_MODE")==NULL)
-        {
-            printf("Info: FPGA warm up.\n");
-            for(int i = 0; i<100; ++i)
+        if(NULL==getenv("XCL_EMULATION_MODE")) {
+            cl_event readevent;
+            printf("Info: FPGA warm up\n");
+            for(int i = 0; i<3; ++i)
             {
                 err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
                 clWaitForEvents(1, &execute);
@@ -591,8 +547,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
         if (err)
         {
-            printf("Error: Failed to execute kernel! %d\n", err);
-            printf("Test failed\n");
+            printf("Error: Failed to execute kernel %d\n", err);
             exit(EXIT_FAILURE);
         }
 
@@ -604,11 +559,10 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer( commands, var_blur_y_cl, CL_TRUE, 0, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, var_blur_y_buf, 0, NULL, &readevent );  
+        err = clEnqueueReadBuffer( commands, var_blur_y_cl, CL_TRUE, 0, sizeof(uint16_t) * (tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1+STENCIL_DISTANCE), var_blur_y_buf, 0, NULL, &readevent );  
         if (err != CL_SUCCESS)
         {
-            printf("Error: Failed to read output array! %d\n", err);
-            printf("Test failed\n");
+            printf("Error: Failed to read blur_y %d\n", err);
             exit(EXIT_FAILURE);
         }
 
@@ -618,16 +572,14 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         double elapsed_time = 0.;
         elapsed_time = (double(write_end.tv_sec-write_begin.tv_sec)+(write_end.tv_nsec-write_begin.tv_nsec)/1e9)*1e6;
         printf("PCIe write time: %lf us\n", elapsed_time);
+        printf("PCIe write throuput: %lf GB/s\n", var_p0_extent_0*var_p0_extent_1*var_p0_elem_size/elapsed_time/1e3);
         elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;
         printf("Kernel run time: %lf us\n", elapsed_time);
-        printf("Throughput: %lf GB/s\n", var_blur_y_extent_0*var_blur_y_extent_1*var_blur_y_elem_size/elapsed_time/1e3);
+        printf("Kernel throughput: %lf pixel/ns\n", var_p0_extent_0*var_p0_extent_1/elapsed_time/1e3);
         elapsed_time = (double(read_end.tv_sec-read_begin.tv_sec)+(read_end.tv_nsec-read_begin.tv_nsec)/1e9)*1e6;
-        printf("PCIe read  time: %lf us\n", elapsed_time);
-        elapsed_time = (double(read_end.tv_sec-write_begin.tv_sec)+(read_end.tv_nsec-write_begin.tv_nsec)/1e9)*1e6;
-        printf("Total run  time: %lf us\n", elapsed_time);
+        printf("PCIe read time: %lf us\n", elapsed_time);
+        printf("PCIe read throuput: %lf GB/s\n", var_blur_y_extent_0*var_blur_y_extent_1*var_blur_y_elem_size/elapsed_time/1e3);
 
-        // Shutdown and cleanup
-        //
         clReleaseMemObject(var_p0_cl);
         clReleaseMemObject(var_blur_y_cl);
         clReleaseProgram(program);
@@ -651,7 +603,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
                     size_t tiled_offset = (tile_index_dim1*tile_num_dim0+tile_index_dim0)*TILE_SIZE_DIM1*TILE_SIZE_DIM0+j*TILE_SIZE_DIM0+i;
                     size_t original_offset = q*var_blur_y_stride_1+p;
                     memcpy(var_blur_y+original_offset,
-                           var_blur_y_buf+tiled_offset,
+                           var_blur_y_buf+STENCIL_DISTANCE+tiled_offset,
                            actual_tile_size_dim0*sizeof(uint16_t));
                 }
             }

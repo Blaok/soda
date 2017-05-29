@@ -12,8 +12,8 @@ int main(int argc, char **argv)
     memset(&input, 0, sizeof(buffer_t));
     memset(&output, 0, sizeof(buffer_t));
 
-    const uint32_t  input_width  = 20000;
-    const uint32_t  input_height = 10000;
+    const uint32_t  input_width  = 2000;
+    const uint32_t  input_height = 1000;
     const uint32_t output_width  = input_width -2;
     const uint32_t output_height = input_height-2;
 
