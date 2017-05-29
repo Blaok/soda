@@ -52,7 +52,7 @@
 #error TILE_SIZE % BURST_LENGTH != 0
 #endif
 
-void load(bool load_flag, uint16_t to[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], ap_uint<BURST_WIDTH>* from, int32_t burst_index)
+void load(bool load_flag, uint16_t to[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], ap_uint<BURST_WIDTH>* from)
 {
     if(load_flag)
     {
@@ -61,7 +61,7 @@ load_epoch:
         for(int i = 0; i < BURST_LENGTH; ++i)
         {
 #pragma HLS pipeline II=1
-            ap_uint<BURST_WIDTH> tmp(from[i+burst_index*BURST_LENGTH]);
+            ap_uint<BURST_WIDTH> tmp(from[i]);
 load_coalesced:
             for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH; ++j)
             {
@@ -73,7 +73,7 @@ load_coalesced:
     }
 }
 
-void store(bool store_flag, ap_uint<BURST_WIDTH>* to, uint16_t from[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], int32_t burst_index)
+void store(bool store_flag, ap_uint<BURST_WIDTH>* to, uint16_t from[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH])
 {
     if(store_flag)
     {
@@ -89,23 +89,25 @@ store_coalesced:
 #pragma HLS unroll
                 tmp((j+1)*PIXEL_WIDTH-1, j*PIXEL_WIDTH) = from[i*BURST_WIDTH/PIXEL_WIDTH+j];
             }
-            to[i+burst_index*BURST_LENGTH] = tmp;
+            to[i] = tmp;
         }
         //fprintf(stderr, "Store done: %d\n",burst_index);
     }
 }
 
-void compute(bool compute_flag, uint16_t output[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t input[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t FF[6], uint16_t FIFO_124[4][124], uint16_t FIFO_125[28][125], int32_t burst_index_in_total, int32_t tile_num_dim0, int32_t var_blur_y_extent_0, int32_t var_blur_y_extent_1, int32_t var_blur_y_min_0, int32_t var_blur_y_min_1)
+void compute(bool compute_flag, uint16_t output[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t input[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t FF[6], uint16_t FIFO_124[4][124], uint16_t FIFO_125[28][125], int32_t burst_index_in_total, int32_t burst_index, int32_t tile_num_dim0, int32_t tile_index_dim0, int32_t tile_index_dim1, int32_t var_blur_y_extent_0, int32_t var_blur_y_extent_1, int32_t var_blur_y_min_0, int32_t var_blur_y_min_1, int32_t FIFO_ptrs[2], int32_t input_index_base)
 {
     if(compute_flag)
     {
-        int32_t burst_index = burst_index_in_total % (TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH));
+        //int32_t burst_index = burst_index_in_total % (TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH));
         //fprintf(stderr, "Compute: %d %d\n", burst_index, burst_index_in_total);
-        int32_t tile_index_dim0 = TILE_INDEX_DIM0(burst_index_in_total);
-        int32_t tile_index_dim1 = TILE_INDEX_DIM1(burst_index_in_total);
+        //int32_t tile_index_dim0 = TILE_INDEX_DIM0(burst_index_in_total);
+        //int32_t tile_index_dim1 = TILE_INDEX_DIM1(burst_index_in_total);
 
-        int32_t FIFO_124_ptr = (BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index)%124;
-        int32_t FIFO_125_ptr = (BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index)%125;
+        int32_t& FIFO_124_ptr = FIFO_ptrs[0];
+        int32_t& FIFO_125_ptr = FIFO_ptrs[1];
+//        int32_t FIFO_124_ptr = (BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index)%124;
+//        int32_t FIFO_125_ptr = (BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index)%125;
 
         uint16_t input_points[(UNROLL_FACTOR)][9];
         //         input_points[(UNROLL_FACTOR)][0] <=> (0, 0)
@@ -128,7 +130,7 @@ compute_epoch:
 #pragma HLS dependence variable=FF inter false
 #pragma HLS dependence variable=FIFO_124 inter false
 #pragma HLS dependence variable=FIFO_125 inter false
-            int32_t input_index = epoch + BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index;
+            int32_t input_index = epoch + input_index_base;// BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index;
 #pragma HLS pipeline II=1
 compute_load_unrolled:
             for(uint32_t unroll_index = 0; unroll_index<(UNROLL_FACTOR); ++unroll_index)
@@ -295,14 +297,17 @@ compute_unrolled:
 #pragma HLS unroll
                 if(input_index >= STENCIL_DISTANCE/UNROLL_FACTOR)
                 {
-                    int32_t output_index = (input_index-STENCIL_DISTANCE/UNROLL_FACTOR)*UNROLL_FACTOR+unroll_index-STENCIL_DISTANCE%UNROLL_FACTOR;
-                    if((input_index-STENCIL_DISTANCE/UNROLL_FACTOR)*UNROLL_FACTOR+unroll_index >= STENCIL_DISTANCE%UNROLL_FACTOR &&
-                        output_index < TILE_SIZE_DIM0*TILE_SIZE_DIM1)
+                    //int32_t output_index = (input_index-STENCIL_DISTANCE/UNROLL_FACTOR)*UNROLL_FACTOR+unroll_index-STENCIL_DISTANCE%UNROLL_FACTOR;
+                    int32_t output_index_offset = epoch*UNROLL_FACTOR+unroll_index;
+                    if((input_index-STENCIL_DISTANCE/UNROLL_FACTOR)*UNROLL_FACTOR+unroll_index >= STENCIL_DISTANCE%UNROLL_FACTOR)// &&
+//                        output_index < TILE_SIZE_DIM0*TILE_SIZE_DIM1)
                     {
+                        /*
                         int32_t i = output_index%TILE_SIZE_DIM0;
                         int32_t j = output_index/TILE_SIZE_DIM0;
                         int32_t q = Q(tile_index_dim1, j);
                         int32_t p = P(tile_index_dim0, i);
+                        */
                         uint16_t input_0 = input_points[unroll_index][0];
                         uint16_t input_1 = input_points[unroll_index][1];
                         uint16_t input_2 = input_points[unroll_index][2];
@@ -312,13 +317,13 @@ compute_unrolled:
                         uint16_t input_6 = input_points[unroll_index][6];
                         uint16_t input_7 = input_points[unroll_index][7];
                         uint16_t input_8 = input_points[unroll_index][8];
-                        if(p >= var_blur_y_min_0 &&
+                        if(true/*p >= var_blur_y_min_0 &&
                            q >= var_blur_y_min_1 &&
                            p < var_blur_y_min_0 + var_blur_y_extent_0 &&
                            q < var_blur_y_min_1 + var_blur_y_extent_1 &&
                            i < TILE_SIZE_DIM0-STENCIL_DIM0+1 &&
                            j < TILE_SIZE_DIM1-STENCIL_DIM1+1 &&
-                           1)
+                           1*/)
                         {
                             uint16_t assign_99 = input_0;
                             uint16_t assign_101 = input_1;
@@ -342,7 +347,8 @@ compute_unrolled:
                             uint16_t assign_126 = assign_125 / assign_106;
                             uint16_t assign_127 = assign_117 + assign_126;
                             uint16_t assign_128 = assign_127 / assign_106;
-                            output[output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index] = assign_128;
+                            //output[output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index] = assign_128;
+                            output[output_index_offset] = assign_128;
                             //printf("out offset: %d - %d = %d\n", output_index+STENCIL_DISTANCE, BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index, output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index);
 /*                            if(output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index<0 || output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index>=BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH)
                             {
@@ -462,40 +468,46 @@ void blur_kernel(ap_uint<BURST_WIDTH>* var_blur_y, ap_uint<BURST_WIDTH>* var_p0,
     bool    load_flag;
     bool compute_flag;
     bool   store_flag;
+    int32_t burst_index = -1;
+    int32_t FIFO_ptrs[2] = {0};
+    int32_t  input_index_base = -(BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR);
 
     //fprintf(stderr, "Checkpoint 1\n");
 burst:
-    for(int32_t burst_index = 0; burst_index < total_burst_num+2; ++burst_index)
+    for(int32_t burst_index_in_total = 0; burst_index_in_total < total_burst_num+2; ++burst_index_in_total)
     {
-        //fprintf(stderr, "\n%dCheckpoint 2:%d\n", total_burst_num, burst_index);
-           load_flag =                    burst_index < total_burst_num;
-        compute_flag = burst_index > 0 && burst_index < total_burst_num+1;
-          store_flag = burst_index > 1;
-        if(burst_index%2==0)
+        //fprintf(stderr, "\n%dCheckpoint 2:%d\n", total_burst_num, burst_index_in_total);
+           load_flag =                    burst_index_in_total < total_burst_num;
+        compute_flag = burst_index_in_total > 0 && burst_index_in_total < total_burst_num+1;
+          store_flag = burst_index_in_total > 1;
+        if(burst_index_in_total%2==0)
         {
-            load(load_flag, input_0, var_p0, burst_index);
-            compute(compute_flag, output_1, input_1, FF, FIFO_124, FIFO_125, burst_index-1, tile_num_dim0, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1);
-            store(store_flag, var_blur_y, output_0, burst_index-2);
+            load(load_flag, input_0, var_p0);
+            compute(compute_flag, output_1, input_1, FF, FIFO_124, FIFO_125, burst_index_in_total-1, burst_index, tile_num_dim0, tile_index_dim0, tile_index_dim1, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1, FIFO_ptrs, input_index_base);
+            store(store_flag, var_blur_y-2*BURST_LENGTH, output_0);
         }
         else
         {
-            load(load_flag, input_1, var_p0, burst_index);
-            compute(compute_flag, output_0, input_0, FF, FIFO_124, FIFO_125, burst_index-1, tile_num_dim0, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1);
-            store(store_flag, var_blur_y, output_1, burst_index-2);
+            load(load_flag, input_1, var_p0);
+            compute(compute_flag, output_0, input_0, FF, FIFO_124, FIFO_125, burst_index_in_total-1, burst_index, tile_num_dim0, tile_index_dim0, tile_index_dim1, var_blur_y_extent_0, var_blur_y_extent_1, var_blur_y_min_0, var_blur_y_min_1, FIFO_ptrs, input_index_base);
+            store(store_flag, var_blur_y-2*BURST_LENGTH, output_1);
         }
-        //fprintf(stderr, "burst_index: %d, TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH: %d\n", burst_index, TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH);
-        /*
-        if(burst_index == TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH)
+        var_p0 += BURST_LENGTH;
+        var_blur_y += BURST_LENGTH;
+        burst_index += 1;
+        input_index_base  += BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR;
+        //fprintf(stderr, "burst_index_in_total: %d, TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH: %d\n", burst_index_in_total, TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH);
+        if(burst_index == (TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH)))
         {
+            burst_index = 0;
+            input_index_base = 0;
             tile_index_dim0 += 1;
             if(tile_index_dim0==tile_num_dim0)
             {
                 tile_index_dim0 = 0;
                 tile_index_dim1 += 1;
             }
-            var_p0 += TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH);
-            var_blur_y += TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH);
-        }*/
+        }
     }
 }
 
