@@ -95,13 +95,14 @@ store_coalesced:
     }
 }
 
-void compute(bool compute_flag, uint16_t output[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t input[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t FF[6], uint16_t FIFO_124[4][124], uint16_t FIFO_125[28][125], int32_t burst_index, int32_t tile_num_dim0, int32_t var_blur_y_extent_0, int32_t var_blur_y_extent_1, int32_t var_blur_y_min_0, int32_t var_blur_y_min_1)
+void compute(bool compute_flag, uint16_t output[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t input[BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH], uint16_t FF[6], uint16_t FIFO_124[4][124], uint16_t FIFO_125[28][125], int32_t burst_index_in_total, int32_t tile_num_dim0, int32_t var_blur_y_extent_0, int32_t var_blur_y_extent_1, int32_t var_blur_y_min_0, int32_t var_blur_y_min_1)
 {
     if(compute_flag)
     {
-        //fprintf(stderr, "Compute: %d\n",burst_index);
-        int32_t tile_index_dim0 = TILE_INDEX_DIM0(burst_index);
-        int32_t tile_index_dim1 = TILE_INDEX_DIM1(burst_index);
+        int32_t burst_index = burst_index_in_total % (TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH));
+        //fprintf(stderr, "Compute: %d %d\n", burst_index, burst_index_in_total);
+        int32_t tile_index_dim0 = TILE_INDEX_DIM0(burst_index_in_total);
+        int32_t tile_index_dim1 = TILE_INDEX_DIM1(burst_index_in_total);
 
         int32_t FIFO_124_ptr = (BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index)%124;
         int32_t FIFO_125_ptr = (BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH/UNROLL_FACTOR*burst_index)%125;
@@ -133,13 +134,12 @@ compute_load_unrolled:
             for(uint32_t unroll_index = 0; unroll_index<(UNROLL_FACTOR); ++unroll_index)
             {
 #pragma HLS unroll
-                /*
-                if(input[epoch*(UNROLL_FACTOR)+unroll_index] != (input_index*UNROLL_FACTOR+unroll_index)%TILE_SIZE_DIM0+(input_index*UNROLL_FACTOR+unroll_index)/TILE_SIZE_DIM0)
-                {
-                    printf("input_index*UNROLL_FACTOR+unroll_index:%d input[epoch*(UNROLL_FACTOR)+unroll_index]:%d\n", input_index*UNROLL_FACTOR+unroll_index, input[epoch*(UNROLL_FACTOR)+unroll_index]);
-                }*/
                 if(input_index*(UNROLL_FACTOR)+unroll_index < (TILE_SIZE_DIM0)*(TILE_SIZE_DIM1))
                 {
+/*                    if(input[epoch*(UNROLL_FACTOR)+unroll_index] != (input_index*UNROLL_FACTOR+unroll_index)%TILE_SIZE_DIM0+(input_index*UNROLL_FACTOR+unroll_index)/TILE_SIZE_DIM0)
+                    {
+                        printf("burst_index:%d input_index*UNROLL_FACTOR+unroll_index:%d input[epoch*(UNROLL_FACTOR)+unroll_index]:%d\n", burst_index, input_index*UNROLL_FACTOR+unroll_index, input[epoch*(UNROLL_FACTOR)+unroll_index]);
+                    }*/
                     input_buffer[unroll_index] = input[epoch*(UNROLL_FACTOR)+unroll_index];
                 }
             }
@@ -343,19 +343,19 @@ compute_unrolled:
                             uint16_t assign_127 = assign_117 + assign_126;
                             uint16_t assign_128 = assign_127 / assign_106;
                             output[output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index] = assign_128;
-/*                            fprintf(stderr, "out offset: %d - %d = %d\n", output_index+STENCIL_DISTANCE, BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index, output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index);
-                            if(output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index<0 || output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index>=BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH)
+                            //printf("out offset: %d - %d = %d\n", output_index+STENCIL_DISTANCE, BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index, output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index);
+/*                            if(output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index<0 || output_index+STENCIL_DISTANCE-BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH*burst_index>=BURST_WIDTH/PIXEL_WIDTH*BURST_LENGTH)
                             {
                                 fprintf(stderr, "Something wrong.\n");
-                            }*/
-                            /*if(assign_128!=p+q+2)
+                            }
+                            if(true || assign_128!=p+q+2)
                             {
                                 printf("input_index=%d output_index=%d unroll_index=%d burst_index=%d i=%d j=%d p=%d q=%d output=%d input_0=%d input_buffer[unroll_index]=%d\n", input_index, output_index, unroll_index, burst_index, i, j, p, q, int(assign_128), int(input_0), int(input_buffer[unroll_index]));
                             }*/
                         }
-/*                        else
+                        /*else
                         {
-                            fprintf(stderr, "if branch: tile_num_dim0:%d tile_index_dim0:%d tile_index_dim1:%d input_index:%d, output_index:%d, i:%d, j:%d, p:%d, q:%d\n", tile_num_dim0, tile_index_dim0, tile_index_dim1, input_index, output_index, i, j, p, q);
+                            printf("if branch: tile_num_dim0:%d tile_index_dim0:%d tile_index_dim1:%d input_index:%d, output_index:%d, i:%d, j:%d, p:%d, q:%d\n", tile_num_dim0, tile_index_dim0, tile_index_dim1, input_index, output_index, i, j, p, q);
                         }*/
                     }
                 } // if input_index >= STENCIL_DISTANCE
@@ -484,6 +484,7 @@ burst:
             store(store_flag, var_blur_y, output_1, burst_index-2);
         }
         //fprintf(stderr, "burst_index: %d, TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH: %d\n", burst_index, TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH);
+        /*
         if(burst_index == TILE_SIZE_DIM0*TILE_SIZE_DIM1/BURST_LENGTH)
         {
             tile_index_dim0 += 1;
@@ -492,7 +493,9 @@ burst:
                 tile_index_dim0 = 0;
                 tile_index_dim1 += 1;
             }
-        }
+            var_p0 += TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH);
+            var_blur_y += TILE_SIZE_DIM0*TILE_SIZE_DIM1/(BURST_WIDTH/PIXEL_WIDTH);
+        }*/
     }
 }
 

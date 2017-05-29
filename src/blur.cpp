@@ -25,6 +25,8 @@
 #define STENCIL_DIM1 (3)
 
 #define STENCIL_DISTANCE ((TILE_SIZE_DIM0)*2+2)
+#define BURST_WIDTH (512)
+#define PIXEL_WIDTH (16)
 
 int load_file_to_memory(const char *filename, char **result)
 { 
@@ -322,7 +324,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         // allocate buffer for tiled input/output
         int32_t tile_num_dim0 = (var_blur_y_extent_0+TILE_SIZE_DIM0-STENCIL_DIM0)/(TILE_SIZE_DIM0-STENCIL_DIM0+1);
         int32_t tile_num_dim1 = (var_blur_y_extent_1+TILE_SIZE_DIM1-STENCIL_DIM1)/(TILE_SIZE_DIM1-STENCIL_DIM1+1);
-        uint16_t* var_blur_y_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1+STENCIL_DISTANCE];
+        uint16_t* var_blur_y_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
         uint16_t* var_p0_buf = new uint16_t[tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1];
 
         // tiling
@@ -484,7 +486,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         }
 
         var_p0_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, NULL, NULL);
-        var_blur_y_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint16_t) * (tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1+STENCIL_DISTANCE), NULL, NULL);
+        var_blur_y_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, NULL, NULL);
         if (!var_p0_cl || !var_blur_y_cl)
         {
             printf("Fatal: Failed to allocate device memory\n");
@@ -494,7 +496,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         timespec write_begin, write_end;
         cl_event writeevent;
         clock_gettime(CLOCK_REALTIME, &write_begin);
-        err = clEnqueueWriteBuffer(commands, var_p0_cl, CL_TRUE, 0, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, var_p0_buf, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_p0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, var_p0_buf, 0, NULL, &writeevent);
         if (err != CL_SUCCESS)
         {
             printf("Fatal: Failed to write to p0 !\n");
@@ -531,8 +533,8 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
             for(int i = 0; i<3; ++i)
             {
                 err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
-                clWaitForEvents(1, &execute);
             }
+            clWaitForEvents(1, &execute);
         }
         else
         {
@@ -559,7 +561,7 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer( commands, var_blur_y_cl, CL_TRUE, 0, sizeof(uint16_t) * (tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1+STENCIL_DISTANCE), var_blur_y_buf, 0, NULL, &readevent );  
+        err = clEnqueueReadBuffer( commands, var_blur_y_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim0*tile_num_dim1*TILE_SIZE_DIM0*TILE_SIZE_DIM1, var_blur_y_buf, 0, NULL, &readevent );
         if (err != CL_SUCCESS)
         {
             printf("Error: Failed to read blur_y %d\n", err);
@@ -571,14 +573,14 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
 
         double elapsed_time = 0.;
         elapsed_time = (double(write_end.tv_sec-write_begin.tv_sec)+(write_end.tv_nsec-write_begin.tv_nsec)/1e9)*1e6;
-        printf("PCIe write time: %lf us\n", elapsed_time);
-        printf("PCIe write throuput: %lf GB/s\n", var_p0_extent_0*var_p0_extent_1*var_p0_elem_size/elapsed_time/1e3);
+        printf("PCIe write time:       %lf us\n", elapsed_time);
+        printf("PCIe write throughput: %lf GB/s\n", var_p0_extent_0*var_p0_extent_1*var_p0_elem_size/elapsed_time/1e3);
         elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;
-        printf("Kernel run time: %lf us\n", elapsed_time);
-        printf("Kernel throughput: %lf pixel/ns\n", var_p0_extent_0*var_p0_extent_1/elapsed_time/1e3);
+        printf("Kernel run time:       %lf us\n", elapsed_time);
+        printf("Kernel throughput:     %lf pixel/ns\n", var_p0_extent_0*var_p0_extent_1/elapsed_time/1e3);
         elapsed_time = (double(read_end.tv_sec-read_begin.tv_sec)+(read_end.tv_nsec-read_begin.tv_nsec)/1e9)*1e6;
-        printf("PCIe read time: %lf us\n", elapsed_time);
-        printf("PCIe read throuput: %lf GB/s\n", var_blur_y_extent_0*var_blur_y_extent_1*var_blur_y_elem_size/elapsed_time/1e3);
+        printf("PCIe read time:        %lf us\n", elapsed_time);
+        printf("PCIe read throughput:  %lf GB/s\n", var_blur_y_extent_0*var_blur_y_extent_1*var_blur_y_elem_size/elapsed_time/1e3);
 
         clReleaseMemObject(var_p0_cl);
         clReleaseMemObject(var_blur_y_cl);
@@ -600,10 +602,10 @@ static int blur_wrapped(buffer_t *var_p0_buffer, buffer_t *var_blur_y_buffer, co
                     size_t y = tile_index_dim1*TILE_SIZE_DIM1+j;
                     size_t p = tile_index_dim0*(TILE_SIZE_DIM0-STENCIL_DIM0+1)+i;
                     size_t q = tile_index_dim1*(TILE_SIZE_DIM1-STENCIL_DIM1+1)+j;
-                    size_t tiled_offset = (tile_index_dim1*tile_num_dim0+tile_index_dim0)*TILE_SIZE_DIM1*TILE_SIZE_DIM0+j*TILE_SIZE_DIM0+i;
+                    size_t tiled_offset = (tile_index_dim1*tile_num_dim0+tile_index_dim0)*(TILE_SIZE_DIM1*TILE_SIZE_DIM0)+j*TILE_SIZE_DIM0+i+STENCIL_DISTANCE;
                     size_t original_offset = q*var_blur_y_stride_1+p;
                     memcpy(var_blur_y+original_offset,
-                           var_blur_y_buf+STENCIL_DISTANCE+tiled_offset,
+                           var_blur_y_buf+tiled_offset,
                            actual_tile_size_dim0*sizeof(uint16_t));
                 }
             }
