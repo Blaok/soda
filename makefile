@@ -1,7 +1,7 @@
 .PHONY: csim cosim hw hls mktemp
 
 APP ?= blur
-SDA_VER ?= 2016.3
+SDA_VER ?= 2017.1
 TILE_SIZE_DIM0 ?= 2000
 TILE_SIZE_DIM1 ?= 1024
 BURST_LENGTH ?= 2000
@@ -32,7 +32,8 @@ XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
 
 HOST_CFLAGS = -std=c++0x -g -Wall -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/include/1_2
-HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0 -ldl -lpthread -lz $(shell libpng-config --ldflags)
+HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -lrt -ldl -lpthread -lz $(shell libpng-config --ldflags)
+#HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0 -ldl -lpthread -lz $(shell libpng-config --ldflags)
 
 XDEVICE = xilinx:adm-pcie-7v3:1ddr:3.0
 HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
