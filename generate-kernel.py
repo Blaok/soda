@@ -202,11 +202,12 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
 #    indent = indent_save
     PrintLine('int32_t input_index = epoch + input_index_base;')
     PrintLine('#pragma HLS pipeline II=1', 0)
-    PrintLine('compute_load_unrolled:', 0)
+    PrintLine('compute_load_channel:', 0)
     PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
     PrintLine('{')
     indent += 1
     PrintLine('#pragma HLS unroll', 0)
+    PrintLine('compute_load_unrolled:', 0)
     PrintLine('for(int32_t unroll_index = 0; unroll_index<UNROLL_FACTOR; ++unroll_index)')
     PrintLine('{')
     indent += 1
@@ -218,6 +219,7 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     PrintLine('}')
     PrintLine()
 
+    PrintLine('compute_chain_channel:', 0)
     PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
     PrintLine('{')
     indent += 1
@@ -276,6 +278,7 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     indent -= 1;PrintLine('} // for unroll_index')
     PrintLine()
 
+    PrintLine('compute_finalize_channel:', 0)
     PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
     PrintLine('{')
     indent += 1
@@ -382,6 +385,7 @@ def PrintKernel(St, A, k, app_name, extra_params):
         PrintLine('#pragma HLS array_partition variable=%s_base complete' % coords_in_tile[i], 0)
     PrintLine()
 
+    PrintLine('bases_init:', 0)
     PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
     PrintLine('{');indent+=1
     PrintLine('#pragma HLS unroll', 0)
@@ -411,10 +415,12 @@ def PrintKernel(St, A, k, app_name, extra_params):
                 PrintLine('#pragma HLS array_partition variable=%s %s dim=%d' % (param_name, param['partition'], partition_dim), 0)
         PrintLine()
 
+        PrintLine('extra_params_unrolled:', 0)
         PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
         PrintLine('{');indent += 1
         PrintLine('#pragma HLS unroll',0)
         for param_name, param in extra_params.items():
+            PrintLine('%s_init:' % param_name, 0)
             PrintLine('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param_name, param_name, param['length'], param_name))
             PrintLine('{');indent += 1
             PrintLine('#pragma HLS pipeline II=1', 0)
