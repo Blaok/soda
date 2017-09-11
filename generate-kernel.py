@@ -317,7 +317,11 @@ def PrintKernel(St, A, k, app_name, extra_params):
             PrintLine('%s* var_%s,' % (param['type'], param_name))
     for i in range(0, len(St)-1):
         PrintLine('int32_t tile_num_dim_%d,' % i)
-    PrintLine('int32_t input_size_dim_%d)' % (len(St)-1))
+    PrintLine('int32_t input_size_dim_%d,' % (len(St)-1))
+    PrintLine('int64_t tile_burst_num,')
+    PrintLine('int64_t extra_space_i_coalesed,')
+    PrintLine('int64_t extra_space_o_coalesed,')
+    PrintLine('int32_t total_burst_num)')
     indent -= 1
     PrintLine('{')
     indent += 1
@@ -357,11 +361,6 @@ def PrintKernel(St, A, k, app_name, extra_params):
         PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=2' % (fifo_length/k), 0)
     PrintLine()
 
-    PrintLine('int64_t tile_pixel_num = %sinput_size_dim_%d;' % (''.join([('TILE_SIZE_DIM_%d*' % i) for i in range(0, len(St)-1)]), len(St)-1))
-    PrintLine('int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH+1;')
-    PrintLine('int64_t extra_space_i = (tile_burst_num*BURST_LENGTH-tile_pixel_num)*CHANNEL_NUM_I;')
-    PrintLine('int64_t extra_space_o = (tile_burst_num*BURST_LENGTH-tile_pixel_num)*CHANNEL_NUM_O;')
-    PrintLine('int32_t total_burst_num = %stile_burst_num;' % (''.join([('tile_num_dim_%d*' % i) for i in range(0, len(St)-1)])))
     for i in range(0, len(St)-1):
         PrintLine('int32_t tile_index_dim_%d = 0;' % i)
     PrintLine('bool    load_flag;')
@@ -462,7 +461,7 @@ def PrintKernel(St, A, k, app_name, extra_params):
     PrintLine('if(burst_index_load == tile_burst_num)')
     PrintLine('{');indent += 1
     PrintLine('burst_index_load = 0;')
-    PrintLine('var_input -= extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I);')
+    PrintLine('var_input -= extra_space_i_coalesed;')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
 
@@ -502,7 +501,7 @@ def PrintKernel(St, A, k, app_name, extra_params):
     PrintLine('if(burst_index_store == tile_burst_num)')
     PrintLine('{');indent += 1
     PrintLine('burst_index_store = 0;')
-    PrintLine('var_output -= extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O);')
+    PrintLine('var_output -= extra_space_o_coalesed;')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
 
