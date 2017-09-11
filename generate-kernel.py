@@ -246,17 +246,14 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     for i in range(0, len(St)-1):
         PrintLine('int32_t %s = %s_base+%s;' % ((coords_in_orig[i],)*2 + (coords_in_tile[i],)))
     PrintLine('int32_t %s = %s;' % (coords_in_orig[len(St)-1],coords_in_tile[len(St)-1]))
-    PrintLine('if(input_index >= STENCIL_DISTANCE/UNROLL_FACTOR)')
-    PrintLine('{');indent += 1
     PrintLine('int32_t output_index_offset = epoch*UNROLL_FACTOR+unroll_index;')
-    PrintLine('if((input_index-STENCIL_DISTANCE/UNROLL_FACTOR)*UNROLL_FACTOR+unroll_index >= STENCIL_DISTANCE%UNROLL_FACTOR)')
-    PrintLine('{');indent += 1
+    PrintLine()
 
     for line in compute_content:
         if len(line) > 0:
             PrintLine(line.replace('\n','').replace('\r',''))
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('} // if input_index >= STENCIL_DISTANCE')
+    PrintLine()
+
     PrintLine('%s += UNROLL_FACTOR;' % coords_in_tile[0])
     if(len(St)>1):
         PrintLine('if(%s>=TILE_SIZE_DIM_0)' % coords_in_tile[0])
