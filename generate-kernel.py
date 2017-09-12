@@ -530,24 +530,20 @@ def PrintLoad():
     PrintLine('{');indent += 1
     PrintLine('if(load_flag)')
     PrintLine('{');indent += 1
-    PrintLine('int c = 0;')
-    PrintLine('int i = 0;')
-    PrintLine('load_epoch: // load_epoch = c*BURST_LENGTH+i;', 0)
-    PrintLine('for(int load_epoch = 0; load_epoch < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I; ++load_epoch)')
+    PrintLine('load_channel:', 0)
+    PrintLine('for(int c = 0; c < CHANNEL_NUM_I; ++c)')
+    PrintLine('{');indent += 1
+    PrintLine('load_epoch:', 0)
+    PrintLine('for(int i = 0; i < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I); ++i)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS pipeline II=1', 0)
-    PrintLine('ap_uint<BURST_WIDTH> tmp(from[load_epoch]);')
+    PrintLine('ap_uint<BURST_WIDTH> tmp(from[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i]);')
     PrintLine('load_coalesced:', 0)
     PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS unroll', 0)
     PrintLine('to[c][i*BURST_WIDTH/PIXEL_WIDTH_I+j] = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);')
     indent -= 1;PrintLine('}')
-    PrintLine('++i;')
-    PrintLine('if(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)==i)')
-    PrintLine('{');indent += 1
-    PrintLine('++c;')
-    PrintLine('i = 0;')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
@@ -559,10 +555,11 @@ def PrintStore():
     PrintLine('{');indent += 1
     PrintLine('if(store_flag)')
     PrintLine('{');indent += 1
-    PrintLine('int c = 0;')
-    PrintLine('int i = 0;')
-    PrintLine('store_epoch:    // store_epoch = c*BURST_LENGTH+i;', 0)
-    PrintLine('for(int store_epoch = 0; store_epoch < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O; ++store_epoch)')
+    PrintLine('store_channel:', 0)
+    PrintLine('for(int c = 0; c < CHANNEL_NUM_O; ++c)')
+    PrintLine('{');indent += 1
+    PrintLine('store_epoch:', 0)
+    PrintLine('for(int i = 0; i < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O); ++i)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS pipeline II=1', 0)
     PrintLine('ap_uint<BURST_WIDTH> tmp;')
@@ -572,12 +569,7 @@ def PrintStore():
     PrintLine('#pragma HLS unroll', 0)
     PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][i*BURST_WIDTH/PIXEL_WIDTH_O+j];')
     indent -= 1;PrintLine('}')
-    PrintLine('to[store_epoch] = tmp;')
-    PrintLine('++i;')
-    PrintLine('if(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)==i)')
-    PrintLine('{');indent += 1
-    PrintLine('++c;')
-    PrintLine('i = 0;')
+    PrintLine('to[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i] = tmp;')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
