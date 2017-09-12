@@ -4,7 +4,7 @@ APP ?= blur
 SDA_VER ?= 2017.1
 TILE_SIZE_DIM_0 ?= 2000
 #TILE_SIZE_DIM1 ?= 1024
-BURST_LENGTH ?= 100000
+BURST_LENGTH ?= 100032
 UNROLL_FACTOR ?= 16
 
 CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)-unroll$(UNROLL_FACTOR)-burst$(BURST_LENGTH).xclbin
@@ -62,11 +62,11 @@ mktemp:
 $(SRC)/$(KERNEL_SRCS): $(SRC)/$(APP).json
 	./generate-kernel.py < $^ > $@
 
-$(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%-tile$(TILE_SIZE_DIM_0).o)
+$(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH).o)
 	@mkdir -p $(BIN)
 	$(WITH_SDACCEL) $(CXX) $(HOST_LFLAGS) $^ -o $@
 
-$(OBJ)/%-tile$(TILE_SIZE_DIM_0).o: $(SRC)/%.cpp $(SRC)/$(APP)_params.h
+$(OBJ)/%-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH).o: $(SRC)/%.cpp $(SRC)/$(APP)_params.h
 	@mkdir -p $(OBJ)
 	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
 	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -c $< -o $@
