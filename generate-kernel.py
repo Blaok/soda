@@ -95,39 +95,41 @@ def PrintLine(line = '', local_indent = -1):
     else:
         print()
 
-def PrintUpdate(producer_map, consumer_map, src):
-    if 'FIFOs' in src:
-        dst = consumer_map.get(src['FIFOs']['produce'])
-        if not dst:
+def PrintUpdate(producer_map, consumer_map, src, input_type):
+    for c in range(0, input_type[1]):
+        if 'FIFOs' in src:
+            dst = consumer_map.get(src['FIFOs']['produce'])
+            if not dst:
+                return
+            fifo_length = src['FIFOs']['length']/producer_map['k']
+            fifo_index = src['FIFOs']['index']
+            src_str = 'FIFO_%d_%d_%d' % (fifo_length, c, fifo_index)
+            #src_str = 'FIFO_%d[%d][%d][FIFO_%d_ptr]' % (fifo_length, c, fifo_index, fifo_length)
+        elif 'FFs' in src:
+            dst = consumer_map.get(src['FFs']['produce'])
+            if not dst:
+                return
+            src_str = 'FF[%d][%d]' % (c, src['FFs']['index'])
+        else:
+            dst = consumer_map.get(src['inputs']['produce'])
+            if not dst:
+                return
+            src_str = 'input_buffer[%d][%d]' % (c, src['inputs']['index'])
+
+        PrintUpdate(producer_map, consumer_map, dst, input_type)
+
+        if 'FIFOs' in dst:
+            fifo_length = dst['FIFOs']['length']/consumer_map['k']
+            fifo_index = dst['FIFOs']['index']
+            dst_str = 'FIFO_%d[%d][%d][FIFO_%d_ptr]' % (fifo_length, c, fifo_index, fifo_length)
+        elif 'FFs' in dst:
+            dst_str = 'FF[%d][%d]' % (c, dst['FFs']['index'])
+        else:
             return
-        fifo_length = src['FIFOs']['length']/producer_map['k']
-        fifo_index = src['FIFOs']['index']
-        src_str = 'FIFO_%d[c][%d][FIFO_%d_ptr]' % (fifo_length, fifo_index, fifo_length)
-    elif 'FFs' in src:
-        dst = consumer_map.get(src['FFs']['produce'])
-        if not dst:
-            return
-        src_str = 'FF[c][%d]' % (src['FFs']['index'])
-    else:
-        dst = consumer_map.get(src['inputs']['produce'])
-        if not dst:
-            return
-        src_str = 'input_buffer[c][%d]' % (src['inputs']['index'])
 
-    PrintUpdate(producer_map, consumer_map, dst)
+        PrintLine('%s = %s;' % (dst_str, src_str))
 
-    if 'FIFOs' in dst:
-        fifo_length = dst['FIFOs']['length']/consumer_map['k']
-        fifo_index = dst['FIFOs']['index']
-        dst_str = 'FIFO_%d[c][%d][FIFO_%d_ptr]' % (fifo_length, fifo_index, fifo_length)
-    elif 'FFs' in dst:
-        dst_str = 'FF[c][%d]' % (dst['FFs']['index'])
-    else:
-        return
-
-    PrintLine('%s = %s;' % (dst_str, src_str))
-
-def PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params):
+def PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type):
     global indent
     buf = GetBuffer(St, A, k)
     points = GetPoints(A, k)
@@ -219,24 +221,32 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     PrintLine('}')
     PrintLine()
 
-    PrintLine('compute_chain_channel:', 0)
-    PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
-    PrintLine('{')
-    indent += 1
-    PrintLine('#pragma HLS unroll', 0)
-    for idx, item in enumerate(buf['inputs']):
-        for unroll_index in points[item].keys():
-            PrintLine("input_points[c][%d][%d] = input_buffer[c][%d]; // (%s)" % (unroll_index, points[item][unroll_index], idx, str(A[points[item][unroll_index]])[1:-1]))
-    for idx, item in enumerate(buf['FFs']):
-        for unroll_index in points[item].keys():
-            PrintLine("input_points[c][%d][%d] = FF[c][%d]; // (%s)" % (unroll_index, points[item][unroll_index], idx, str(A[points[item][unroll_index]])[1:-1]))
-    for fifo_length in buf['FIFOs'].keys():
-        for idx, item in enumerate(buf['FIFOs'][fifo_length]):
-            for unroll_index in points[item].keys():
-                PrintLine("input_points[c][%d][%d] = FIFO_%d[c][%d][FIFO_%d_ptr]; // (%s)" % (unroll_index, points[item][unroll_index], fifo_length/k, idx, fifo_length/k, str(A[points[item][unroll_index]])[1:-1]))
+    for c in range(0, input_type[1]):
+        for fifo_length in buf['FIFOs'].keys():
+            for idx, item in enumerate(buf['FIFOs'][fifo_length]):
+                PrintLine('input_type FIFO_%d_%d_%d = FIFO_%d[%d][%d][FIFO_%d_ptr];'% (fifo_length/k, c, idx, fifo_length/k, c, idx, fifo_length/k))
+    PrintLine()
 
-    indent -= 1
-    PrintLine('}')
+#    PrintLine('compute_chain_channel:', 0)
+#    PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
+#    PrintLine('{')
+#    indent += 1
+#    PrintLine('#pragma HLS unroll', 0)
+    for c in range(0, input_type[1]):
+        for idx, item in enumerate(buf['inputs']):
+            for unroll_index in points[item].keys():
+                PrintLine("input_points[%d][%d][%d] = input_buffer[%d][%d]; // (%s)" % (c, unroll_index, points[item][unroll_index], c, idx, str(A[points[item][unroll_index]])[1:-1]))
+        for idx, item in enumerate(buf['FFs']):
+            for unroll_index in points[item].keys():
+                PrintLine("input_points[%d][%d][%d] = FF[%d][%d]; // (%s)" % (c, unroll_index, points[item][unroll_index], c, idx, str(A[points[item][unroll_index]])[1:-1]))
+        for fifo_length in buf['FIFOs'].keys():
+            for idx, item in enumerate(buf['FIFOs'][fifo_length]):
+                for unroll_index in points[item].keys():
+                    PrintLine("input_points[%d][%d][%d] = FIFO_%d_%d_%d; // (%s)" % (c, unroll_index, points[item][unroll_index], fifo_length/k, c, idx, str(A[points[item][unroll_index]])[1:-1]))
+                    #PrintLine("input_points[%d][%d][%d] = FIFO_%d[%d][%d][FIFO_%d_ptr]; // (%s)" % (c, unroll_index, points[item][unroll_index], fifo_length/k, c, idx, fifo_length/k, str(A[points[item][unroll_index]])[1:-1]))
+
+#    indent -= 1
+#    PrintLine('}')
     PrintLine()
 
     PrintLine('compute_unrolled:', 0)
@@ -249,6 +259,9 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
         PrintLine('int32_t %s = %s_base+%s;' % ((coords_in_orig[i],)*2 + (coords_in_tile[i],)))
     PrintLine('int32_t %s = %s;' % (coords_in_orig[len(St)-1],coords_in_tile[len(St)-1]))
     PrintLine('int32_t output_index_offset = epoch*UNROLL_FACTOR+unroll_index;')
+    PrintLine()
+    for idx, item in enumerate(A):
+        PrintLine('input_type input_%s = input_points[0][unroll_index][%d];' % ('_'.join([str(x) for x in item]), idx))
     PrintLine()
 
     for line in compute_content:
@@ -278,20 +291,21 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     indent -= 1;PrintLine('} // for unroll_index')
     PrintLine()
 
-    PrintLine('compute_finalize_channel:', 0)
-    PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
-    PrintLine('{')
-    indent += 1
-    PrintLine('#pragma HLS unroll', 0)
-    first = True
-    for idx, item in enumerate(buf['inputs']):
-        if first:
-            first = False
-        else:
-            PrintLine()
-        PrintUpdate(GetProduceMap(buf), GetConsumeMap(buf), {'inputs':{'index':idx, 'produce':item}})
-    indent -= 1
-    PrintLine('}')
+    #PrintLine('compute_finalize_channel:', 0)
+    #PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
+    #PrintLine('{')
+    #indent += 1
+    #PrintLine('#pragma HLS unroll', 0)
+    for c in range(0, input_type[1]):
+        first = True
+        for idx, item in enumerate(buf['inputs']):
+            if first:
+                first = False
+            else:
+                PrintLine()
+            PrintUpdate(GetProduceMap(buf), GetConsumeMap(buf), {'inputs':{'index':idx, 'produce':item}}, input_type)
+    #indent -= 1
+    #PrintLine('}')
     PrintLine()
     for fifo_length in buf['FIFOs'].keys():
         PrintLine('FIFO_%d_ptr = FIFO_%d_ptr==(%d-1) ? 0 : FIFO_%d_ptr+1;' % (fifo_length/k, fifo_length/k, fifo_length/k, fifo_length/k))
@@ -589,8 +603,8 @@ St = config.get('St', [0]*config['dim'])
 A = config['A']
 k = int(os.environ.get('UNROLL_FACTOR', config['k']))
 burst_width = config['burst_width']
-pixel_width_i = type_width[input_type]
-pixel_width_o = type_width[output_type]
+pixel_width_i = type_width[input_type[0]]
+pixel_width_o = type_width[output_type[0]]
 input_partition = burst_width/pixel_width_i if burst_width/pixel_width_i > k else k
 output_partition = burst_width/pixel_width_o if burst_width/pixel_width_o > k else k
 compute_content = config['compute_content']
@@ -602,8 +616,8 @@ while (('TILE_SIZE_DIM_%d' % i) in os.environ):
 
 indent = 0
 PrintHeader(app_name)
-PrintLine('typedef %s input_type;' % input_type)
-PrintLine('typedef %s output_type;' % output_type)
+PrintLine('typedef %s input_type;' % input_type[0])
+PrintLine('typedef %s output_type;' % output_type[0])
 PrintGuard('UNROLL_FACTOR', k)
 for i in range(0, len(St)-1):
     PrintGuard('TILE_SIZE_DIM_%d' % i, St[i])
@@ -612,7 +626,7 @@ PrintLoad()
 PrintLine()
 PrintStore()
 PrintLine()
-PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params)
+PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type)
 PrintLine()
 PrintKernel(St, A, k, app_name, extra_params)
 
