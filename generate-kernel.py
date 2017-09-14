@@ -353,7 +353,7 @@ def PrintKernel(St, A, k, app_name, extra_params):
             PrintLine('#pragma HLS INTERFACE s_axilite port=var_%s bundle=control' % param_name, 0)
     for i in range(0, len(St)-1):
         PrintLine('#pragma HLS INTERFACE s_axilite port=tile_num_dim_%d bundle=control' % i, 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=input_size_dim_1 bundle=control', 0)
+    PrintLine('#pragma HLS INTERFACE s_axilite port=input_size_dim_%d bundle=control' % (len(St)-1), 0)
     PrintLine('#pragma HLS INTERFACE s_axilite port=tile_burst_num bundle=control', 0)
     PrintLine('#pragma HLS INTERFACE s_axilite port=extra_space_i_coalesed bundle=control', 0)
     PrintLine('#pragma HLS INTERFACE s_axilite port=extra_space_o_coalesed bundle=control', 0)
