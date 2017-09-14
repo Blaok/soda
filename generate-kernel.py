@@ -538,7 +538,7 @@ def PrintHeader(app_name):
     PrintLine('#include"%s_params.h"' % app_name)
     PrintLine()
 
-def PrintLoad():
+def PrintLoad(input_type):
     global indent
     PrintLine('void load(bool load_flag, input_type to[CHANNEL_NUM_I][BURST_LENGTH], ap_uint<BURST_WIDTH>* from)')
     PrintLine('{');indent += 1
@@ -556,14 +556,18 @@ def PrintLoad():
     PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS unroll', 0)
-    PrintLine('to[c][i*BURST_WIDTH/PIXEL_WIDTH_I+j] = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);')
+    if input_type=='float' or input_type=='double':
+        PrintLine('uint%d_t raw_bits = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % 32 if input_type=='float' else 64)
+        PrintLine('to[c][i*BURST_WIDTH/PIXEL_WIDTH_I+j] = *(input_type*)(&raw_bits);')
+    else:
+        PrintLine('to[c][i*BURST_WIDTH/PIXEL_WIDTH_I+j] = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
 
-def PrintStore():
+def PrintStore(output_type):
     global indent
     PrintLine('void store(bool store_flag, ap_uint<BURST_WIDTH>* to, output_type from[CHANNEL_NUM_O][BURST_LENGTH])')
     PrintLine('{');indent += 1
@@ -581,7 +585,11 @@ def PrintStore():
     PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS unroll', 0)
-    PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][i*BURST_WIDTH/PIXEL_WIDTH_O+j];')
+    if output_type=='float' or output_type=='double':
+        PrintLine('output_type raw_bits = from[c][i*BURST_WIDTH/PIXEL_WIDTH_O+j];')
+        PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = *(uint%d_t*)(&raw_bits);' % 32 if output_type=='float' else 64)
+    else:
+        PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][i*BURST_WIDTH/PIXEL_WIDTH_O+j];')
     indent -= 1;PrintLine('}')
     PrintLine('to[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i] = tmp;')
     indent -= 1;PrintLine('}')
@@ -594,7 +602,7 @@ def PrintGuard(var, val):
     PrintLine('#error %s != %d' % (var, val))
     PrintLine('#endif//%s != %d' % (var, val))
 
-type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64}
+type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
 config = json.loads(sys.stdin.read())
 input_type = config['input_type']
 output_type = config['output_type']
@@ -622,9 +630,9 @@ PrintGuard('UNROLL_FACTOR', k)
 for i in range(0, len(St)-1):
     PrintGuard('TILE_SIZE_DIM_%d' % i, St[i])
 PrintLine()
-PrintLoad()
+PrintLoad(input_type[0])
 PrintLine()
-PrintStore()
+PrintStore(output_type[0])
 PrintLine()
 PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type)
 PrintLine()
