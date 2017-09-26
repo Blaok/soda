@@ -7,15 +7,19 @@
 
 int main(int argc, char **argv)
 {
-//    Image<uint8_t> input(6408, 4802);
+    if(argc != 4)
+    {
+        fprintf(stderr, "Usage: \n    %s <xclbin> <input width> <input height>\n", argv[0]);
+        return 1;
+    }
     buffer_t input, output;
     memset(&input, 0, sizeof(buffer_t));
     memset(&output, 0, sizeof(buffer_t));
 
-    const uint32_t  input_width  = 2000;
-    const uint32_t  input_height = 1000;
-    const uint32_t output_width  = input_width -2;
-    const uint32_t output_height = input_height-2;
+    const int32_t  input_width  = strtoul(argv[2], nullptr, 10);
+    const int32_t  input_height = strtoul(argv[3], nullptr, 10);
+    const int32_t output_width  = input_width -2;
+    const int32_t output_height = input_height-2;
 
     uint8_t*  input_img = new uint8_t[ input_width* input_height];
     uint8_t* output_img = new uint8_t[output_width*output_height];
@@ -25,14 +29,14 @@ int main(int argc, char **argv)
     input.stride[0] = 1;  // Spacing in memory between adjacent values of x.
     input.stride[1] = input_width; // Spacing in memory between adjacent values of y;
     input.elem_size = sizeof(uint8_t); // Bytes per element.
-    input.host = (unsigned char *)input_img;
+    input.host = (uint8_t *)input_img;
 
     output.extent[0] = output_width; // Width.
     output.extent[1] = output_height; // Height.
     output.stride[0] = 1;  // Spacing in memory between adjacent values of x.
     output.stride[1] = output_width; // Spacing in memory between adjacent values of y;
     output.elem_size = sizeof(uint8_t); // Bytes per element.
-    output.host = (unsigned char *)output_img;
+    output.host = (uint8_t *)output_img;
 
     for (int y = 0; y < input_height; y++) {
         for (int x = 0; x < input_width; x++) {

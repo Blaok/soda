@@ -7,15 +7,19 @@
 
 int main(int argc, char **argv)
 {
-//    Image<uint16_t> input(6408, 4802);
+    if(argc != 4)
+    {
+        fprintf(stderr, "Usage: \n    %s <xclbin> <input width> <input height>\n", argv[0]);
+        return 1;
+    }
     buffer_t input, output;
     memset(&input, 0, sizeof(buffer_t));
     memset(&output, 0, sizeof(buffer_t));
 
-    const uint32_t  input_width  = 2000;
-    const uint32_t  input_height = 1000;
-    const uint32_t output_width  = input_width -4;
-    const uint32_t output_height = input_height-4;
+    const int32_t  input_width  = strtoul(argv[2], nullptr, 10);
+    const int32_t  input_height = strtoul(argv[3], nullptr, 10);
+    const int32_t output_width  = input_width -4;
+    const int32_t output_height = input_height-4;
 
     uint16_t*  input_img = new uint16_t[ input_width* input_height];
     uint16_t* output_img = new uint16_t[output_width*output_height];

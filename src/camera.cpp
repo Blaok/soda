@@ -6,21 +6,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <fcntl.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
 #include <CL/opencl.h>
 
-#include "gaussian.h"
-#include "gaussian_params.h"
+#include "camera.h"
+#include "camera_params.h"
+
+inline float float_from_bits(uint32_t bits)
+{
+    union
+    {
+        uint32_t as_uint;
+        float as_float;
+        
+    } u;
+    u.as_uint = bits;
+    return u.as_float;
+}
+
+inline float pow_f32(float x, float y) {return powf(x, y);}
 
 int load_file_to_memory(const char *filename, char **result)
 { 
-    size_t size = 0;
+    uint32_t size = 0;
     FILE *f = fopen(filename, "rb");
-    if (NULL == f)
+    if (f == NULL)
     {
         *result = NULL;
         return -1;
@@ -117,10 +133,10 @@ int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
     } else if (max_touched > max_valid) {
         fprintf(*error_report, "%s is acccessed at %d, which is beyond the max (%d) in dimension %d", func_name, max_touched, max_valid, dimension);
     }
-    return halide_error_code_access_out_of_bounds;
+return halide_error_code_access_out_of_bounds;
 }
 
-static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+static int camera_wrapped(float var_color_temp, float var_gamma, float var_contrast, int32_t var_blackLevel, int32_t var_whiteLevel, buffer_t* var_input_buffer, buffer_t* var_m3200_buffer, buffer_t* var_m7000_buffer, buffer_t* var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
     uint16_t *var_input = (uint16_t *)(var_input_buffer->host);
     (void)var_input;
     const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
@@ -137,10 +153,10 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     (void)input_size_dim_0;
     int32_t input_size_dim_1 = var_input_buffer->extent[1];
     (void)input_size_dim_1;
-    int32_t var_input_extent_2 = var_input_buffer->extent[2];
-    (void)var_input_extent_2;
-    int32_t var_input_extent_3 = var_input_buffer->extent[3];
-    (void)var_input_extent_3;
+    int32_t input_size_dim_2 = var_input_buffer->extent[2];
+    (void)input_size_dim_2;
+    int32_t input_size_dim_3 = var_input_buffer->extent[3];
+    (void)input_size_dim_3;
     int32_t var_input_stride_0 = var_input_buffer->stride[0];
     (void)var_input_stride_0;
     int32_t var_input_stride_1 = var_input_buffer->stride[1];
@@ -151,8 +167,71 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     (void)var_input_stride_3;
     int32_t var_input_elem_size = var_input_buffer->elem_size;
     (void)var_input_elem_size;
-    uint16_t *var_output = (uint16_t *)(var_output_buffer->host);
-    (void)var_output;
+
+    float *var_m3200 = (float *)(var_m3200_buffer->host);
+    (void)var_m3200;
+    const bool var_m3200_host_and_dev_are_null = (var_m3200_buffer->host == NULL) && (var_m3200_buffer->dev == 0);
+    (void)var_m3200_host_and_dev_are_null;
+    int32_t var_m3200_min_0 = var_m3200_buffer->min[0];
+    (void)var_m3200_min_0;
+    int32_t var_m3200_min_1 = var_m3200_buffer->min[1];
+    (void)var_m3200_min_1;
+    int32_t var_m3200_min_2 = var_m3200_buffer->min[2];
+    (void)var_m3200_min_2;
+    int32_t var_m3200_min_3 = var_m3200_buffer->min[3];
+    (void)var_m3200_min_3;
+    int32_t var_m3200_extent_0 = var_m3200_buffer->extent[0];
+    (void)var_m3200_extent_0;
+    int32_t var_m3200_extent_1 = var_m3200_buffer->extent[1];
+    (void)var_m3200_extent_1;
+    int32_t var_m3200_extent_2 = var_m3200_buffer->extent[2];
+    (void)var_m3200_extent_2;
+    int32_t var_m3200_extent_3 = var_m3200_buffer->extent[3];
+    (void)var_m3200_extent_3;
+    int32_t var_m3200_stride_0 = var_m3200_buffer->stride[0];
+    (void)var_m3200_stride_0;
+    int32_t var_m3200_stride_1 = var_m3200_buffer->stride[1];
+    (void)var_m3200_stride_1;
+    int32_t var_m3200_stride_2 = var_m3200_buffer->stride[2];
+    (void)var_m3200_stride_2;
+    int32_t var_m3200_stride_3 = var_m3200_buffer->stride[3];
+    (void)var_m3200_stride_3;
+    int32_t var_m3200_elem_size = var_m3200_buffer->elem_size;
+    (void)var_m3200_elem_size;
+
+    float *var_m7000 = (float *)(var_m7000_buffer->host);
+    (void)var_m7000;
+    const bool var_m7000_host_and_dev_are_null = (var_m7000_buffer->host == NULL) && (var_m7000_buffer->dev == 0);
+    (void)var_m7000_host_and_dev_are_null;
+    int32_t var_m7000_min_0 = var_m7000_buffer->min[0];
+    (void)var_m7000_min_0;
+    int32_t var_m7000_min_1 = var_m7000_buffer->min[1];
+    (void)var_m7000_min_1;
+    int32_t var_m7000_min_2 = var_m7000_buffer->min[2];
+    (void)var_m7000_min_2;
+    int32_t var_m7000_min_3 = var_m7000_buffer->min[3];
+    (void)var_m7000_min_3;
+    int32_t var_m7000_extent_0 = var_m7000_buffer->extent[0];
+    (void)var_m7000_extent_0;
+    int32_t var_m7000_extent_1 = var_m7000_buffer->extent[1];
+    (void)var_m7000_extent_1;
+    int32_t var_m7000_extent_2 = var_m7000_buffer->extent[2];
+    (void)var_m7000_extent_2;
+    int32_t var_m7000_extent_3 = var_m7000_buffer->extent[3];
+    (void)var_m7000_extent_3;
+    int32_t var_m7000_stride_0 = var_m7000_buffer->stride[0];
+    (void)var_m7000_stride_0;
+    int32_t var_m7000_stride_1 = var_m7000_buffer->stride[1];
+    (void)var_m7000_stride_1;
+    int32_t var_m7000_stride_2 = var_m7000_buffer->stride[2];
+    (void)var_m7000_stride_2;
+    int32_t var_m7000_stride_3 = var_m7000_buffer->stride[3];
+    (void)var_m7000_stride_3;
+    int32_t var_m7000_elem_size = var_m7000_buffer->elem_size;
+    (void)var_m7000_elem_size;
+
+    uint8_t *var_processed = (uint8_t *)(var_output_buffer->host);
+    (void)var_processed;
     const bool var_output_host_and_dev_are_null = (var_output_buffer->host == NULL) && (var_output_buffer->dev == 0);
     (void)var_output_host_and_dev_are_null;
     int32_t var_output_min_0 = var_output_buffer->min[0];
@@ -167,10 +246,10 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     (void)output_size_dim_0;
     int32_t output_size_dim_1 = var_output_buffer->extent[1];
     (void)output_size_dim_1;
-    int32_t var_output_extent_2 = var_output_buffer->extent[2];
-    (void)var_output_extent_2;
-    int32_t var_output_extent_3 = var_output_buffer->extent[3];
-    (void)var_output_extent_3;
+    int32_t output_size_dim_2 = var_output_buffer->extent[2];
+    (void)output_size_dim_2;
+    int32_t output_size_dim_3 = var_output_buffer->extent[3];
+    (void)output_size_dim_3;
     int32_t var_output_stride_0 = var_output_buffer->stride[0];
     (void)var_output_stride_0;
     int32_t var_output_stride_1 = var_output_buffer->stride[1];
@@ -181,6 +260,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     (void)var_output_stride_3;
     int32_t var_output_elem_size = var_output_buffer->elem_size;
     (void)var_output_elem_size;
+
     if (var_output_host_and_dev_are_null)
     {
         bool assign_0 = halide_rewrite_buffer(var_output_buffer, 2, var_output_min_0, output_size_dim_0, 1, var_output_min_1, output_size_dim_1, output_size_dim_0, 0, 0, 0, 0, 0, 0);
@@ -197,14 +277,14 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     bool assign_5 = !(assign_4);
     if (assign_5)
     {
-        bool assign_6 = var_output_elem_size == 2;
+        bool assign_6 = var_output_elem_size == 1;
         if (!assign_6)         {
-            int32_t assign_7 = halide_error_bad_elem_size(NULL, "Output buffer output", "uint16", var_output_elem_size, 2);
+            int32_t assign_7 = halide_error_bad_elem_size(NULL, "Output buffer camera_y", "uint8", var_output_elem_size, 1);
             return assign_7;
         }
         bool assign_8 = var_input_elem_size == 2;
         if (!assign_8)         {
-            int32_t assign_9 = halide_error_bad_elem_size(NULL, "Input buffer input", "uint16", var_input_elem_size, 2);
+            int32_t assign_9 = halide_error_bad_elem_size(NULL, "Input buffer p0", "uint16", var_input_elem_size, 2);
             return assign_9;
         }
         bool assign_10 = var_input_min_0 <= var_output_min_0;
@@ -218,7 +298,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             int32_t assign_17 = assign_16 + 1;
             int32_t assign_18 = var_input_min_0 + input_size_dim_0;
             int32_t assign_19 = assign_18 + -1;
-            int32_t assign_20 = halide_error_access_out_of_bounds(NULL, "Input buffer input", 0, var_output_min_0, assign_17, var_input_min_0, assign_19);
+            int32_t assign_20 = halide_error_access_out_of_bounds(NULL, "Input buffer p0", 0, var_output_min_0, assign_17, var_input_min_0, assign_19);
             return assign_20;
         }
         bool assign_21 = var_input_min_1 <= var_output_min_1;
@@ -232,17 +312,17 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             int32_t assign_28 = assign_27 + 1;
             int32_t assign_29 = var_input_min_1 + input_size_dim_1;
             int32_t assign_30 = assign_29 + -1;
-            int32_t assign_31 = halide_error_access_out_of_bounds(NULL, "Input buffer input", 1, var_output_min_1, assign_28, var_input_min_1, assign_30);
+            int32_t assign_31 = halide_error_access_out_of_bounds(NULL, "Input buffer p0", 1, var_output_min_1, assign_28, var_input_min_1, assign_30);
             return assign_31;
         }
         bool assign_32 = var_output_stride_0 == 1;
         if (!assign_32)         {
-            int32_t assign_33 = halide_error_constraint_violated(NULL, "output.stride.0", var_output_stride_0, "1", 1);
+            int32_t assign_33 = halide_error_constraint_violated(NULL, "camera_y.stride.0", var_output_stride_0, "1", 1);
             return assign_33;
         }
         bool assign_34 = var_input_stride_0 == 1;
         if (!assign_34)         {
-            int32_t assign_35 = halide_error_constraint_violated(NULL, "input.stride.0", var_input_stride_0, "1", 1);
+            int32_t assign_35 = halide_error_constraint_violated(NULL, "p0.stride.0", var_input_stride_0, "1", 1);
             return assign_35;
         }
         int64_t assign_36 = (int64_t)(output_size_dim_1);
@@ -256,7 +336,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         if (!assign_43)         {
             int64_t assign_44 = (int64_t)(output_size_dim_0);
             int64_t assign_45 = (int64_t)(2147483647);
-            int32_t assign_46 = halide_error_buffer_allocation_too_large(NULL, "output", assign_44, assign_45);
+            int32_t assign_46 = halide_error_buffer_allocation_too_large(NULL, "camera_y", assign_44, assign_45);
             return assign_46;
         }
         int64_t assign_47 = (int64_t)(output_size_dim_1);
@@ -269,14 +349,14 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             int64_t assign_53 = (int64_t)(var_output_stride_1);
             int64_t assign_54 = assign_52 * assign_53;
             int64_t assign_55 = (int64_t)(2147483647);
-            int32_t assign_56 = halide_error_buffer_allocation_too_large(NULL, "output", assign_54, assign_55);
+            int32_t assign_56 = halide_error_buffer_allocation_too_large(NULL, "camera_y", assign_54, assign_55);
             return assign_56;
         }
         int64_t assign_57 = (int64_t)(2147483647);
         bool assign_58 = assign_38 <= assign_57;
         if (!assign_58)         {
             int64_t assign_59 = (int64_t)(2147483647);
-            int32_t assign_60 = halide_error_buffer_extents_too_large(NULL, "output", assign_38, assign_59);
+            int32_t assign_60 = halide_error_buffer_extents_too_large(NULL, "camera_y", assign_38, assign_59);
             return assign_60;
         }
         int64_t assign_61 = (int64_t)(input_size_dim_0);
@@ -285,7 +365,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         if (!assign_63)         {
             int64_t assign_64 = (int64_t)(input_size_dim_0);
             int64_t assign_65 = (int64_t)(2147483647);
-            int32_t assign_66 = halide_error_buffer_allocation_too_large(NULL, "input", assign_64, assign_65);
+            int32_t assign_66 = halide_error_buffer_allocation_too_large(NULL, "p0", assign_64, assign_65);
             return assign_66;
         }
         int64_t assign_67 = (int64_t)(input_size_dim_1);
@@ -298,19 +378,19 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             int64_t assign_73 = (int64_t)(var_input_stride_1);
             int64_t assign_74 = assign_72 * assign_73;
             int64_t assign_75 = (int64_t)(2147483647);
-            int32_t assign_76 = halide_error_buffer_allocation_too_large(NULL, "input", assign_74, assign_75);
+            int32_t assign_76 = halide_error_buffer_allocation_too_large(NULL, "p0", assign_74, assign_75);
             return assign_76;
         }
         int64_t assign_77 = (int64_t)(2147483647);
         bool assign_78 = assign_41 <= assign_77;
         if (!assign_78)         {
             int64_t assign_79 = (int64_t)(2147483647);
-            int32_t assign_80 = halide_error_buffer_extents_too_large(NULL, "input", assign_41, assign_79);
+            int32_t assign_80 = halide_error_buffer_extents_too_large(NULL, "p0", assign_41, assign_79);
             return assign_80;
         }
 
         // allocate buffer for tiled input/output
-        int32_t tile_num_dim_0 = (output_size_dim_0+TILE_SIZE_DIM_0-STENCIL_DIM_0)/(TILE_SIZE_DIM_0-STENCIL_DIM_0+1);
+        int32_t tile_num_dim_0 = (output_size_dim_0+(TILE_SIZE_DIM_0)-(STENCIL_DIM_0))/((TILE_SIZE_DIM_0)-(STENCIL_DIM_0)+1);
 
         // align each linearized tile to multiples of BURST_WIDTH
         int64_t tile_pixel_num = TILE_SIZE_DIM_0*input_size_dim_1;
@@ -321,7 +401,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
 
         uint16_t* var_input_buf = new uint16_t[tile_num_dim_0*tile_size_linearized_i];
-        uint16_t* var_output_buf = new uint16_t[tile_num_dim_0*tile_size_linearized_o];
+        uint8_t* var_output_buf = new uint8_t[tile_num_dim_0*tile_size_linearized_o];
 
         // tiling
         for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
@@ -331,28 +411,106 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             {
                 for(int32_t j = 0; j < input_size_dim_1; ++j)
                 {
-                    for(int32_t i = 0; i < actual_tile_size_dim_0; ++i)
+                    for(int32_t i = 0; i < actual_tile_size_dim_0;++i)
                     {
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
                         int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/BURST_LENGTH;
                         int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%BURST_LENGTH;
-                        int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
+                        int32_t p = tile_index_dim_0*((TILE_SIZE_DIM_0)-(STENCIL_DIM_0)+1)+i;
                         int32_t q = j;
                         int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_I+c*BURST_LENGTH+burst_residue;
-                        int64_t original_offset = (q*var_input_stride_1+p)*CHANNEL_NUM_I+c;
+                        int64_t original_offset = q*var_input_stride_1+p*var_input_stride_0;
                         var_input_buf[tiled_offset] = var_input[original_offset];
                     }
                 }
             }
         }
 
+        int16_t var_matrix[12];
+        uint8_t var_curve[1024];
+        // produce matrix
+        for (int var_matrix_s0_y = 0; var_matrix_s0_y < 0 + 3; var_matrix_s0_y++)
+        {
+            for (int var_matrix_s0_v0 = 0; var_matrix_s0_v0 < 0 + 4; var_matrix_s0_v0++)
+            {
+                int32_t var_220 = var_matrix_s0_y * 4;
+                int32_t var_221 = var_matrix_s0_v0 + var_220;
+                int32_t var_222 = var_matrix_s0_y * var_m3200_stride_1;
+                int32_t var_223 = var_matrix_s0_v0 + var_222;
+                int32_t var_224 = var_m3200_min_1 * var_m3200_stride_1;
+                int32_t var_225 = var_m3200_min_0 + var_224;
+                int32_t var_226 = var_223 - var_225;
+                float var_227 = var_m3200[var_226];
+                float var_228 = float_from_bits(1065353216 /* 1 */) / var_color_temp;
+                float var_229 = var_228 * float_from_bits(1169700325 /* 5894.74 */);
+                float var_230 = float_from_bits(1072417307 /* 1.84211 */) - var_229;
+                float var_231 = var_227 * var_230;
+                int32_t var_232 = var_matrix_s0_y * var_m7000_stride_1;
+                int32_t var_233 = var_matrix_s0_v0 + var_232;
+                int32_t var_234 = var_m7000_min_1 * var_m7000_stride_1;
+                int32_t var_235 = var_m7000_min_0 + var_234;
+                int32_t var_236 = var_233 - var_235;
+                float var_237 = var_m7000[var_236];
+                float var_238 = var_229 + float_from_bits(3210187830 /* -0.842105 */);
+                float var_239 = var_237 * var_238;
+                float var_240 = var_231 + var_239;
+                float var_241 = var_240 * float_from_bits(1132462080 /* 256 */);
+                int16_t var_242 = (int16_t)(var_241);
+                var_matrix[var_221] = var_242;
+            } // for var_matrix_s0_v0
+        } // for var_matrix_s0_y
+        // consume matrix
+        // produce curve
+        for (int var_curve_s0_v0 = 0; var_curve_s0_v0 < 0 + 1024; var_curve_s0_v0++)
+        {
+            int32_t var_243 = var_curve_s0_v0 - var_blackLevel;
+            float var_244 = (float)(var_243);
+            int32_t var_245 = var_whiteLevel - var_blackLevel;
+            float var_246 = (float)(var_245);
+            float var_247 = float_from_bits(1065353216 /* 1 */) / var_246;
+            float var_248 = var_244 * var_247;
+            float var_249 = min(var_248, float_from_bits(1065353216 /* 1 */));
+            float var_250 = max(var_249, float_from_bits(0 /* 0 */));
+            float var_251 = float_from_bits(1065353216 /* 1 */) / var_gamma;
+            float var_252 = pow_f32(var_250, var_251);
+            float var_253 = var_contrast * float_from_bits(1008981770 /* 0.01 */);
+            float var_254 = pow_f32(float_from_bits(1073741824 /* 2 */), var_253);
+            uint8_t var_255 = (uint8_t)(255);
+            float var_256 = float_from_bits(1065353216 /* 1 */) - var_252;
+            float var_257 = float_from_bits(1073741824 /* 2 */) - var_254;
+            float var_258 = var_257 * float_from_bits(1073741824 /* 2 */);
+            float var_259 = float_from_bits(1073741824 /* 2 */) - var_258;
+            float var_260 = var_259 * var_256;
+            float var_261 = var_260 - var_254;
+            float var_262 = var_261 + float_from_bits(1073741824 /* 2 */);
+            float var_263 = var_256 * var_262;
+            float var_264 = float_from_bits(1065353216 /* 1 */) - var_263;
+            float var_265 = var_259 * var_252;
+            float var_266 = var_265 - var_254;
+            float var_267 = var_266 + float_from_bits(1073741824 /* 2 */);
+            float var_268 = var_252 * var_267;
+            bool var_269 = float_from_bits(1056964608 /* 0.5 */) < var_252;
+            float var_270 = (float)(var_269 ? var_264 : var_268);
+            float var_271 = var_270 * float_from_bits(1132396544 /* 255 */);
+            float var_272 = var_271 + float_from_bits(1056964608 /* 0.5 */);
+            float var_273 = min(var_272, float_from_bits(1132396544 /* 255 */));
+            float var_274 = max(var_273, float_from_bits(0 /* 0 */));
+            uint8_t var_275 = (uint8_t)(var_274);
+            bool var_276 = var_whiteLevel < var_curve_s0_v0;
+            uint8_t var_277 = (uint8_t)(var_276 ? var_255 : var_275);
+            uint8_t var_278 = (uint8_t)(0);
+            bool var_279 = var_blackLevel < var_curve_s0_v0;
+            uint8_t var_280 = (uint8_t)(var_279 ? var_277 : var_278);
+            var_curve[var_curve_s0_v0] = var_280;
+        }
+
         // prepare for opencl
 #if defined(SDA_PLATFORM) && !defined(TARGET_DEVICE)
-#define STR_VALUE(arg)      #arg
-#define GET_STRING(name) STR_VALUE(name)
-#define TARGET_DEVICE GET_STRING(SDA_PLATFORM)
+  #define STR_VALUE(arg)      #arg
+  #define GET_STRING(name) STR_VALUE(name)
+  #define TARGET_DEVICE GET_STRING(SDA_PLATFORM)
 #endif
         const char *target_device_name = TARGET_DEVICE;
         int err;                            // error code returned from api calls
@@ -370,20 +528,26 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
        
         cl_mem var_input_cl;                   // device memory used for the input array
         cl_mem var_output_cl;               // device memory used for the output array
+        cl_mem var_matrix_cl;                   // device memory used for the input array
+        cl_mem var_curve_cl;               // device memory used for the output array
    
+        // Get all platforms and then select Xilinx platform
         err = clGetPlatformIDs(16, platforms, &platform_count);
         if (err != CL_SUCCESS)
             {
-                printf("FATAL: Failed to find an OpenCL platform\n");
+                printf("Error: Failed to find an OpenCL platform!\n");
+                printf("Test failed\n");
                 exit(EXIT_FAILURE);
             }
         printf("INFO: Found %d platforms\n", platform_count);
 
+        // Find Xilinx Plaftorm
         int platform_found = 0;
-        for (unsigned iplat = 0; iplat<platform_count; iplat++) {
+        for (unsigned int iplat=0; iplat<platform_count; iplat++) {
             err = clGetPlatformInfo(platforms[iplat], CL_PLATFORM_VENDOR, 1000, (void *)cl_platform_vendor,NULL);
             if (err != CL_SUCCESS) {
-                printf("FATAL: clGetPlatformInfo(CL_PLATFORM_VENDOR) failed\n");
+                printf("Error: clGetPlatformInfo(CL_PLATFORM_VENDOR) failed!\n");
+                printf("Test failed\n");
                 exit(EXIT_FAILURE);
             }
             if (strcmp(cl_platform_vendor, "Xilinx") == 0) {
@@ -393,25 +557,30 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             }
         }
         if (!platform_found) {
-            printf("FATAL: Platform Xilinx not found\n");
+            printf("ERROR: Platform Xilinx not found. Exit.\n");
             exit(EXIT_FAILURE);
         }
       
-        cl_device_id devices[16];
+        // Connect to a compute device
+        // find all devices and then select the target device
+        cl_device_id devices[16];  // compute device id 
         cl_uint device_count;
         unsigned int device_found = 0;
         char cl_device_name[1001];
         err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ACCELERATOR,
                              16, devices, &device_count);
         if (err != CL_SUCCESS) {
-            printf("FATAL: Failed to create a device group\n");
+            printf("Error: Failed to create a device group!\n");
+            printf("Test failed\n");
             exit(EXIT_FAILURE);
         }
 
-        for (unsigned int i=0; i<device_count; i++) {
+        //iterate all devices to select the target device. 
+        for (unsigned i=0; i<device_count; i++) {
             err = clGetDeviceInfo(devices[i], CL_DEVICE_NAME, 1024, cl_device_name, 0);
             if (err != CL_SUCCESS) {
-                printf("FATAL: Failed to get device name for device %d\n", i);
+                printf("Error: Failed to get device name for device %d!\n", i);
+                printf("Test failed\n");
                 exit(EXIT_FAILURE);
             }
             //printf("CL_DEVICE_NAME %s\n", cl_device_name);
@@ -423,85 +592,122 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         }
         
         if (!device_found) {
-            printf("FATAL: Target device %s not found\n", target_device_name);
+            printf("ERROR: Target device %s not found. Exit.\n", target_device_name);
             exit(EXIT_FAILURE);
         }
 
 
         err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ACCELERATOR,
                              1, &device_id, NULL);
-        if (err != CL_SUCCESS) {
-            printf("FATAL: Failed to create a device group\n");
-            exit(EXIT_FAILURE);
-        }
+        if (err != CL_SUCCESS)
+            {
+                printf("Error: Failed to create a device group!\n");
+                printf("Test failed\n");
+                exit(EXIT_FAILURE);
+            }
       
+        // Create a compute context 
+        //
         context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
-        if (!context) {
-            printf("FATAL: Failed to create a compute context\n");
-            exit(EXIT_FAILURE);
-        }
+        if (!context)
+            {
+                printf("Error: Failed to create a compute context!\n");
+                printf("Test failed\n");
+                exit(EXIT_FAILURE);
+            }
 
+        // Create a command commands
+        //
         commands = clCreateCommandQueue(context, device_id, 0, &err);
-        if (!commands) {
-            printf("FATAL: Failed to create a command commands %i\n",err);
-            exit(EXIT_FAILURE);
-        }
+        if (!commands)
+            {
+                printf("Error: Failed to create a command commands!\n");
+                printf("Error: code %i\n",err);
+                printf("Test failed\n");
+                exit(EXIT_FAILURE);
+            }
 
         int status;
 
+        // Create Program Objects
+        //
+      
+        // Load binary from disk
         unsigned char *kernelbinary;
         printf("INFO: Loading %s\n", xclbin);
         int n_i = load_file_to_memory(xclbin, (char **) &kernelbinary);
         if (n_i < 0) {
-            printf("FATAL: Failed to load kernel from xclbin: %s\n", xclbin);
+            printf("failed to load kernel from xclbin: %s\n", xclbin);
+            printf("Test failed\n");
             exit(EXIT_FAILURE);
         }
         size_t n = n_i;
+        // Create the compute program from offline
         program = clCreateProgramWithBinary(context, 1, &device_id, &n,
-                                           (const unsigned char **) &kernelbinary, &status, &err);
+                                            (const unsigned char **) &kernelbinary, &status, &err);
         if ((!program) || (err!=CL_SUCCESS)) {
-            printf("FATAL: Failed to create compute program from binary %d\n", err);
+            printf("Error: Failed to create compute program from binary %d!\n", err);
+            printf("Test failed\n");
             exit(EXIT_FAILURE);
         }
-        free(kernelbinary);
 
+        // Build the program executable
+        //
         err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
-        if (err != CL_SUCCESS) {
-            size_t len;
-            char buffer[2048];
-            printf("FATAL: Failed to build program executable\n");
-            clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
-            printf("%s\n", buffer);
-            exit(EXIT_FAILURE);
-        }
+        if (err != CL_SUCCESS)
+            {
+                size_t len;
+                char buffer[2048];
 
-        kernel = clCreateKernel(program, "gaussian_kernel", &err);
-        if (!kernel || err != CL_SUCCESS) {
-            printf("FATAL: Failed to create compute kernel %d\n", err);
-            exit(EXIT_FAILURE);
-        }
+                printf("Error: Failed to build program executable!\n");
+                clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+                printf("%s\n", buffer);
+                printf("Test failed\n");
+                exit(EXIT_FAILURE);
+            }
 
-        var_input_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i), NULL, NULL);
-        var_output_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o), NULL, NULL);
+        // Create the compute kernel in the program we wish to run
+        //
+        kernel = clCreateKernel(program, "camera_kernel", &err);
+        if (!kernel || err != CL_SUCCESS)
+            {
+                printf("Error: Failed to create compute kernel %d!\n", err);
+                printf("Test failed\n");
+                exit(EXIT_FAILURE);
+            }
+
+        // Create the input and output arrays in device memory for our calculation
+        //
+        var_matrix_cl    = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(int16_t) * 12, NULL, NULL);
+        var_curve_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint8_t) * 1024, NULL, NULL);
+        var_input_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i), NULL, NULL);
+        var_output_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint8_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o), NULL, NULL);
         if (!var_input_cl || !var_output_cl)
         {
-            printf("FATAL: Failed to allocate device memory\n");
+            printf("Error: Failed to allocate device memory!\n");
+            printf("Test failed\n");
             exit(EXIT_FAILURE);
         }
         
+        // Write our data set into the input array in device memory 
+        //
         timespec write_begin, write_end;
         cl_event writeevent;
         clock_gettime(CLOCK_REALTIME, &write_begin);
-        err = clEnqueueWriteBuffer(commands, var_input_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i, var_input_buf, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_matrix_cl, CL_FALSE, 0, sizeof(int16_t) * 12, var_matrix, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(commands, var_curve_cl,  CL_FALSE, 0, sizeof(uint8_t) * 1024, var_curve, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(commands, var_input_cl,  CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i, var_input_buf, 0, NULL, &writeevent);
         if (err != CL_SUCCESS)
         {
-            printf("FATAL: Failed to write to input !\n");
+            printf("FATAL: Failed to write to input!\n");
             exit(EXIT_FAILURE);
         }
 
         clWaitForEvents(1, &writeevent);
         clock_gettime(CLOCK_REALTIME, &write_end);
 
+        // Set the arguments to our compute kernel
+        //
         err = 0;
         printf("HOST: tile_num_dim_0 = %d, TILE_SIZE_DIM_0 = %d\n", tile_num_dim_0, TILE_SIZE_DIM_0);
         printf("HOST: var_input_extent_0 = %d, var_input_extent_1 = %d\n", input_size_dim_0, input_size_dim_1);
@@ -515,21 +721,24 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
 
         err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &var_output_cl);
         err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &var_input_cl);
-        err |= clSetKernelArg(kernel, 2, sizeof(tile_num_dim_0), &tile_num_dim_0);
-        err |= clSetKernelArg(kernel, 3, sizeof(input_size_dim_1), &input_size_dim_1);
-        err |= clSetKernelArg(kernel, 4, sizeof(tile_burst_num), &tile_burst_num);
-        err |= clSetKernelArg(kernel, 5, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
-        err |= clSetKernelArg(kernel, 6, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
-        err |= clSetKernelArg(kernel, 7, sizeof(total_burst_num), &total_burst_num);
+        err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &var_matrix_cl);
+        err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &var_curve_cl);
+        err |= clSetKernelArg(kernel, 4, sizeof(tile_num_dim_0), &tile_num_dim_0);
+        err |= clSetKernelArg(kernel, 5, sizeof(input_size_dim_1), &input_size_dim_1);
+        err |= clSetKernelArg(kernel, 6, sizeof(tile_burst_num), &tile_burst_num);
+        err |= clSetKernelArg(kernel, 7, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
+        err |= clSetKernelArg(kernel, 8, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
+        err |= clSetKernelArg(kernel, 9, sizeof(total_burst_num), &total_burst_num);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to set kernel arguments\n");
-            printf("ERROR code: %d\n", err);
+			printf("ERROR code: %d\n", err);
             exit(EXIT_FAILURE);
         }
-
+        
         cl_event execute;
-        if(NULL==getenv("XCL_EMULATION_MODE")) {
+        if(NULL==getenv("XCL_EMULATION_MODE"))
+        {
             printf("INFO: FPGA warm up\n");
             for(int i = 0; i<3; ++i)
             {
@@ -550,7 +759,8 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
         if (err)
         {
-            printf("ERROR: Failed to execute kernel %d\n", err);
+            printf("Error: Failed to execute kernel! %d\n", err);
+            printf("Test failed\n");
             exit(EXIT_FAILURE);
         }
 
@@ -562,7 +772,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer(commands, var_output_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o, var_output_buf, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer( commands, var_output_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_o, var_output_buf, 0, NULL, &readevent );  
         if (err != CL_SUCCESS)
         {
             printf("ERROR: Failed to read output %d\n", err);
@@ -580,9 +790,13 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         printf("Kernel run time:       %lf us\n", elapsed_time);
         printf("Kernel throughput:     %lf pixel/ns\n", input_size_dim_0*input_size_dim_1/elapsed_time/1e3);
         elapsed_time = (double(read_end.tv_sec-read_begin.tv_sec)+(read_end.tv_nsec-read_begin.tv_nsec)/1e9)*1e6;
-        printf("PCIe read time:        %lf us\n", elapsed_time);
+        printf("PCIe read  time:       %lf us\n", elapsed_time);
         printf("PCIe read throughput:  %lf GB/s\n", output_size_dim_0*output_size_dim_1*var_output_elem_size/elapsed_time/1e3);
 
+        // Shutdown and cleanup
+        //
+        clReleaseMemObject(var_matrix_cl);
+        clReleaseMemObject(var_curve_cl);
         clReleaseMemObject(var_input_cl);
         clReleaseMemObject(var_output_cl);
         clReleaseProgram(program);
@@ -595,7 +809,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             int32_t actual_tile_size_dim_0 = (tile_index_dim_0==tile_num_dim_0-1) ? input_size_dim_0-(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)*tile_index_dim_0 : TILE_SIZE_DIM_0;
             for(int32_t c = 0; c < CHANNEL_NUM_O; ++c)
             {
-                for(int32_t j = 0; j < input_size_dim_1-STENCIL_DIM_1+1; ++j)
+                for(int32_t j = 0; j < output_size_dim_1; ++j)
                 {
                     for(int32_t i = 0; i < actual_tile_size_dim_0-STENCIL_DIM_0+1; ++i)
                     {
@@ -604,23 +818,28 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
                         // (i, j, k, l) is coordinates in a tile
                         int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/BURST_LENGTH;
                         int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%BURST_LENGTH;
-                        int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
+                        int32_t p = tile_index_dim_0*((TILE_SIZE_DIM_0)-(STENCIL_DIM_0)+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_O+c*BURST_LENGTH+burst_residue;
-                        int64_t original_offset = (q*var_output_stride_1+p)*CHANNEL_NUM_O+c;
-                        //printf("p=%d, q=%d, i=%d, j=%d, tiled_offset = %d, original_offset = %d, var_output_buf[tiled_offset] = %d\n",p,q,i,j,tiled_offset, original_offset, var_output_buf[tiled_offset]);
-                        var_output[original_offset] = var_output_buf[tiled_offset];
+                        int64_t tiled_offset = ((tile_index_dim_0*tile_burst_num+burst_index)*BURST_LENGTH)*CHANNEL_NUM_O+c*BURST_LENGTH+burst_residue;
+                        int64_t original_offset = q*var_output_stride_1+p*var_output_stride_0+c*var_output_stride_2;
+                        if(p<output_size_dim_0 && q<output_size_dim_1)
+                        {
+                            var_processed[original_offset] = var_output_buf[tiled_offset];
+                        }
                     }
                 }
             }
         }
+
         delete[] var_output_buf;
         delete[] var_input_buf;
     } // if assign_5
     return 0;
 }
 
-int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+int camera(float var_color_temp, float var_gamma, float var_contrast, int32_t var_blackLevel, int32_t var_whiteLevel,
+           buffer_t *var_input_buffer, buffer_t *var_m3200_buffer, buffer_t *var_m7000_buffer,
+           buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
     uint16_t *var_input = (uint16_t *)(var_input_buffer->host);
     (void)var_input;
     const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
@@ -637,10 +856,10 @@ int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char
     (void)input_size_dim_0;
     int32_t input_size_dim_1 = var_input_buffer->extent[1];
     (void)input_size_dim_1;
-    int32_t var_input_extent_2 = var_input_buffer->extent[2];
-    (void)var_input_extent_2;
-    int32_t var_input_extent_3 = var_input_buffer->extent[3];
-    (void)var_input_extent_3;
+    int32_t input_size_dim_2 = var_input_buffer->extent[2];
+    (void)input_size_dim_2;
+    int32_t input_size_dim_3 = var_input_buffer->extent[3];
+    (void)input_size_dim_3;
     int32_t var_input_stride_0 = var_input_buffer->stride[0];
     (void)var_input_stride_0;
     int32_t var_input_stride_1 = var_input_buffer->stride[1];
@@ -651,8 +870,71 @@ int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char
     (void)var_input_stride_3;
     int32_t var_input_elem_size = var_input_buffer->elem_size;
     (void)var_input_elem_size;
-    uint16_t *var_output = (uint16_t *)(var_output_buffer->host);
-    (void)var_output;
+
+    float *var_m3200 = (float *)(var_m3200_buffer->host);
+    (void)var_m3200;
+    const bool var_m3200_host_and_dev_are_null = (var_m3200_buffer->host == NULL) && (var_m3200_buffer->dev == 0);
+    (void)var_m3200_host_and_dev_are_null;
+    int32_t var_m3200_min_0 = var_m3200_buffer->min[0];
+    (void)var_m3200_min_0;
+    int32_t var_m3200_min_1 = var_m3200_buffer->min[1];
+    (void)var_m3200_min_1;
+    int32_t var_m3200_min_2 = var_m3200_buffer->min[2];
+    (void)var_m3200_min_2;
+    int32_t var_m3200_min_3 = var_m3200_buffer->min[3];
+    (void)var_m3200_min_3;
+    int32_t var_m3200_extent_0 = var_m3200_buffer->extent[0];
+    (void)var_m3200_extent_0;
+    int32_t var_m3200_extent_1 = var_m3200_buffer->extent[1];
+    (void)var_m3200_extent_1;
+    int32_t var_m3200_extent_2 = var_m3200_buffer->extent[2];
+    (void)var_m3200_extent_2;
+    int32_t var_m3200_extent_3 = var_m3200_buffer->extent[3];
+    (void)var_m3200_extent_3;
+    int32_t var_m3200_stride_0 = var_m3200_buffer->stride[0];
+    (void)var_m3200_stride_0;
+    int32_t var_m3200_stride_1 = var_m3200_buffer->stride[1];
+    (void)var_m3200_stride_1;
+    int32_t var_m3200_stride_2 = var_m3200_buffer->stride[2];
+    (void)var_m3200_stride_2;
+    int32_t var_m3200_stride_3 = var_m3200_buffer->stride[3];
+    (void)var_m3200_stride_3;
+    int32_t var_m3200_elem_size = var_m3200_buffer->elem_size;
+    (void)var_m3200_elem_size;
+
+    float *var_m7000 = (float *)(var_m7000_buffer->host);
+    (void)var_m7000;
+    const bool var_m7000_host_and_dev_are_null = (var_m7000_buffer->host == NULL) && (var_m7000_buffer->dev == 0);
+    (void)var_m7000_host_and_dev_are_null;
+    int32_t var_m7000_min_0 = var_m7000_buffer->min[0];
+    (void)var_m7000_min_0;
+    int32_t var_m7000_min_1 = var_m7000_buffer->min[1];
+    (void)var_m7000_min_1;
+    int32_t var_m7000_min_2 = var_m7000_buffer->min[2];
+    (void)var_m7000_min_2;
+    int32_t var_m7000_min_3 = var_m7000_buffer->min[3];
+    (void)var_m7000_min_3;
+    int32_t var_m7000_extent_0 = var_m7000_buffer->extent[0];
+    (void)var_m7000_extent_0;
+    int32_t var_m7000_extent_1 = var_m7000_buffer->extent[1];
+    (void)var_m7000_extent_1;
+    int32_t var_m7000_extent_2 = var_m7000_buffer->extent[2];
+    (void)var_m7000_extent_2;
+    int32_t var_m7000_extent_3 = var_m7000_buffer->extent[3];
+    (void)var_m7000_extent_3;
+    int32_t var_m7000_stride_0 = var_m7000_buffer->stride[0];
+    (void)var_m7000_stride_0;
+    int32_t var_m7000_stride_1 = var_m7000_buffer->stride[1];
+    (void)var_m7000_stride_1;
+    int32_t var_m7000_stride_2 = var_m7000_buffer->stride[2];
+    (void)var_m7000_stride_2;
+    int32_t var_m7000_stride_3 = var_m7000_buffer->stride[3];
+    (void)var_m7000_stride_3;
+    int32_t var_m7000_elem_size = var_m7000_buffer->elem_size;
+    (void)var_m7000_elem_size;
+
+    uint16_t *var_processed = (uint16_t *)(var_output_buffer->host);
+    (void)var_processed;
     const bool var_output_host_and_dev_are_null = (var_output_buffer->host == NULL) && (var_output_buffer->dev == 0);
     (void)var_output_host_and_dev_are_null;
     int32_t var_output_min_0 = var_output_buffer->min[0];
@@ -667,10 +949,10 @@ int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char
     (void)output_size_dim_0;
     int32_t output_size_dim_1 = var_output_buffer->extent[1];
     (void)output_size_dim_1;
-    int32_t var_output_extent_2 = var_output_buffer->extent[2];
-    (void)var_output_extent_2;
-    int32_t var_output_extent_3 = var_output_buffer->extent[3];
-    (void)var_output_extent_3;
+    int32_t output_size_dim_2 = var_output_buffer->extent[2];
+    (void)output_size_dim_2;
+    int32_t output_size_dim_3 = var_output_buffer->extent[3];
+    (void)output_size_dim_3;
     int32_t var_output_stride_0 = var_output_buffer->stride[0];
     (void)var_output_stride_0;
     int32_t var_output_stride_1 = var_output_buffer->stride[1];
@@ -681,7 +963,8 @@ int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char
     (void)var_output_stride_3;
     int32_t var_output_elem_size = var_output_buffer->elem_size;
     (void)var_output_elem_size;
-    int32_t assign_81 = gaussian_wrapped(var_input_buffer, var_output_buffer, xclbin);
+
+    int32_t assign_81 = camera_wrapped(var_color_temp, var_gamma, var_contrast, var_blackLevel, var_whiteLevel, var_input_buffer, var_m3200_buffer, var_m7000_buffer, var_output_buffer, xclbin);
     bool assign_82 = assign_81 == 0;
     if (!assign_82)     {
         return assign_81;

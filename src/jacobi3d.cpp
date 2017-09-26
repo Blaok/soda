@@ -13,8 +13,8 @@
 #include <sys/stat.h>
 #include <CL/opencl.h>
 
-#include "gaussian.h"
-#include "gaussian_params.h"
+#include "jacobi3d.h"
+#include "jacobi3d_params.h"
 
 int load_file_to_memory(const char *filename, char **result)
 { 
@@ -120,8 +120,8 @@ int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
     return halide_error_code_access_out_of_bounds;
 }
 
-static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
-    uint16_t *var_input = (uint16_t *)(var_input_buffer->host);
+static int jacobi3d_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+    float *var_input = (float *)(var_input_buffer->host);
     (void)var_input;
     const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
     (void)var_input_host_and_dev_are_null;
@@ -137,10 +137,10 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     (void)input_size_dim_0;
     int32_t input_size_dim_1 = var_input_buffer->extent[1];
     (void)input_size_dim_1;
-    int32_t var_input_extent_2 = var_input_buffer->extent[2];
-    (void)var_input_extent_2;
-    int32_t var_input_extent_3 = var_input_buffer->extent[3];
-    (void)var_input_extent_3;
+    int32_t input_size_dim_2 = var_input_buffer->extent[2];
+    (void)input_size_dim_2;
+    int32_t input_size_dim_3 = var_input_buffer->extent[3];
+    (void)input_size_dim_3;
     int32_t var_input_stride_0 = var_input_buffer->stride[0];
     (void)var_input_stride_0;
     int32_t var_input_stride_1 = var_input_buffer->stride[1];
@@ -151,7 +151,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     (void)var_input_stride_3;
     int32_t var_input_elem_size = var_input_buffer->elem_size;
     (void)var_input_elem_size;
-    uint16_t *var_output = (uint16_t *)(var_output_buffer->host);
+    float *var_output = (float *)(var_output_buffer->host);
     (void)var_output;
     const bool var_output_host_and_dev_are_null = (var_output_buffer->host == NULL) && (var_output_buffer->dev == 0);
     (void)var_output_host_and_dev_are_null;
@@ -197,14 +197,14 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     bool assign_5 = !(assign_4);
     if (assign_5)
     {
-        bool assign_6 = var_output_elem_size == 2;
+        bool assign_6 = var_output_elem_size == 4;
         if (!assign_6)         {
-            int32_t assign_7 = halide_error_bad_elem_size(NULL, "Output buffer output", "uint16", var_output_elem_size, 2);
+            int32_t assign_7 = halide_error_bad_elem_size(NULL, "Output buffer output", "float", var_output_elem_size, 4);
             return assign_7;
         }
-        bool assign_8 = var_input_elem_size == 2;
+        bool assign_8 = var_input_elem_size == 4;
         if (!assign_8)         {
-            int32_t assign_9 = halide_error_bad_elem_size(NULL, "Input buffer input", "uint16", var_input_elem_size, 2);
+            int32_t assign_9 = halide_error_bad_elem_size(NULL, "Input buffer input", "float", var_input_elem_size, 4);
             return assign_9;
         }
         bool assign_10 = var_input_min_0 <= var_output_min_0;
@@ -311,38 +311,46 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
 
         // allocate buffer for tiled input/output
         int32_t tile_num_dim_0 = (output_size_dim_0+TILE_SIZE_DIM_0-STENCIL_DIM_0)/(TILE_SIZE_DIM_0-STENCIL_DIM_0+1);
+        int32_t tile_num_dim_1 = (output_size_dim_1+TILE_SIZE_DIM_1-STENCIL_DIM_1)/(TILE_SIZE_DIM_1-STENCIL_DIM_1+1);
 
         // align each linearized tile to multiples of BURST_WIDTH
-        int64_t tile_pixel_num = TILE_SIZE_DIM_0*input_size_dim_1;
+        int64_t tile_pixel_num = TILE_SIZE_DIM_0*TILE_SIZE_DIM_1*input_size_dim_2;
         int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH+1;
         int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_I);
         int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_O);
         int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
         int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
 
-        uint16_t* var_input_buf = new uint16_t[tile_num_dim_0*tile_size_linearized_i];
-        uint16_t* var_output_buf = new uint16_t[tile_num_dim_0*tile_size_linearized_o];
+        float* var_input_buf = new float[tile_num_dim_0*tile_num_dim_1*tile_size_linearized_i];
+        float* var_output_buf = new float[tile_num_dim_0*tile_num_dim_1*tile_size_linearized_o];
 
         // tiling
-        for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
+        for(int32_t tile_index_dim_1 = 0; tile_index_dim_1 < tile_num_dim_1; ++tile_index_dim_1)
         {
-            int32_t actual_tile_size_dim_0 = (tile_index_dim_0==tile_num_dim_0-1) ? input_size_dim_0-(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)*tile_index_dim_0 : TILE_SIZE_DIM_0;
-            for(int32_t c = 0; c < CHANNEL_NUM_I; ++c)
+            int32_t actual_tile_size_dim_1 = (tile_index_dim_1==tile_num_dim_1-1) ? input_size_dim_1-(TILE_SIZE_DIM_1-STENCIL_DIM_1+1)*tile_index_dim_1 : TILE_SIZE_DIM_1;
+            for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
             {
-                for(int32_t j = 0; j < input_size_dim_1; ++j)
+                int32_t actual_tile_size_dim_0 = (tile_index_dim_0==tile_num_dim_0-1) ? input_size_dim_0-(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)*tile_index_dim_0 : TILE_SIZE_DIM_0;
+                for(int32_t c = 0; c < CHANNEL_NUM_I; ++c)
                 {
-                    for(int32_t i = 0; i < actual_tile_size_dim_0; ++i)
-                    {
-                        // (x, y, z, w) is coordinates in tiled image
-                        // (p, q, r, s) is coordinates in original image
-                        // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%BURST_LENGTH;
-                        int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
-                        int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_I+c*BURST_LENGTH+burst_residue;
-                        int64_t original_offset = (q*var_input_stride_1+p)*CHANNEL_NUM_I+c;
-                        var_input_buf[tiled_offset] = var_input[original_offset];
+                    for(int32_t k = 0; k < input_size_dim_2; ++k) {
+                        for(int32_t j = 0; j < actual_tile_size_dim_1; ++j)
+                        {
+                            for(int32_t i = 0; i < actual_tile_size_dim_0; ++i)
+                            {
+                                // (x, y, z, w) is coordinates in tiled image
+                                // (p, q, r, s) is coordinates in original image
+                                // (i, j, k, l) is coordinates in a tile
+                                int32_t burst_index = (k*TILE_SIZE_DIM_0*TILE_SIZE_DIM_1+j*TILE_SIZE_DIM_0+i)/BURST_LENGTH;
+                                int32_t burst_residue = (k*TILE_SIZE_DIM_0*TILE_SIZE_DIM_1+j*TILE_SIZE_DIM_0+i)%BURST_LENGTH;
+                                int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
+                                int32_t q = tile_index_dim_1*(TILE_SIZE_DIM_1-STENCIL_DIM_1+1)+j;
+                                int32_t r = k;
+                                int64_t tiled_offset = ((tile_index_dim_0+tile_index_dim_1*tile_num_dim_0)*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_I+c*BURST_LENGTH+burst_residue;
+                                int64_t original_offset = (q*var_input_stride_1+p*var_input_stride_0+r*var_input_stride_2)*CHANNEL_NUM_I+c;
+                                var_input_buf[tiled_offset] = var_input[original_offset];
+                            }
+                        }
                     }
                 }
             }
@@ -475,14 +483,14 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             exit(EXIT_FAILURE);
         }
 
-        kernel = clCreateKernel(program, "gaussian_kernel", &err);
+        kernel = clCreateKernel(program, "jacobi3d_kernel", &err);
         if (!kernel || err != CL_SUCCESS) {
             printf("FATAL: Failed to create compute kernel %d\n", err);
             exit(EXIT_FAILURE);
         }
 
-        var_input_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i), NULL, NULL);
-        var_output_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o), NULL, NULL);
+        var_input_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(float) * (tile_num_dim_0*tile_num_dim_1*tile_size_linearized_i+extra_space_i), NULL, NULL);
+        var_output_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * (tile_num_dim_0*tile_num_dim_1*tile_size_linearized_o+extra_space_o), NULL, NULL);
         if (!var_input_cl || !var_output_cl)
         {
             printf("FATAL: Failed to allocate device memory\n");
@@ -492,7 +500,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         timespec write_begin, write_end;
         cl_event writeevent;
         clock_gettime(CLOCK_REALTIME, &write_begin);
-        err = clEnqueueWriteBuffer(commands, var_input_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i, var_input_buf, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_num_dim_1*tile_size_linearized_i, var_input_buf, 0, NULL, &writeevent);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to write to input !\n");
@@ -504,23 +512,24 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
 
         err = 0;
         printf("HOST: tile_num_dim_0 = %d, TILE_SIZE_DIM_0 = %d\n", tile_num_dim_0, TILE_SIZE_DIM_0);
-        printf("HOST: var_input_extent_0 = %d, var_input_extent_1 = %d\n", input_size_dim_0, input_size_dim_1);
+        printf("HOST: input_size_dim_0 = %d, input_size_dim_1 = %d\n", input_size_dim_0, input_size_dim_1);
         printf("HOST: var_input_min_0 = %d, var_input_min_1 = %d\n", var_input_min_0, var_input_min_1);
         printf("HOST: output_size_dim_0 = %d, output_size_dim_1 = %d\n", output_size_dim_0, output_size_dim_1);
         printf("HOST: var_output_min_0 = %d, var_output_min_1 = %d\n", var_output_min_0, var_output_min_1);
 
         int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I);
         int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O);
-        int32_t total_burst_num = tile_num_dim_0*tile_burst_num;
+        int32_t total_burst_num = tile_num_dim_0*tile_num_dim_1*tile_burst_num;
 
         err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &var_output_cl);
         err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &var_input_cl);
         err |= clSetKernelArg(kernel, 2, sizeof(tile_num_dim_0), &tile_num_dim_0);
-        err |= clSetKernelArg(kernel, 3, sizeof(input_size_dim_1), &input_size_dim_1);
-        err |= clSetKernelArg(kernel, 4, sizeof(tile_burst_num), &tile_burst_num);
-        err |= clSetKernelArg(kernel, 5, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
-        err |= clSetKernelArg(kernel, 6, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
-        err |= clSetKernelArg(kernel, 7, sizeof(total_burst_num), &total_burst_num);
+        err |= clSetKernelArg(kernel, 3, sizeof(tile_num_dim_1), &tile_num_dim_1);
+        err |= clSetKernelArg(kernel, 4, sizeof(input_size_dim_1), &input_size_dim_1);
+        err |= clSetKernelArg(kernel, 5, sizeof(tile_burst_num), &tile_burst_num);
+        err |= clSetKernelArg(kernel, 6, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
+        err |= clSetKernelArg(kernel, 7, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
+        err |= clSetKernelArg(kernel, 8, sizeof(total_burst_num), &total_burst_num);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to set kernel arguments\n");
@@ -562,7 +571,7 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer(commands, var_output_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o, var_output_buf, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_num_dim_1*tile_size_linearized_o, var_output_buf, 0, NULL, &readevent );
         if (err != CL_SUCCESS)
         {
             printf("ERROR: Failed to read output %d\n", err);
@@ -575,13 +584,13 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         double elapsed_time = 0.;
         elapsed_time = (double(write_end.tv_sec-write_begin.tv_sec)+(write_end.tv_nsec-write_begin.tv_nsec)/1e9)*1e6;
         printf("PCIe write time:       %lf us\n", elapsed_time);
-        printf("PCIe write throughput: %lf GB/s\n", input_size_dim_0*input_size_dim_1*var_input_elem_size/elapsed_time/1e3);
+        printf("PCIe write throughput: %lf GB/s\n", input_size_dim_0*input_size_dim_1*input_size_dim_2*var_input_elem_size/elapsed_time/1e3);
         elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;
         printf("Kernel run time:       %lf us\n", elapsed_time);
-        printf("Kernel throughput:     %lf pixel/ns\n", input_size_dim_0*input_size_dim_1/elapsed_time/1e3);
+        printf("Kernel throughput:     %lf pixel/ns\n", input_size_dim_0*input_size_dim_1*input_size_dim_2/elapsed_time/1e3);
         elapsed_time = (double(read_end.tv_sec-read_begin.tv_sec)+(read_end.tv_nsec-read_begin.tv_nsec)/1e9)*1e6;
         printf("PCIe read time:        %lf us\n", elapsed_time);
-        printf("PCIe read throughput:  %lf GB/s\n", output_size_dim_0*output_size_dim_1*var_output_elem_size/elapsed_time/1e3);
+        printf("PCIe read throughput:  %lf GB/s\n", output_size_dim_0*output_size_dim_1*input_size_dim_2*var_output_elem_size/elapsed_time/1e3);
 
         clReleaseMemObject(var_input_cl);
         clReleaseMemObject(var_output_cl);
@@ -590,26 +599,34 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         clReleaseCommandQueue(commands);
         clReleaseContext(context);
 
-        for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
+        for(int32_t tile_index_dim_1 = 0; tile_index_dim_1 < tile_num_dim_1; ++tile_index_dim_1)
         {
-            int32_t actual_tile_size_dim_0 = (tile_index_dim_0==tile_num_dim_0-1) ? input_size_dim_0-(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)*tile_index_dim_0 : TILE_SIZE_DIM_0;
-            for(int32_t c = 0; c < CHANNEL_NUM_O; ++c)
+            int32_t actual_tile_size_dim_1 = (tile_index_dim_1==tile_num_dim_1-1) ? input_size_dim_1-(TILE_SIZE_DIM_1-STENCIL_DIM_1+1)*tile_index_dim_1 : TILE_SIZE_DIM_1;
+            for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
             {
-                for(int32_t j = 0; j < input_size_dim_1-STENCIL_DIM_1+1; ++j)
+                int32_t actual_tile_size_dim_0 = (tile_index_dim_0==tile_num_dim_0-1) ? input_size_dim_0-(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)*tile_index_dim_0 : TILE_SIZE_DIM_0;
+                for(int32_t c = 0; c < CHANNEL_NUM_O; ++c)
                 {
-                    for(int32_t i = 0; i < actual_tile_size_dim_0-STENCIL_DIM_0+1; ++i)
+                    for(int32_t k = 0; k < input_size_dim_2-STENCIL_DIM_2+1; ++k)
                     {
-                        // (x, y, z, w) is coordinates in tiled image
-                        // (p, q, r, s) is coordinates in original image
-                        // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%BURST_LENGTH;
-                        int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
-                        int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_O+c*BURST_LENGTH+burst_residue;
-                        int64_t original_offset = (q*var_output_stride_1+p)*CHANNEL_NUM_O+c;
-                        //printf("p=%d, q=%d, i=%d, j=%d, tiled_offset = %d, original_offset = %d, var_output_buf[tiled_offset] = %d\n",p,q,i,j,tiled_offset, original_offset, var_output_buf[tiled_offset]);
-                        var_output[original_offset] = var_output_buf[tiled_offset];
+                        for(int32_t j = 0; j < actual_tile_size_dim_1-STENCIL_DIM_1+1; ++j)
+                        {
+                            for(int32_t i = 0; i < actual_tile_size_dim_0-STENCIL_DIM_0+1; ++i)
+                            {
+                                // (x, y, z, w) is coordinates in tiled image
+                                // (p, q, r, s) is coordinates in original image
+                                // (i, j, k, l) is coordinates in a tile
+                                int32_t burst_index = (k*TILE_SIZE_DIM_1*TILE_SIZE_DIM_0+j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/BURST_LENGTH;
+                                int32_t burst_residue = (k*TILE_SIZE_DIM_1*TILE_SIZE_DIM_0+j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%BURST_LENGTH;
+                                int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
+                                int32_t q = tile_index_dim_1*(TILE_SIZE_DIM_1-STENCIL_DIM_1+1)+i;
+                                int32_t r = k;
+                                int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_O+c*BURST_LENGTH+burst_residue;
+                                int64_t original_offset = (q*var_output_stride_1+p*var_output_stride_0+r*var_output_stride_2)*CHANNEL_NUM_O+c;
+                                //printf("p=%d, q=%d, i=%d, j=%d, tiled_offset = %d, original_offset = %d, var_output_buf[tiled_offset] = %d\n",p,q,i,j,tiled_offset, original_offset, var_output_buf[tiled_offset]);
+                                var_output[original_offset] = var_output_buf[tiled_offset];
+                            }
+                        }
                     }
                 }
             }
@@ -620,8 +637,8 @@ static int gaussian_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
     return 0;
 }
 
-int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
-    uint16_t *var_input = (uint16_t *)(var_input_buffer->host);
+int jacobi3d(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+    float *var_input = (float *)(var_input_buffer->host);
     (void)var_input;
     const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
     (void)var_input_host_and_dev_are_null;
@@ -637,10 +654,10 @@ int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char
     (void)input_size_dim_0;
     int32_t input_size_dim_1 = var_input_buffer->extent[1];
     (void)input_size_dim_1;
-    int32_t var_input_extent_2 = var_input_buffer->extent[2];
-    (void)var_input_extent_2;
-    int32_t var_input_extent_3 = var_input_buffer->extent[3];
-    (void)var_input_extent_3;
+    int32_t input_size_dim_2 = var_input_buffer->extent[2];
+    (void)input_size_dim_2;
+    int32_t input_size_dim_3 = var_input_buffer->extent[3];
+    (void)input_size_dim_3;
     int32_t var_input_stride_0 = var_input_buffer->stride[0];
     (void)var_input_stride_0;
     int32_t var_input_stride_1 = var_input_buffer->stride[1];
@@ -651,7 +668,7 @@ int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char
     (void)var_input_stride_3;
     int32_t var_input_elem_size = var_input_buffer->elem_size;
     (void)var_input_elem_size;
-    uint16_t *var_output = (uint16_t *)(var_output_buffer->host);
+    float *var_output = (float *)(var_output_buffer->host);
     (void)var_output;
     const bool var_output_host_and_dev_are_null = (var_output_buffer->host == NULL) && (var_output_buffer->dev == 0);
     (void)var_output_host_and_dev_are_null;
@@ -681,7 +698,7 @@ int gaussian(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char
     (void)var_output_stride_3;
     int32_t var_output_elem_size = var_output_buffer->elem_size;
     (void)var_output_elem_size;
-    int32_t assign_81 = gaussian_wrapped(var_input_buffer, var_output_buffer, xclbin);
+    int32_t assign_81 = jacobi3d_wrapped(var_input_buffer, var_output_buffer, xclbin);
     bool assign_82 = assign_81 == 0;
     if (!assign_82)     {
         return assign_81;

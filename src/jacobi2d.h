@@ -1,5 +1,5 @@
-#ifndef HALIDE_BLUR_H_
-#define HALIDE_BLUR_H_
+#ifndef HALIDE_JACOBI2D_H_
+#define HALIDE_JACOBI2D_H_
 
 #ifndef HALIDE_ATTRIBUTE_ALIGN
     #ifdef _MSC_VER
@@ -31,7 +31,7 @@ typedef struct buffer_t {
 #endif//HALIDE_FUNCTION_ATTRS
 
 
-int threshold(buffer_t *var_p0_buffer, buffer_t *var_threshold_y_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS;
+int jacobi2d(buffer_t *var_p0_buffer, buffer_t *var_jacobi2d_y_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS;
 
-#endif//HALIDE_BLUR_H_
+#endif//HALIDE_JACOBI2D_H_
 
