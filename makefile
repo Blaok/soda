@@ -3,7 +3,7 @@
 APP ?= blur
 SDA_VER ?= 2017.1
 TILE_SIZE_DIM_0 ?= 2000
-#TILE_SIZE_DIM1 ?= 1024
+#TILE_SIZE_DIM_1 ?= 1024
 BURST_LENGTH ?= 100032
 UNROLL_FACTOR ?= 16
 
@@ -35,12 +35,12 @@ HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -lrt -ldl -l
 
 XDEVICE = xilinx:adm-pcie-7v3:1ddr:3.0
 HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
-HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DBURST_LENGTH=$(BURST_LENGTH) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
+HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1) -DBURST_LENGTH=$(BURST_LENGTH) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --xdevice $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g
-CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DBURST_LENGTH=$(BURST_LENGTH) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
+CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1) -DBURST_LENGTH=$(BURST_LENGTH) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
@@ -57,7 +57,7 @@ hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
 hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 
 mktemp:
-	@TMP=$$(mktemp -d --suffix=-sdaccel-2016.3-halide1-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
+	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
 $(SRC)/$(KERNEL_SRCS): $(SRC)/$(APP).json
 	./generate-kernel.py < $^ > $@
