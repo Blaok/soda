@@ -42,7 +42,7 @@ def GetAdderTree(variables, count):
     if len(variables)>1:
         r1 = GetAdderTree(variables[0:int(len(variables)/2)], count)
         r2 = GetAdderTree(variables[int(len(variables)/2):], r1[1])
-        print('        "int32_t tmp_adder_%d = %s+%s;",' % (r2[1], r1[0], r2[0]))
+        print('        "float tmp_adder_%d = %s+%s;",' % (r2[1], r1[0], r2[0]))
         return ('tmp_adder_%d' % r2[1], r2[1]+1)
     return( variables[0], count)
         
@@ -50,7 +50,9 @@ def GetAdderTree(variables, count):
 A = (GetA(A, num_iter))
 print('"A": '+str([x[0] for x in A.values()]))
 #print('"coeff": '+str(['%d/%d' % (x[1].numerator, x[1].denominator) for x in A.values()]))
-den_lcm = lcm(*[a[1].denominator for a in A.values()])
-final_var = GetAdderTree(['input_%s*%d' % ('_'.join([str(x) for x in a[0]]), a[1].numerator*den_lcm/a[1].denominator) for a in A.values()], 0)
+#den_lcm = lcm(*[a[1].denominator for a in A.values()])
+#final_var = GetAdderTree(['input_%s*%d' % ('_'.join([str(x) for x in a[0]]), a[1].numerator*den_lcm/a[1].denominator) for a in A.values()], 0)
+final_var = GetAdderTree(['input_%s*%ff' % ('_'.join([str(x) for x in a[0]]), (1.*a[1].numerator)/a[1].denominator) for a in A.values()], 0)
 #print('output_type output_point = '+' + '.join(['input_%s*%d/%d' % ('_'.join([str(x) for x in a[0]]), a[1].numerator, a[1].denominator) for a in A.values()])+'0;')
-print('        "output_type output_point = %s/%d;",' % (final_var[0], den_lcm))
+#print('        "output_type output_point = %s/%d;",' % (final_var[0], den_lcm))
+print('        "output_type output_point = %s;",' % (final_var[0],))
