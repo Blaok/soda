@@ -1,0 +1,441 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u19-blaok' (Linux_x86_64 version 4.4.0-79-generic) on Wed Sep 13 02:34:48 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_camera_kernel-tile2000-unroll8_camera-hw-tile2000-unroll8-burst100032.dir/impl/kernels/camera_kernel'
+INFO: [HLS 200-10] Creating and opening project '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_camera_kernel-tile2000-unroll8_camera-hw-tile2000-unroll8-burst100032.dir/impl/kernels/camera_kernel/camera_kernel'.
+INFO: [HLS 200-10] Adding design file '/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_camera_kernel-tile2000-unroll8_camera-hw-tile2000-unroll8-burst100032.dir/impl/kernels/camera_kernel/camera_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:49 ; elapsed = 00:00:20 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 23555 ; free virtual = 41100
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:50 ; elapsed = 00:00:21 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 23833 ; free virtual = 41383
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:194) in function 'compute(bool, unsigned char (*) [100032], unsigned short (*) [100032], short (*) [12], unsigned char (*) [8][1024], unsigned short (*) [78], unsigned short (*) [60][249], unsigned short (*) [12][250], unsigned short (*) [8][248], int*, int*, int*, int, int)' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:04:18 ; elapsed = 00:03:50 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 22795 ; free virtual = 40311
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:60: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:07:40 ; elapsed = 00:07:13 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 18895 ; free virtual = 36636
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'camera_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'compute_epoch' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:185) in function 'compute' for pipelining.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'store_epoch' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:53) in function 'store' for pipelining.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:27) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2398) in function 'camera_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'extra_params_unrolled' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2414) in function 'camera_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:198) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:1000) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:58) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:27) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:35) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2354) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2355) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2356) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2357) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2358) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_249' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2359) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_250' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2360) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_248' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2361) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2385) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2388) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2389) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'curve' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2405) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:178) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2354) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2355) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2356) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'output_0.1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2356) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'output_0.2' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2356) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2357) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'output_1.1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2357) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'output_1.2' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2357) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2358) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_249.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2359) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_250.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2360) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_248.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2361) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.2' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.4' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.5' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.6' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'matrix.7' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2404) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'curve.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2405) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'curve.1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2405) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'curve.2' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2405) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:178) in dimension 1 completely.
+WARNING: [XFORM 203-104] Completely partitioning array 'input_points' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) accessed through non-constant indices on dimension 1, which may result in long runtime and suboptimal QoR due to large multiplexers. Please consider wrapping the array access into a function or using a register file core instead.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.2' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.4' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.5' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.6' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.7' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:88) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:185:10) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 227 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 189 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 189 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 189 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 189 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 189 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 189 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2138:17) in function 'compute'... converting 189 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2142:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:184:50) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2450:9) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2433:85) in function 'camera_kernel'... converting 7 basic blocks.
+INFO: [XFORM 203-11] Balancing expressions in function 'compute' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:68)...72 expression(s) balanced.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:11:42 ; elapsed = 00:11:17 . Memory (MB): peak = 828.453 ; gain = 492.594 ; free physical = 16533 ; free virtual = 34190
+INFO: [XFORM 203-541] Flattening a loop nest 'store_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:50:10) in function 'store'.
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst read of length 12 on port 'gmem3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2420:2).
+INFO: [XFORM 203-811] Inferring bus burst write of length 4689 on port 'to.V' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:62:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 3126 on port 'from.V' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:32:85).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[29]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[49]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[30]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[52]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[33]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[26]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[70]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[23]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[50]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[56]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[67]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[51]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[13]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[57]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[44]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[16]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[19]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[46]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[45]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[17]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[21]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[24]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[32]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[22]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[54]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[35]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[47]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[60]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[18]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[14]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[71]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[37]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[74]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[20]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[12]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[62]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[53]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[41]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[68]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[59]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[31]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[55]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[69]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[28]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[25]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[42]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[48]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[63]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[61]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[39]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[75]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[72]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[76]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[15]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[38]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[27]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[36]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[66]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[43]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[40]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[65]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[34]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[64]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[58]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[77]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[73]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[15]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[30]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[57]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[16]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[51]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[31]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[50]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[40]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[13]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[47]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[26]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[49]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[29]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[46]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[12]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[55]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[39]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[41]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[34]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[35]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[21]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[20]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[56]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[28]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[32]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[19]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[18]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[22]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[44]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[58]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[24]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[48]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[38]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[36]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[53]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[14]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[54]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[17]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[59]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[27]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[45]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[52]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[33]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[37]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[43]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[42]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[25]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[23]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_248[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:75).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:11:58 ; elapsed = 00:11:33 . Memory (MB): peak = 828.453 ; gain = 492.594 ; free physical = 15289 ; free virtual = 33155
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'camera_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 693.94 seconds; current allocated memory: 182.495 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.74 seconds; current allocated memory: 183.576 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 16.
+WARNING: [SCHED 204-21] Estimated clock period (4.89ns) exceeds the target (target clock period: 5ns, clock uncertainty: 1.35ns, effective delay budget: 3.65ns).
+WARNING: [SCHED 204-21] The critical path consists of the following:
+	'mul' operation ('var_350', /home/blaok/ssd/blaok/git/sdaccel-stencil/src/camera_kernel-tile2000-unroll8.cpp:2091) (4.89 ns)
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 17.61 seconds; current allocated memory: 214.723 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 23.91 seconds; current allocated memory: 261.179 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_channel_store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 4.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 16.02 seconds; current allocated memory: 268.566 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 1.72 seconds; current allocated memory: 271.430 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'camera_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'memset_FIFO_ptrs'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 1.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-61] Pipelining loop 'matrix_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 2.
+INFO: [SCHED 204-61] Pipelining loop 'curve_init'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 130.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 5.52 seconds; current allocated memory: 286.664 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 35.72 seconds; current allocated memory: 309.599 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 16.07 seconds; current allocated memory: 317.178 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-104] Estimated max fanout for 'compute' is 6606 from HDL expression: (ap_block_pp0_stage0_11001 == 1'b0)
+INFO: [RTGEN 206-100] Generating core module 'camera_kernel_mac_muladd_15ns_16s_16s_31_1': 21 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'camera_kernel_mac_muladd_16s_15ns_16s_31_1': 3 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'camera_kernel_mac_muladd_16s_16s_32s_32_1': 24 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'camera_kernel_mul_mul_16s_16s_32_1': 24 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 3.67 seconds; current allocated memory: 366.200 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Generating core module 'camera_kernel_mux_32_8_1': 64 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 40.98 seconds; current allocated memory: 494.360 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'camera_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/gmem3' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/var_matrix' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/var_curve' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/input_size_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'camera_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'camera_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_matrix', 'var_curve', 'tile_num_dim_0', 'input_size_dim_1', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-104] Estimated max fanout for 'camera_kernel' is 7712, found 2 HDL expressions with this fanout: (1'b1 == ap_CS_fsm_state2078), (1'b1 == ap_CS_fsm_state2081)
+INFO: [RTGEN 206-100] Generating core module 'camera_kernel_mux_42_32_1': 3 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'camera_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 38.58 seconds; current allocated memory: 550.536 MB.
+INFO: [RTMG 210-278] Implementing memory 'camera_kernel_input_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'camera_kernel_output_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'camera_kernel_FIFO_249_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'camera_kernel_FIFO_250_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'camera_kernel_FIFO_248_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'camera_kernel_curve_0_0_ram (RAM)' using block RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:15:27 ; elapsed = 00:15:46 . Memory (MB): peak = 986.621 ; gain = 650.762 ; free physical = 14183 ; free virtual = 32124
+INFO: [SYSC 207-301] Generating SystemC RTL for camera_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for camera_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for camera_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_3896 3896
+Add Instance store grp_store_fu_4424 4424
+Add Instance load grp_load_fu_4626 4626
+INFO: [Common 17-206] Exiting Vivado at Wed Sep 13 02:51:22 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 1049.59 seconds; peak allocated memory: 550.536 MB.

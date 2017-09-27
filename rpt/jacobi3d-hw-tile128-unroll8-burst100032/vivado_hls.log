@@ -1,0 +1,502 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u19-blaok' (Linux_x86_64 version 4.4.0-79-generic) on Thu Sep 14 08:10:06 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_jacobi3d_kernel-tile128-unroll8_jacobi3d-hw-tile128-unroll8-burst100032.dir/impl/kernels/jacobi3d_kernel'
+INFO: [HLS 200-10] Creating and opening project '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_jacobi3d_kernel-tile128-unroll8_jacobi3d-hw-tile128-unroll8-burst100032.dir/impl/kernels/jacobi3d_kernel/jacobi3d_kernel'.
+INFO: [HLS 200-10] Adding design file '/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_jacobi3d_kernel-tile128-unroll8_jacobi3d-hw-tile128-unroll8-burst100032.dir/impl/kernels/jacobi3d_kernel/jacobi3d_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:57 ; elapsed = 00:00:25 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 50588 ; free virtual = 95221
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:58 ; elapsed = 00:00:26 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 50473 ; free virtual = 95110
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:192) in function 'compute(bool, float (*) [100032], float (*) [100032], float (*) [60], float (*) [7][2048], float (*) [84][16], float (*) [14][2032], float (*) [12][2016], float (*) [6][1999], float (*) [5][1984], float (*) [10][2000], float (*) [4][2015], float (*) [44][15], float (*) [3][1983], float (*) [2][2031], float (*) [1][2047], int*, int*, int*, int*, int, int, int)' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:01:10 ; elapsed = 00:00:38 . Memory (MB): peak = 348.766 ; gain = 12.906 ; free physical = 50387 ; free virtual = 95027
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:65: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:01:21 ; elapsed = 00:00:49 . Memory (MB): peak = 348.766 ; gain = 12.906 ; free physical = 49490 ; free virtual = 94126
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'jacobi3d_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'compute_epoch' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:174) in function 'compute' for pipelining.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'store_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:54) in function 'store' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:30) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1352) in function 'jacobi3d_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:196) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:838) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:54) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:62) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:30) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:38) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1277) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1278) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1279) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1280) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1281) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2048' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1282) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_16' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1283) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2032' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1284) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2016' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1285) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1999' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1286) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1984' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1287) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2000' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1288) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2015' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1289) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_15' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1290) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1983' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1291) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2031' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1292) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2047' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1293) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1336) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1339) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1340) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'k_base' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1341) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:167) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1277) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1278) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1279) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1280) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1281) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2048.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1282) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_16.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1283) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2032.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1284) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2016.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1285) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1999.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1286) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1984.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1287) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2000.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1288) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2015.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1289) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_15.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1290) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1983.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1291) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2031.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1292) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_2047.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1293) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:167) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.2' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.4' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.5' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.6' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.7' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:111) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1377:9) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:1360:85) in function 'jacobi3d_kernel'... converting 5 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:174:10) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 25 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 4 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 4 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 4 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 4 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 4 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 4 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:959:17) in function 'compute'... converting 4 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:961:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:173:50) in function 'compute'... converting 4 basic blocks.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:01:38 ; elapsed = 00:01:07 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 48002 ; free virtual = 92360
+INFO: [XFORM 203-811] Inferring bus burst write of length 6252 on port 'to.V' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:67:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 6252 on port 'from.V' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:35:86).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[43]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[42]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[41]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[40]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[39]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[38]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[37]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[36]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[56]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[55]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[54]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[12]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[52]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[51]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[50]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[49]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[48]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[47]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[46]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[45]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[44]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[53]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[18]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[17]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[16]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[15]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[35]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[34]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[33]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[32]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[31]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[30]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[29]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[59]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[28]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[27]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[58]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[14]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[13]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[57]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[26]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[25]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[24]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[23]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[22]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[21]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[20]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[19]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2048[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2048[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2048[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2048[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2048[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2048[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2048[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[45]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[44]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[43]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[42]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[55]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[29]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[24]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[23]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[22]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[21]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[20]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[56]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[47]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[46]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[48]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[83]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[82]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[81]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[80]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[79]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[78]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[77]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[76]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[75]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[74]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[73]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[72]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[71]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[70]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[69]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[68]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[67]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[66]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[65]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[64]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[63]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[62]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[61]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[60]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[59]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[58]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[57]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[37]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[30]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[32]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[28]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[27]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[50]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[54]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[52]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[41]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[33]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[31]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[15]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[26]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[12]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[49]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[34]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[39]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[51]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[13]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[40]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[53]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[35]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[36]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[38]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[18]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[14]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[25]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[17]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[16]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_16[19]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:77).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[13]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[12]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2032[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:78).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2016[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:79).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1999[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:80).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1999[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:80).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1999[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:80).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1999[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:80).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1999[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:80).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1999[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:80).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1984[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:81).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1984[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:81).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1984[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:81).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1984[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:81).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1984[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:81).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2000[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:82).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2015[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:83).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2015[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:83).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2015[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:83).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2015[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:83).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[43]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[42]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[41]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[40]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[39]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[38]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[36]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[33]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[30]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[28]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[27]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[26]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[25]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[24]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[23]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[22]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[21]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[20]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[19]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[18]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[17]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[16]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[15]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[14]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[13]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[12]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[35]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[34]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[31]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[32]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[37]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_15[29]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1983[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:85).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1983[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:85).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1983[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:85).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2031[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:86).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2031[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:86).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_2047' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/jacobi3d_kernel-tile128-unroll8.cpp:87).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:01:42 ; elapsed = 00:01:10 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 47200 ; free virtual = 91664
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'jacobi3d_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 70.75 seconds; current allocated memory: 124.949 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.57 seconds; current allocated memory: 125.825 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 56.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 9.45 seconds; current allocated memory: 135.944 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 5.56 seconds; current allocated memory: 153.504 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 6.84 seconds; current allocated memory: 154.550 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.46 seconds; current allocated memory: 155.326 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'jacobi3d_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'memset_FIFO_ptrs'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 1.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.47 seconds; current allocated memory: 157.126 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 6.7 seconds; current allocated memory: 160.184 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 6.8 seconds; current allocated memory: 162.046 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-104] Estimated max fanout for 'compute' is 22585 from HDL expression: (ap_block_pp0_stage0_11001 == 1'b0)
+INFO: [RTGEN 206-100] Generating core module 'jacobi3d_kernel_fadd_32ns_32ns_32_8_full_dsp': 432 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'jacobi3d_kernel_fmul_32ns_32ns_32_5_max_dsp': 350 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 13.09 seconds; current allocated memory: 199.232 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 19.9 seconds; current allocated memory: 239.945 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'jacobi3d_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/tile_num_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/input_size_dim_2' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi3d_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'jacobi3d_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_input_V', 'tile_num_dim_1', 'input_size_dim_2', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Generating core module 'jacobi3d_kernel_mux_164_32_1': 12 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'jacobi3d_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 7.71 seconds; current allocated memory: 258.554 MB.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_input_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_2048_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_16_0_0_ram (RAM)' using distributed RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_2032_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_2016_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_1999_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_1984_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_2000_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_2015_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_15_0_0_ram (RAM)' using distributed RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_1983_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_2031_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi3d_kernel_FIFO_2047_0_0_ram (RAM)' using block RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:02:56 ; elapsed = 00:02:48 . Memory (MB): peak = 668.441 ; gain = 332.582 ; free physical = 45165 ; free virtual = 89841
+INFO: [SYSC 207-301] Generating SystemC RTL for jacobi3d_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for jacobi3d_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for jacobi3d_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [IP_Flow 19-4832] The IP name 'jacobi3d_kernel_ap_fmul_3_max_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+create_ip: Time (s): cpu = 00:00:03 ; elapsed = 00:00:06 . Memory (MB): peak = 1219.879 ; gain = 67.863 ; free physical = 42097 ; free virtual = 86363
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'jacobi3d_kernel_ap_fmul_3_max_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'jacobi3d_kernel_ap_fmul_3_max_dsp_32'...
+WARNING: [IP_Flow 19-4832] The IP name 'jacobi3d_kernel_ap_fadd_6_full_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'jacobi3d_kernel_ap_fadd_6_full_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'jacobi3d_kernel_ap_fadd_6_full_dsp_32'...
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_1690 1690
+Add Instance store grp_store_fu_2015 2015
+Add Instance load grp_load_fu_2041 2041
+INFO: [Common 17-206] Exiting Vivado at Thu Sep 14 08:13:38 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 296.18 seconds; peak allocated memory: 258.554 MB.

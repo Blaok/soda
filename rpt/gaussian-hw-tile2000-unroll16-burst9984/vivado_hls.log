@@ -1,0 +1,304 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u11-blaok' (Linux_x86_64 version 4.4.0-62-generic) on Fri Sep 15 01:05:40 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gaussian_kernel-tile2000-unroll16_gaussian-hw-tile2000-unroll16-burst9984.dir/impl/kernels/gaussian_kernel'
+INFO: [HLS 200-10] Creating and opening project '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gaussian_kernel-tile2000-unroll16_gaussian-hw-tile2000-unroll16-burst9984.dir/impl/kernels/gaussian_kernel/gaussian_kernel'.
+INFO: [HLS 200-10] Adding design file '/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gaussian_kernel-tile2000-unroll16_gaussian-hw-tile2000-unroll16-burst9984.dir/impl/kernels/gaussian_kernel/gaussian_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:51 ; elapsed = 00:00:26 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 112670 ; free virtual = 126027
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:51 ; elapsed = 00:00:26 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 112533 ; free virtual = 125899
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:125) in function 'compute(bool, unsigned short (*) [9984], unsigned short (*) [9984], unsigned short (*) [20], unsigned short (*) [16][124], unsigned short (*) [48][125], int*, int*, int*, int, int)' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:54 ; elapsed = 00:00:29 . Memory (MB): peak = 348.719 ; gain = 12.859 ; free physical = 112347 ; free virtual = 125728
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:60: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:56 ; elapsed = 00:00:32 . Memory (MB): peak = 348.719 ; gain = 12.859 ; free physical = 112658 ; free virtual = 126053
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'gaussian_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'compute_epoch' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:117) in function 'compute' for pipelining.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:50) in function 'store' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:27) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:894) in function 'gaussian_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:129) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:603) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:50) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:58) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:27) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:35) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:853) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:854) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:855) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:856) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:857) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_124' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:858) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_125' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:859) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:881) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:884) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:885) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:110) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:853) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:854) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:855) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:856) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:857) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_124.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:858) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_125.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:859) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:110) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.1' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.2' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.3' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.4' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.5' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.6' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.7' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.8' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.9' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.10' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.11' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.12' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.13' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.14' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.15' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:918:9) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:901:85) in function 'gaussian_kernel'... converting 5 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:901:41) in function 'gaussian_kernel'... converting 2 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:117:10) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 49 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:712:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:714:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:116:49) in function 'compute'... converting 3 basic blocks.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:01:01 ; elapsed = 00:00:37 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 112859 ; free virtual = 126297
+INFO: [XFORM 203-811] Inferring bus burst write of length 312 on port 'to.V' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:62:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 312 on port 'from.V' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:32:84).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[15]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[10]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[14]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[9]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[6]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[5]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[13]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[18]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[4]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[19]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[16]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[2]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[11]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[3]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[7]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[12]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[17]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[8]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[1]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[3]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[2]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[12]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[13]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[0]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[15]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[6]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[14]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[4]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[5]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[10]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[9]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[7]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[8]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_124[11]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[45]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[42]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[30]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[46]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[26]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[19]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[27]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[39]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[17]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[38]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[3]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[13]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[12]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[8]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[37]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[1]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[7]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[5]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[2]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[18]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[4]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[16]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[6]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[9]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[15]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[35]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[36]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[47]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[10]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[11]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[43]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[41]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[0]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[40]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[31]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[22]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[21]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[28]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[29]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[32]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[24]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[33]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[20]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[14]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[34]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[23]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[25]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_125[44]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll16.cpp:72).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:01:02 ; elapsed = 00:00:38 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 113260 ; free virtual = 126702
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'gaussian_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 38.37 seconds; current allocated memory: 113.906 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.57 seconds; current allocated memory: 114.982 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 1.07 seconds; current allocated memory: 117.490 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.75 seconds; current allocated memory: 120.392 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.88 seconds; current allocated memory: 121.500 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.57 seconds; current allocated memory: 122.357 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'gaussian_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.46 seconds; current allocated memory: 123.741 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 1.99 seconds; current allocated memory: 126.003 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 1.24 seconds; current allocated memory: 128.131 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 0.81 seconds; current allocated memory: 137.019 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 2.21 seconds; current allocated memory: 150.433 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'gaussian_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/input_size_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'gaussian_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_input_V', 'input_size_dim_1', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Finished creating RTL model for 'gaussian_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 3.08 seconds; current allocated memory: 163.147 MB.
+INFO: [RTMG 210-278] Implementing memory 'gaussian_kernel_input_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'gaussian_kernel_FIFO_124_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'gaussian_kernel_FIFO_125_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'gaussian_kernel_FIFO_125_0_12_ram (RAM)' using block RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:01:18 ; elapsed = 00:01:03 . Memory (MB): peak = 540.441 ; gain = 204.582 ; free physical = 112144 ; free virtual = 125765
+INFO: [SYSC 207-301] Generating SystemC RTL for gaussian_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for gaussian_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for gaussian_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_1201 1201
+Add Instance store grp_store_fu_1388 1388
+Add Instance load grp_load_fu_1430 1430
+INFO: [Common 17-206] Exiting Vivado at Fri Sep 15 01:07:12 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 150.81 seconds; peak allocated memory: 163.147 MB.

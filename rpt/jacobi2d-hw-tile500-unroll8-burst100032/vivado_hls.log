@@ -1,0 +1,434 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u11-blaok' (Linux_x86_64 version 4.4.0-62-generic) on Fri Sep 15 23:32:24 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_jacobi2d_kernel-tile500-unroll8_jacobi2d-hw-tile500-unroll8-burst100032.dir/impl/kernels/jacobi2d_kernel'
+INFO: [HLS 200-10] Creating and opening project '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_jacobi2d_kernel-tile500-unroll8_jacobi2d-hw-tile500-unroll8-burst100032.dir/impl/kernels/jacobi2d_kernel/jacobi2d_kernel'.
+INFO: [HLS 200-10] Adding design file '/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_jacobi2d_kernel-tile500-unroll8_jacobi2d-hw-tile500-unroll8-burst100032.dir/impl/kernels/jacobi2d_kernel/jacobi2d_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:52 ; elapsed = 00:00:40 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 88646 ; free virtual = 177291
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:53 ; elapsed = 00:00:42 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 88692 ; free virtual = 177387
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:172) in function 'compute(bool, float (*) [100032], float (*) [100032], float (*) [98], float (*) [8][63], float (*) [56][62], float (*) [46][61], float (*) [2][60], int*, int*, int*, int, int)' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:01:02 ; elapsed = 00:00:52 . Memory (MB): peak = 348.750 ; gain = 12.891 ; free physical = 88898 ; free virtual = 177684
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:62: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:01:11 ; elapsed = 00:01:00 . Memory (MB): peak = 348.750 ; gain = 12.891 ; free physical = 88700 ; free virtual = 177524
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'jacobi2d_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'compute_epoch' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:162) in function 'compute' for pipelining.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:51) in function 'store' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:27) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1255) in function 'jacobi2d_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:176) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:810) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:51) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:59) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:27) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:35) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1208) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1209) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1210) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1211) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1212) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_63' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1213) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_62' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1214) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_61' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1215) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_60' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1216) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1242) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1245) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1246) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:155) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1208) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1209) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1210) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1211) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1212) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_63.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1213) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_62.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1214) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_61.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1215) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_60.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1216) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:155) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.1' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.2' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.3' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.4' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.5' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.6' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.7' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:90) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1279:9) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:1262:85) in function 'jacobi2d_kernel'... converting 5 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:162:10) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 25 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:947:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:949:17) to (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:161:50) in function 'compute'... converting 3 basic blocks.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:01:25 ; elapsed = 00:01:14 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 88058 ; free virtual = 176938
+INFO: [XFORM 203-811] Inferring bus burst write of length 6252 on port 'to.V' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:64:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 6252 on port 'from.V' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:32:86).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[11]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[73]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[70]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[69]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[68]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[67]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[66]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[65]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[64]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[63]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[62]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[61]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[60]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[59]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[58]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[57]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[56]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[55]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[54]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[53]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[52]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[51]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[50]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[49]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[48]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[47]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[46]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[45]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[44]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[43]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[42]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[41]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[40]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[39]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[38]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[37]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[36]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[35]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[34]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[2]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[20]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[21]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[19]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[6]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[29]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[24]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[32]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[31]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[10]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[7]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[30]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[9]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[97]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[96]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[95]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[94]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[93]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[92]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[91]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[90]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[89]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[88]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[87]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[86]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[85]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[84]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[83]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[82]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[81]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[33]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[72]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[71]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[4]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[77]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[80]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[79]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[76]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[27]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[13]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[25]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[18]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[5]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[16]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[17]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[28]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[14]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[23]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[8]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[15]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[12]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[22]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[78]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[74]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[75]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[26]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[3]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[7]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[6]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[5]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[4]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[3]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[2]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[1]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[0]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[15]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[14]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[12]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[11]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[10]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[9]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[8]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[43]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[42]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[41]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[40]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[39]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[38]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[37]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[36]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[35]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[34]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[33]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[32]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[31]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[30]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[29]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[28]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[27]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[26]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[25]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[24]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[23]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[22]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[21]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[20]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[46]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[45]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[44]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[47]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[4]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[0]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[3]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[2]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[1]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[19]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[18]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[17]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[16]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[55]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[54]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[53]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[52]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[51]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[50]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[49]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[48]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[7]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[6]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[5]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[13]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[11]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[10]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[9]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[8]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[7]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[6]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[5]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[4]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[3]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[12]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[40]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[41]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[42]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[43]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[44]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[45]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[15]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[18]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[17]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[20]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[14]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[2]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[1]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[0]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[39]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[38]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[37]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[36]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[35]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[34]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[33]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[32]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[31]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[30]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[29]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[28]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[27]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[26]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[25]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[24]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[23]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[22]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[21]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[19]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[16]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_61[13]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:75).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_60[0]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:76).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_60[1]' (/curr/blaok/git/sdaccel-stencil1/src/jacobi2d_kernel-tile500-unroll8.cpp:76).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:01:27 ; elapsed = 00:01:17 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 87838 ; free virtual = 176774
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'jacobi2d_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 77.73 seconds; current allocated memory: 126.781 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.62 seconds; current allocated memory: 127.656 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 56.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 12.58 seconds; current allocated memory: 137.723 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 5.94 seconds; current allocated memory: 155.893 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 10.52 seconds; current allocated memory: 156.868 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.95 seconds; current allocated memory: 157.644 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'jacobi2d_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'memset_FIFO_ptrs'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 1.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.49 seconds; current allocated memory: 158.989 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 7.64 seconds; current allocated memory: 161.423 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 7.15 seconds; current allocated memory: 163.217 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-104] Estimated max fanout for 'compute' is 11904 from HDL expression: ((ap_block_pp0_stage0_11001 == 1'b0) & (ap_reg_pp0_iter5_exitcond3_reg_9863 == 1'd0))
+INFO: [RTGEN 206-100] Generating core module 'jacobi2d_kernel_fadd_32ns_32ns_32_8_full_dsp': 504 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'jacobi2d_kernel_fmul_32ns_32ns_32_5_max_dsp': 436 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 13.34 seconds; current allocated memory: 199.685 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 23.84 seconds; current allocated memory: 238.031 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'jacobi2d_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/input_size_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'jacobi2d_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'jacobi2d_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_input_V', 'input_size_dim_1', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Generating core module 'jacobi2d_kernel_mux_42_32_1': 4 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'jacobi2d_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 6.04 seconds; current allocated memory: 251.075 MB.
+INFO: [RTMG 210-278] Implementing memory 'jacobi2d_kernel_input_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi2d_kernel_FIFO_63_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi2d_kernel_FIFO_62_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi2d_kernel_FIFO_61_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'jacobi2d_kernel_FIFO_60_0_0_ram (RAM)' using block RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:02:45 ; elapsed = 00:03:11 . Memory (MB): peak = 668.441 ; gain = 332.582 ; free physical = 84411 ; free virtual = 174300
+INFO: [SYSC 207-301] Generating SystemC RTL for jacobi2d_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for jacobi2d_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for jacobi2d_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+enable_beta_device: Time (s): cpu = 00:00:02 ; elapsed = 00:00:08 . Memory (MB): peak = 1152.020 ; gain = 68.430 ; free physical = 84489 ; free virtual = 172703
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [IP_Flow 19-4832] The IP name 'jacobi2d_kernel_ap_fadd_6_full_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'jacobi2d_kernel_ap_fadd_6_full_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'jacobi2d_kernel_ap_fadd_6_full_dsp_32'...
+WARNING: [IP_Flow 19-4832] The IP name 'jacobi2d_kernel_ap_fmul_3_max_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'jacobi2d_kernel_ap_fmul_3_max_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'jacobi2d_kernel_ap_fmul_3_max_dsp_32'...
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_1424 1424
+Add Instance store grp_store_fu_1691 1691
+Add Instance load grp_load_fu_1717 1717
+INFO: [Common 17-206] Exiting Vivado at Fri Sep 15 23:36:35 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 327.86 seconds; peak allocated memory: 251.075 MB.

@@ -1,0 +1,211 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u11-blaok' (Linux_x86_64 version 4.4.0-62-generic) on Fri Sep 15 01:03:35 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gaussian_kernel-tile2000-unroll1_gaussian-hw-tile2000-unroll1-burst100032.dir/impl/kernels/gaussian_kernel'
+INFO: [HLS 200-10] Creating and opening project '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gaussian_kernel-tile2000-unroll1_gaussian-hw-tile2000-unroll1-burst100032.dir/impl/kernels/gaussian_kernel/gaussian_kernel'.
+INFO: [HLS 200-10] Adding design file '/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gaussian_kernel-tile2000-unroll1_gaussian-hw-tile2000-unroll1-burst100032.dir/impl/kernels/gaussian_kernel/gaussian_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:54 ; elapsed = 00:00:20 . Memory (MB): peak = 348.441 ; gain = 12.586 ; free physical = 111962 ; free virtual = 125030
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:54 ; elapsed = 00:00:21 . Memory (MB): peak = 348.441 ; gain = 12.586 ; free physical = 111952 ; free virtual = 125024
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:122) in function 'compute(bool, unsigned short (*) [100032], unsigned short (*) [100032], unsigned short (*) [20], unsigned short (*) [4][1996], int*, int*, int*, int, int)' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:126) in function 'compute(bool, unsigned short (*) [100032], unsigned short (*) [100032], unsigned short (*) [20], unsigned short (*) [4][1996], int*, int*, int*, int, int)' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:165) in function 'compute(bool, unsigned short (*) [100032], unsigned short (*) [100032], unsigned short (*) [20], unsigned short (*) [4][1996], int*, int*, int*, int, int)' completely.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:377) in function 'gaussian_kernel' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:55 ; elapsed = 00:00:21 . Memory (MB): peak = 348.676 ; gain = 12.820 ; free physical = 112142 ; free virtual = 125217
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:60: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:55 ; elapsed = 00:00:22 . Memory (MB): peak = 348.676 ; gain = 12.820 ; free physical = 112125 ; free virtual = 125199
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'gaussian_kernel' automatically.
+WARNING: [XFORM 203-505] Ignore pipeline pragma in Loop whose tripcount is only 1 in function 'gaussian_kernel'.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'memset_FIFO_ptrs' in function 'gaussian_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:50) in function 'store' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:27) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'memset_FIFO_ptrs' in function 'gaussian_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:50) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:58) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:27) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:35) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:339) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:340) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:341) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:342) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:343) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1996' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:344) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:364) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:367) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:368) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:82) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:108) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:339) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:340) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:341) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:342) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:343) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_1996.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:344) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:82) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:108) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:82) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:401:9) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:384:85) in function 'gaussian_kernel'... converting 5 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:276:17) to (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:114:50) in function 'compute'... converting 3 basic blocks.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:56 ; elapsed = 00:00:23 . Memory (MB): peak = 476.438 ; gain = 140.582 ; free physical = 112058 ; free virtual = 125142
+INFO: [XFORM 203-811] Inferring bus burst write of length 3126 on port 'to.V' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:62:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 3126 on port 'from.V' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:32:86).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[13]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[2]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[3]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[4]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[5]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[6]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[7]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[8]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[9]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[10]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[11]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[12]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[14]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[15]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[16]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[17]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[18]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[19]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1996[0]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1996[1]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1996[2]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_1996[3]' (/curr/blaok/git/sdaccel-stencil1/src/gaussian_kernel-tile2000-unroll1.cpp:71).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:56 ; elapsed = 00:00:24 . Memory (MB): peak = 476.438 ; gain = 140.582 ; free physical = 111998 ; free virtual = 125086
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'gaussian_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 23.81 seconds; current allocated memory: 106.037 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.55 seconds; current allocated memory: 107.129 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.49 seconds; current allocated memory: 108.337 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.23 seconds; current allocated memory: 109.402 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.39 seconds; current allocated memory: 110.363 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.62 seconds; current allocated memory: 111.288 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'gaussian_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.37 seconds; current allocated memory: 111.995 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 1.3 seconds; current allocated memory: 113.082 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 0.7 seconds; current allocated memory: 115.105 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Generating core module 'gaussian_kernel_mux_325_16_1': 1 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 0.51 seconds; current allocated memory: 119.066 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 0.74 seconds; current allocated memory: 124.958 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'gaussian_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/input_size_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gaussian_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'gaussian_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_input_V', 'input_size_dim_1', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Finished creating RTL model for 'gaussian_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 1.46 seconds; current allocated memory: 133.023 MB.
+INFO: [RTMG 210-278] Implementing memory 'gaussian_kernel_input_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'gaussian_kernel_FIFO_1996_0_0_ram (RAM)' using block RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:01:06 ; elapsed = 00:00:39 . Memory (MB): peak = 540.438 ; gain = 204.582 ; free physical = 111509 ; free virtual = 124724
+INFO: [SYSC 207-301] Generating SystemC RTL for gaussian_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for gaussian_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for gaussian_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_807 807
+Add Instance store grp_store_fu_903 903
+Add Instance load grp_load_fu_945 945
+INFO: [Common 17-206] Exiting Vivado at Fri Sep 15 01:04:40 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 113.45 seconds; peak allocated memory: 133.023 MB.

@@ -1,0 +1,262 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u19-blaok' (Linux_x86_64 version 4.4.0-79-generic) on Tue Sep 12 19:50:35 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_blur_kernel-tile1000-unroll16_blur-hw-tile1000-unroll16-burst100032.dir/impl/kernels/blur_kernel'
+INFO: [HLS 200-10] Creating and opening project '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_blur_kernel-tile1000-unroll16_blur-hw-tile1000-unroll16-burst100032.dir/impl/kernels/blur_kernel/blur_kernel'.
+INFO: [HLS 200-10] Adding design file '/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/home/blaok/ssd/blaok/git/sdaccel-stencil/_xocc_compile_blur_kernel-tile1000-unroll16_blur-hw-tile1000-unroll16-burst100032.dir/impl/kernels/blur_kernel/blur_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:45 ; elapsed = 00:00:24 . Memory (MB): peak = 348.449 ; gain = 12.586 ; free physical = 43086 ; free virtual = 69187
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:46 ; elapsed = 00:00:24 . Memory (MB): peak = 348.449 ; gain = 12.586 ; free physical = 43083 ; free virtual = 69193
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:109) in function 'compute(bool, unsigned short (*) [100032], unsigned short (*) [100032], unsigned short (*) [6], unsigned short (*) [20][62], unsigned short (*) [12][63], int*, int*, int*, int, int)' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:46 ; elapsed = 00:00:25 . Memory (MB): peak = 348.691 ; gain = 12.828 ; free physical = 43047 ; free virtual = 69165
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:60: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:47 ; elapsed = 00:00:26 . Memory (MB): peak = 348.691 ; gain = 12.828 ; free physical = 43012 ; free virtual = 69133
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'blur_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'compute_epoch' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:101) in function 'compute' for pipelining.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'store_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:50) in function 'store' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:27) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:484) in function 'blur_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:113) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:299) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:50) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:58) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:27) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:35) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:443) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:444) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:445) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:446) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:447) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_62' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:448) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_63' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:449) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:471) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:474) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:475) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:94) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:443) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:444) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:445) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:446) in dimension 1 with a cyclic factor 32.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:447) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_62.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:448) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_63.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:449) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:94) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.1' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.2' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.3' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.4' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.5' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.6' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.7' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.8' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.9' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.10' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.11' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.12' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.13' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.14' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.15' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:101:10) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 49 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:348:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:350:17) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:100:51) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:508:9) to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:491:85) in function 'blur_kernel'... converting 5 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock to (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:491:41) in function 'blur_kernel'... converting 2 basic blocks.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:48 ; elapsed = 00:00:27 . Memory (MB): peak = 476.445 ; gain = 140.582 ; free physical = 43084 ; free virtual = 69183
+INFO: [XFORM 203-811] Inferring bus burst write of length 3126 on port 'to.V' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:62:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 3126 on port 'from.V' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:32:86).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[14]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[16]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[13]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[19]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[12]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[17]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[18]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[15]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[11]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[10]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[4]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[5]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[2]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[1]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[3]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[6]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[8]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[7]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[0]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[9]' (/home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:72).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:49 ; elapsed = 00:00:28 . Memory (MB): peak = 476.445 ; gain = 140.582 ; free physical = 44930 ; free virtual = 71035
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'blur_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 28.43 seconds; current allocated memory: 112.104 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.48 seconds; current allocated memory: 113.180 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 7.
+WARNING: [SCHED 204-21] Estimated clock period (4.89ns) exceeds the target (target clock period: 5ns, clock uncertainty: 1.35ns, effective delay budget: 3.65ns).
+WARNING: [SCHED 204-21] The critical path consists of the following:
+	'mul' operation ('mul8', /home/blaok/ssd/blaok/git/sdaccel-stencil/src/blur_kernel-tile1000-unroll16.cpp:332) (4.89 ns)
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 1.18 seconds; current allocated memory: 116.335 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.64 seconds; current allocated memory: 119.937 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.93 seconds; current allocated memory: 121.015 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.47 seconds; current allocated memory: 121.886 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'blur_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.36 seconds; current allocated memory: 123.151 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 1.69 seconds; current allocated memory: 125.017 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 1.06 seconds; current allocated memory: 127.146 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Generating core module 'blur_kernel_mul_mul_16ns_18ns_34_1': 60 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'blur_kernel_mul_mul_18ns_16ns_34_1': 4 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 0.67 seconds; current allocated memory: 137.751 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 2.5 seconds; current allocated memory: 153.472 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'blur_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/input_size_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'blur_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'blur_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_input_V', 'input_size_dim_1', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Finished creating RTL model for 'blur_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 1.99 seconds; current allocated memory: 164.596 MB.
+INFO: [RTMG 210-278] Implementing memory 'blur_kernel_input_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'blur_kernel_FIFO_62_0_0_ram (RAM)' using distributed RAMs.
+INFO: [RTMG 210-278] Implementing memory 'blur_kernel_FIFO_63_0_0_ram (RAM)' using distributed RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:01:04 ; elapsed = 00:00:49 . Memory (MB): peak = 540.445 ; gain = 204.582 ; free physical = 46764 ; free virtual = 73042
+INFO: [SYSC 207-301] Generating SystemC RTL for blur_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for blur_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for blur_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_1017 1017
+Add Instance store grp_store_fu_1158 1158
+Add Instance load grp_load_fu_1200 1200
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 12 19:51:52 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 137.37 seconds; peak allocated memory: 164.596 MB.

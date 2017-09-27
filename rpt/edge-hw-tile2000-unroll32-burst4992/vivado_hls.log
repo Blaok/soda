@@ -1,0 +1,322 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u11-blaok' (Linux_x86_64 version 4.4.0-62-generic) on Fri Sep 15 00:51:58 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_edge_kernel-tile2000-unroll32_edge-hw-tile2000-unroll32-burst4992.dir/impl/kernels/edge_kernel'
+INFO: [HLS 200-10] Creating and opening project '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_edge_kernel-tile2000-unroll32_edge-hw-tile2000-unroll32-burst4992.dir/impl/kernels/edge_kernel/edge_kernel'.
+INFO: [HLS 200-10] Adding design file '/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_edge_kernel-tile2000-unroll32_edge-hw-tile2000-unroll32-burst4992.dir/impl/kernels/edge_kernel/edge_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:56 ; elapsed = 00:00:24 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 115458 ; free virtual = 127020
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:56 ; elapsed = 00:00:25 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 115447 ; free virtual = 127030
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:109) in function 'compute(bool, unsigned char (*) [4992], unsigned char (*) [4992], unsigned char (*) [6], unsigned char (*) [36][62], unsigned char (*) [28][63], int*, int*, int*, int, int)' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:58 ; elapsed = 00:00:27 . Memory (MB): peak = 348.703 ; gain = 12.844 ; free physical = 115221 ; free virtual = 126826
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:60: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:59 ; elapsed = 00:00:27 . Memory (MB): peak = 348.703 ; gain = 12.844 ; free physical = 115079 ; free virtual = 126691
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'edge_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'compute_epoch' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:101) in function 'compute' for pipelining.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:50) in function 'store' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:27) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:704) in function 'edge_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:113) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:475) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:50) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:58) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:27) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:35) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:663) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:664) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:665) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:666) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:667) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_62' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:668) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_63' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:669) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:691) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:694) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:695) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:94) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:663) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:664) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:665) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:666) in dimension 1 with a cyclic factor 64.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:667) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_62.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:668) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_63.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:669) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:94) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.1' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.2' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.3' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.4' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.5' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.6' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.7' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.8' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.9' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.10' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.11' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.12' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.13' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.14' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.15' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.16' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.17' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.18' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.19' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.20' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.21' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.22' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.23' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.24' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.25' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.26' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.27' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.28' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.29' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.30' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.31' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:84) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:728:9) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:711:85) in function 'edge_kernel'... converting 5 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:711:41) in function 'edge_kernel'... converting 2 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:101:10) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 97 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:520:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:522:17) to (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:100:49) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-11] Balancing expressions in function 'compute' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:68)...96 expression(s) balanced.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:01:02 ; elapsed = 00:00:32 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 114832 ; free virtual = 126485
+INFO: [XFORM 203-811] Inferring bus burst write of length 78 on port 'to.V' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:62:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 78 on port 'from.V' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:32:83).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[2]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[4]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[5]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[3]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:70).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[0]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[2]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[5]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[4]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[3]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[6]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[13]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[16]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[27]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[19]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[18]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[30]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[34]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[22]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[20]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[8]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[35]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[24]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[29]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[17]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[33]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[31]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[26]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[11]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[21]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[32]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[9]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[25]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[1]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[14]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[23]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[10]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[12]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[15]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[7]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_62[28]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:71).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[26]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[2]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[4]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[10]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[11]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[18]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[0]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[20]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[13]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[7]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[19]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[14]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[8]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[24]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[12]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[9]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[5]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[27]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[6]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[23]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[21]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[22]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[15]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[16]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[3]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[17]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[25]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_63[1]' (/curr/blaok/git/sdaccel-stencil1/src/edge_kernel-tile2000-unroll32.cpp:72).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:01:05 ; elapsed = 00:00:34 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 114724 ; free virtual = 126392
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'edge_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 34.64 seconds; current allocated memory: 125.118 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.71 seconds; current allocated memory: 126.667 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 5.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 2.25 seconds; current allocated memory: 131.667 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 1.54 seconds; current allocated memory: 137.117 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 2.27 seconds; current allocated memory: 138.589 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.69 seconds; current allocated memory: 139.882 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'edge_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.7 seconds; current allocated memory: 141.978 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 3.29 seconds; current allocated memory: 145.377 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 2.31 seconds; current allocated memory: 148.317 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 1.82 seconds; current allocated memory: 169.749 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 5.67 seconds; current allocated memory: 195.269 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'edge_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/input_size_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'edge_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'edge_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_input_V', 'input_size_dim_1', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Finished creating RTL model for 'edge_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 6.2 seconds; current allocated memory: 217.463 MB.
+INFO: [RTMG 210-278] Implementing memory 'edge_kernel_input_0_0_0_ram (RAM)' using distributed RAMs.
+INFO: [RTMG 210-278] Implementing memory 'edge_kernel_FIFO_62_0_0_ram (RAM)' using distributed RAMs.
+INFO: [RTMG 210-278] Implementing memory 'edge_kernel_FIFO_63_0_0_ram (RAM)' using distributed RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:01:36 ; elapsed = 00:01:19 . Memory (MB): peak = 540.441 ; gain = 204.582 ; free physical = 112675 ; free virtual = 124610
+INFO: [SYSC 207-301] Generating SystemC RTL for edge_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for edge_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for edge_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_1817 1817
+Add Instance store grp_store_fu_2086 2086
+Add Instance load grp_load_fu_2160 2160
+INFO: [Common 17-206] Exiting Vivado at Fri Sep 15 00:53:50 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 158.1 seconds; peak allocated memory: 217.463 MB.

@@ -1,0 +1,246 @@
+================================================================
+  Vivado(TM) HLS - High-Level Synthesis from C, C++ and SystemC
+  Version 2017.1
+  Build 1846317 on Thu Jun 22 18:17:09 MDT 2017
+  Copyright (C) 1986-2017 Xilinx, Inc. All Rights Reserved.
+================================================================
+INFO: [HLS 200-10] Running '/opt/tools/xilinx/SDx/2017.1/Vivado_HLS/bin/unwrapped/lnx64.o/vivado_hls'
+INFO: [HLS 200-10] For user 'blaok' on host 'u11-blaok' (Linux_x86_64 version 4.4.0-62-generic) on Fri Sep 15 00:51:58 PDT 2017
+INFO: [HLS 200-10] On os Ubuntu 16.04.2 LTS
+INFO: [HLS 200-10] In directory '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gradient_kernel-tile2000-unroll8_gradient-hw-tile2000-unroll8-burst49984.dir/impl/kernels/gradient_kernel'
+INFO: [HLS 200-10] Creating and opening project '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gradient_kernel-tile2000-unroll8_gradient-hw-tile2000-unroll8-burst49984.dir/impl/kernels/gradient_kernel/gradient_kernel'.
+INFO: [HLS 200-10] Adding design file '/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp' to the project
+INFO: [HLS 200-10] Creating and opening solution '/curr/blaok/git/sdaccel-stencil1/_xocc_compile_gradient_kernel-tile2000-unroll8_gradient-hw-tile2000-unroll8-burst49984.dir/impl/kernels/gradient_kernel/gradient_kernel/solution_OCL_REGION_0'.
+INFO: [HLS 200-10] Setting target device to 'xc7vx690tffg1157-2'
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 5ns.
+INFO: [SYN 201-201] Setting up clock 'default' with an uncertainty of 1.35ns.
+INFO: [SCHED 204-61] Option 'relax_ii_for_timing' is enabled, will increase II to preserve clock frequency constraints.
+INFO: [XFORM 203-1171] Pipeline the innermost loop with trip count more than 64 or its parent loop when its trip count is less than or equal 64.
+INFO: [XFORM 203-1161] The maximum of name length is set into 256.
+INFO: [HLS 200-10] Analyzing design file '/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp' ... 
+INFO: [HLS 200-10] Validating synthesis directives ...
+INFO: [HLS 200-111] Finished Checking Pragmas Time (s): cpu = 00:00:53 ; elapsed = 00:00:24 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 115419 ; free virtual = 126963
+INFO: [HLS 200-111] Finished Linking Time (s): cpu = 00:00:54 ; elapsed = 00:00:24 . Memory (MB): peak = 348.445 ; gain = 12.586 ; free physical = 115367 ; free virtual = 126922
+INFO: [HLS 200-10] Starting code transformations ...
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:107) in function 'compute(bool, float (*) [49984], float (*) [49984], float (*) [2], float (*) [2][249], float (*) [14][250], int*, int*, int*, int, int)' completely.
+INFO: [HLS 200-111] Finished Standard Transforms Time (s): cpu = 00:00:54 ; elapsed = 00:00:25 . Memory (MB): peak = 348.668 ; gain = 12.809 ; free physical = 115438 ; free virtual = 127006
+INFO: [HLS 200-10] Checking synthesizability ...
+WARNING: [SYNCHK 200-23] /curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:62: variable-indexed range selection may cause suboptimal QoR.
+INFO: [SYNCHK 200-10] 0 error(s), 1 warning(s).
+INFO: [HLS 200-111] Finished Checking Synthesizability Time (s): cpu = 00:00:54 ; elapsed = 00:00:25 . Memory (MB): peak = 348.668 ; gain = 12.809 ; free physical = 115444 ; free virtual = 127024
+INFO: [XFORM 203-510] Pipelining loop 'memset_FIFO_ptrs' in function 'gradient_kernel' automatically.
+INFO: [XFORM 203-502] Unrolling all sub-loops inside loop 'compute_epoch' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:99) in function 'compute' for pipelining.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:51) in function 'store' automatically.
+INFO: [XFORM 203-502] Unrolling small iteration loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:27) in function 'load' automatically.
+INFO: [XFORM 203-501] Unrolling loop 'bases_init' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:317) in function 'gradient_kernel' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_load_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:111) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'compute_unrolled' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:177) in function 'compute' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_channel' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:51) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'store_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:59) in function 'store' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_channel' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:27) in function 'load' completely.
+INFO: [XFORM 203-501] Unrolling loop 'load_coalesced' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:35) in function 'load' completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:276) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_1' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:277) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:278) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'output_1' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:279) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FF' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:280) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_249' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:281) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_250' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:282) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_ptrs' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:304) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'i_base' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:307) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'j_base' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:308) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:92) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_0.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:276) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'input_1.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:277) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'output_0.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:278) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'output_1.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:279) in dimension 1 with a cyclic factor 16.
+INFO: [XFORM 203-101] Partitioning array 'FF.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:280) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_249.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:281) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'FIFO_250.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:282) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_buffer.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:92) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.0' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.1' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.2' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.3' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.4' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.5' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.6' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-101] Partitioning array 'input_points.0.7' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:86) in dimension 1 completely.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:341:9) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:324:85) in function 'gradient_kernel'... converting 5 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:324:41) in function 'gradient_kernel'... converting 2 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:99:10) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 25 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:209:17) in function 'compute'... converting 3 basic blocks.
+INFO: [XFORM 203-401] Performing if-conversion on hyperblock from (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:211:17) to (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:98:49) in function 'compute'... converting 3 basic blocks.
+INFO: [HLS 200-111] Finished Pre-synthesis Time (s): cpu = 00:00:55 ; elapsed = 00:00:26 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 115308 ; free virtual = 126906
+INFO: [XFORM 203-811] Inferring bus burst write of length 3124 on port 'to.V' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:64:17).
+INFO: [XFORM 203-811] Inferring bus burst read of length 3124 on port 'from.V' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:32:85).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[1]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FF[0]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:72).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[1]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_249[0]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:73).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[8]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[7]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[9]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[13]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[11]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[3]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[5]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[1]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[0]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[12]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[2]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[6]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[10]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+WARNING: [ANALYSIS 214-52] Found false inter dependency for variable 'FIFO_250[4]' (/curr/blaok/git/sdaccel-stencil1/src/gradient_kernel-tile2000-unroll8.cpp:74).
+INFO: [HLS 200-111] Finished Architecture Synthesis Time (s): cpu = 00:00:56 ; elapsed = 00:00:27 . Memory (MB): peak = 476.441 ; gain = 140.582 ; free physical = 115147 ; free virtual = 126754
+INFO: [HLS 200-10] Starting hardware synthesis ...
+INFO: [HLS 200-10] Synthesizing 'gradient_kernel' ...
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'load_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 27.01 seconds; current allocated memory: 105.081 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.53 seconds; current allocated memory: 105.972 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'compute_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 72.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 1.33 seconds; current allocated memory: 109.047 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.8 seconds; current allocated memory: 112.298 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-61] Pipelining loop 'store_epoch'.
+INFO: [SCHED 204-61] Pipelining result: Target II: 1, Final II: 1, Depth: 3.
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 1.34 seconds; current allocated memory: 113.258 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 0.59 seconds; current allocated memory: 113.995 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-42] -- Implementing module 'gradient_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [SCHED 204-11] Starting scheduling ...
+INFO: [SCHED 204-11] Finished scheduling.
+INFO: [HLS 200-111]  Elapsed time: 0.37 seconds; current allocated memory: 114.786 MB.
+INFO: [BIND 205-100] Starting micro-architecture generation ...
+INFO: [BIND 205-101] Performing variable lifetime analysis.
+INFO: [BIND 205-101] Exploring resource sharing.
+INFO: [BIND 205-101] Binding ...
+INFO: [BIND 205-100] Finished micro-architecture generation.
+INFO: [HLS 200-111]  Elapsed time: 1.59 seconds; current allocated memory: 115.932 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'load' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'load'.
+INFO: [HLS 200-111]  Elapsed time: 1.22 seconds; current allocated memory: 117.709 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'compute' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-104] Estimated max fanout for 'compute' is 9745 from HDL expression: (ap_block_pp0_stage0_11001 == 1'b0)
+INFO: [RTGEN 206-100] Generating core module 'gradient_kernel_fadd_32ns_32ns_32_8_full_dsp': 24 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'gradient_kernel_fdiv_32ns_32ns_32_16': 8 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'gradient_kernel_fmul_32ns_32ns_32_5_max_dsp': 32 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'gradient_kernel_fsqrt_32ns_32ns_32_16': 8 instance(s).
+INFO: [RTGEN 206-100] Generating core module 'gradient_kernel_fsub_32ns_32ns_32_8_full_dsp': 32 instance(s).
+INFO: [RTGEN 206-100] Finished creating RTL model for 'compute'.
+INFO: [HLS 200-111]  Elapsed time: 1.04 seconds; current allocated memory: 126.381 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'store' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-100] Finished creating RTL model for 'store'.
+INFO: [HLS 200-111]  Elapsed time: 3.71 seconds; current allocated memory: 136.051 MB.
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [HLS 200-10] -- Generating RTL for module 'gradient_kernel' 
+INFO: [HLS 200-10] ----------------------------------------------------------------
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/gmem1' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/gmem2' to 'm_axi'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/var_output_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/var_input_V' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/tile_num_dim_0' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/input_size_dim_1' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/tile_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/extra_space_i_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/extra_space_o_coalesed' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on port 'gradient_kernel/total_burst_num' to 's_axilite & ap_none'.
+INFO: [RTGEN 206-500] Setting interface mode on function 'gradient_kernel' to 's_axilite & ap_ctrl_hs'.
+INFO: [RTGEN 206-100] Bundling port 'return', 'var_output_V', 'var_input_V', 'input_size_dim_1', 'tile_burst_num', 'extra_space_i_coalesed', 'extra_space_o_coalesed' and 'total_burst_num' to AXI-Lite port control.
+INFO: [RTGEN 206-100] Finished creating RTL model for 'gradient_kernel'.
+INFO: [HLS 200-111]  Elapsed time: 1.19 seconds; current allocated memory: 142.551 MB.
+INFO: [RTMG 210-278] Implementing memory 'gradient_kernel_input_0_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'gradient_kernel_FIFO_249_0_0_ram (RAM)' using block RAMs.
+INFO: [RTMG 210-278] Implementing memory 'gradient_kernel_FIFO_250_0_0_ram (RAM)' using block RAMs.
+INFO: [HLS 200-111] Finished generating all RTL models Time (s): cpu = 00:01:09 ; elapsed = 00:00:49 . Memory (MB): peak = 540.441 ; gain = 204.582 ; free physical = 114181 ; free virtual = 126005
+INFO: [SYSC 207-301] Generating SystemC RTL for gradient_kernel.
+INFO: [VHDL 208-304] Generating VHDL RTL for gradient_kernel.
+INFO: [VLOG 209-307] Generating Verilog RTL for gradient_kernel.
+INFO: [IMPL 213-8] Exporting RTL as an IP in IP-XACT.
+
+
+****** Vivado v2017.1_sdx (64-bit)
+  **** SW Build 1915620 on Thu Jun 22 17:54:59 MDT 2017
+  **** IP Build 1908669 on Thu Jun 22 19:20:41 MDT 2017
+    ** Copyright 1986-2017 Xilinx, Inc. All Rights Reserved.
+
+INFO: [Common 17-1460] Use of init.tcl in /opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl is deprecated. Please use Vivado_init.tcl 
+Sourcing tcl script '/opt/tools/xilinx/SDx/2017.1/Vivado/scripts/init.tcl'
+16 Beta devices matching pattern found, 0 enabled.
+Loaded SDSoC Platform Tcl Library
+source run_ippack.tcl -notrace
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [IP_Flow 19-4832] The IP name 'gradient_kernel_ap_fsub_6_full_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'gradient_kernel_ap_fsub_6_full_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'gradient_kernel_ap_fsub_6_full_dsp_32'...
+WARNING: [IP_Flow 19-4832] The IP name 'gradient_kernel_ap_fadd_6_full_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'gradient_kernel_ap_fadd_6_full_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'gradient_kernel_ap_fadd_6_full_dsp_32'...
+WARNING: [IP_Flow 19-4832] The IP name 'gradient_kernel_ap_fdiv_14_no_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'gradient_kernel_ap_fdiv_14_no_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'gradient_kernel_ap_fdiv_14_no_dsp_32'...
+WARNING: [IP_Flow 19-4832] The IP name 'gradient_kernel_ap_fsqrt_14_no_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'gradient_kernel_ap_fsqrt_14_no_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'gradient_kernel_ap_fsqrt_14_no_dsp_32'...
+WARNING: [IP_Flow 19-4832] The IP name 'gradient_kernel_ap_fmul_3_max_dsp_32' you have specified is long. The Windows operating system has path length limitations. It is recommended you use shorter names to reduce the likelihood of issues.
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'gradient_kernel_ap_fmul_3_max_dsp_32'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'gradient_kernel_ap_fmul_3_max_dsp_32'...
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/tools/xilinx/SDx/2017.1/Vivado/data/ip'.
+WARNING: [Vivado 12-4404] The CPU emulation flow is not supported when using a packaged XO file with XOCC.
+Add Instance compute grp_compute_fu_601 601
+Add Instance store grp_store_fu_674 674
+Add Instance load grp_load_fu_700 700
+package_xo: Time (s): cpu = 00:00:04 ; elapsed = 00:00:07 . Memory (MB): peak = 1253.914 ; gain = 0.000 ; free physical = 111605 ; free virtual = 123976
+INFO: [Common 17-206] Exiting Vivado at Fri Sep 15 00:53:47 2017...
+Vivado HLS completed successfully
+INFO: [HLS 200-112] Total elapsed time: 204.13 seconds; peak allocated memory: 142.551 MB.
