@@ -18,7 +18,8 @@ typedef uint16_t output_type;
 #error TILE_SIZE_DIM_0 != 2000
 #endif//TILE_SIZE_DIM_0 != 2000
 
-void load(bool load_flag, input_type to[CHANNEL_NUM_I][BURST_LENGTH*2], ap_uint<BURST_WIDTH>* from_channel_1, ap_uint<BURST_WIDTH>* from_channel_2)
+template<int chan_idx, int chan_tot>
+void load(bool load_flag, input_type to[CHANNEL_NUM_I][BURST_LENGTH*chan_tot], ap_uint<BURST_WIDTH>* from)
 {
     if(load_flag)
     {
@@ -29,21 +30,20 @@ load_epoch:
             for(int i = 0; i < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I); ++i)
             {
 #pragma HLS pipeline II=1
-                ap_uint<BURST_WIDTH> tmp_channel_1(from_channel_1[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i]);
-                ap_uint<BURST_WIDTH> tmp_channel_2(from_channel_2[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i]);
+                ap_uint<BURST_WIDTH> tmp(from[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i]);
 load_coalesced:
                 for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)
                 {
 #pragma HLS unroll
-                    to[c][(i*BURST_WIDTH/PIXEL_WIDTH_I+j)*2+0] = tmp_channel_1((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);
-                    to[c][(i*BURST_WIDTH/PIXEL_WIDTH_I+j)*2+1] = tmp_channel_2((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);
+                    to[c][(i*BURST_WIDTH/PIXEL_WIDTH_I+j)*chan_tot+chan_idx] = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);
                 }
             }
         }
     }
 }
 
-void store(bool store_flag, ap_uint<BURST_WIDTH>* to_channel_1, ap_uint<BURST_WIDTH>* to_channel_2, output_type from[CHANNEL_NUM_O][BURST_LENGTH*2])
+template<int chan_idx, int chan_tot>
+void store(bool store_flag, ap_uint<BURST_WIDTH>* to, output_type from[CHANNEL_NUM_O][BURST_LENGTH*chan_tot])
 {
     if(store_flag)
     {
@@ -54,17 +54,14 @@ store_epoch:
             for(int i = 0; i < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O); ++i)
             {
 #pragma HLS pipeline II=1
-                ap_uint<BURST_WIDTH> tmp_channel_1;
-                ap_uint<BURST_WIDTH> tmp_channel_2;
+                ap_uint<BURST_WIDTH> tmp;
 store_coalesced:
                 for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)
                 {
 #pragma HLS unroll
-                    tmp_channel_1((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][(i*BURST_WIDTH/PIXEL_WIDTH_O+j)*2+0];
-                    tmp_channel_2((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][(i*BURST_WIDTH/PIXEL_WIDTH_O+j)*2+1];
+                    tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][(i*BURST_WIDTH/PIXEL_WIDTH_O+j)*chan_tot+chan_idx];
                 }
-                to_channel_1[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i] = tmp_channel_1;
-                to_channel_2[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i] = tmp_channel_2;
+                to[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i] = tmp;
             }
         }
     }
@@ -1096,10 +1093,10 @@ extern "C"
 {
 
 void blur_kernel(
-    ap_uint<BURST_WIDTH>* var_output_channel_1,
-    ap_uint<BURST_WIDTH>* var_output_channel_2,
-    ap_uint<BURST_WIDTH>* var_input_channel_1,
-    ap_uint<BURST_WIDTH>* var_input_channel_2,
+    ap_uint<BURST_WIDTH>* var_output_chan_0,
+    ap_uint<BURST_WIDTH>* var_output_chan_1,
+    ap_uint<BURST_WIDTH>* var_input_chan_0,
+    ap_uint<BURST_WIDTH>* var_input_chan_1,
     int32_t tile_num_dim_0,
     int32_t input_size_dim_1,
     int64_t tile_burst_num,
@@ -1107,15 +1104,15 @@ void blur_kernel(
     int64_t extra_space_o_coalesed,
     int32_t total_burst_num)
 {
-#pragma HLS INTERFACE m_axi port=var_output_channel_1 offset=slave depth=65536 bundle=gmem0 latency=120
-#pragma HLS INTERFACE m_axi port=var_output_channel_2 offset=slave depth=65536 bundle=gmem1 latency=120
-#pragma HLS INTERFACE m_axi port=var_input_channel_1 offset=slave depth=65536 bundle=gmem2 latency=120
-#pragma HLS INTERFACE m_axi port=var_input_channel_2 offset=slave depth=65536 bundle=gmem3 latency=120
+#pragma HLS INTERFACE m_axi port=var_output_chan_0 offset=slave depth=65536 bundle=gmem0 latency=120
+#pragma HLS INTERFACE m_axi port=var_output_chan_1 offset=slave depth=65536 bundle=gmem1 latency=120
+#pragma HLS INTERFACE m_axi port=var_input_chan_0 offset=slave depth=65536 bundle=gmem2 latency=120
+#pragma HLS INTERFACE m_axi port=var_input_chan_1 offset=slave depth=65536 bundle=gmem3 latency=120
 
-#pragma HLS INTERFACE s_axilite port=var_output_channel_1 bundle=control
-#pragma HLS INTERFACE s_axilite port=var_output_channel_2 bundle=control
-#pragma HLS INTERFACE s_axilite port=var_input_channel_1 bundle=control
-#pragma HLS INTERFACE s_axilite port=var_input_channel_2 bundle=control
+#pragma HLS INTERFACE s_axilite port=var_output_chan_0 bundle=control
+#pragma HLS INTERFACE s_axilite port=var_output_chan_1 bundle=control
+#pragma HLS INTERFACE s_axilite port=var_input_chan_0 bundle=control
+#pragma HLS INTERFACE s_axilite port=var_input_chan_1 bundle=control
 #pragma HLS INTERFACE s_axilite port=tile_num_dim_0 bundle=control
 #pragma HLS INTERFACE s_axilite port=input_size_dim_1 bundle=control
 #pragma HLS INTERFACE s_axilite port=tile_burst_num bundle=control
@@ -1179,26 +1176,30 @@ burst:
         store_flag = burst_index_in_total > 1;
         if(burst_index_in_total%2==0)
         {
-            load(load_flag, input_0, var_input_channel_1, var_input_channel_2);
+            load<0, 2>(load_flag, input_0, var_input_chan_0);
+            load<1, 2>(load_flag, input_0, var_input_chan_1);
             compute(compute_flag, output_1, input_1, FF, FIFO_31, FIFO_32, FIFO_ptrs, i_base, j_base, p_base, input_index_base);
-            store(store_flag, var_output_channel_1, var_output_channel_2, output_0);
+            store<0, 2>(store_flag, var_output_chan_0, output_0);
+            store<1, 2>(store_flag, var_output_chan_1, output_0);
         }
         else
         {
-            load(load_flag, input_1, var_input_channel_1, var_input_channel_2);
+            load<0, 2>(load_flag, input_1, var_input_chan_0);
+            load<1, 2>(load_flag, input_1, var_input_chan_1);
             compute(compute_flag, output_0, input_0, FF, FIFO_31, FIFO_32, FIFO_ptrs, i_base, j_base, p_base, input_index_base);
-            store(store_flag, var_output_channel_1, var_output_channel_2, output_1);
+            store<0, 2>(store_flag, var_output_chan_0, output_1);
+            store<1, 2>(store_flag, var_output_chan_1, output_1);
         }
         if(load_flag)
         {
-            var_input_channel_1 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I;
-            var_input_channel_2 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I;
+            var_input_chan_0 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I;
+            var_input_chan_1 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I;
             burst_index_load += 1;
             if(burst_index_load == tile_burst_num)
             {
                 burst_index_load = 0;
-                var_input_channel_1 -= extra_space_i_coalesed;
-                var_input_channel_2 -= extra_space_i_coalesed;
+                var_input_chan_0 -= extra_space_i_coalesed;
+                var_input_chan_1 -= extra_space_i_coalesed;
             }
         }
         if(compute_flag)
@@ -1219,14 +1220,14 @@ burst:
         }
         if(store_flag)
         {
-            var_output_channel_1 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O;
-            var_output_channel_2 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O;
+            var_output_chan_0 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O;
+            var_output_chan_1 += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O;
             burst_index_store += 1;
             if(burst_index_store == tile_burst_num)
             {
                 burst_index_store = 0;
-                var_output_channel_1 -= extra_space_o_coalesed;
-                var_output_channel_2 -= extra_space_o_coalesed;
+                var_output_chan_0 -= extra_space_o_coalesed;
+                var_output_chan_1 -= extra_space_o_coalesed;
             }
         }
     }
