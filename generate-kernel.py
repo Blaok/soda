@@ -129,7 +129,7 @@ def PrintUpdate(producer_map, consumer_map, src, input_type):
 
         PrintLine('%s = %s;' % (dst_str, src_str))
 
-def PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type):
+def PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type, dram_chan):
     global indent
     buf = GetBuffer(St, A, k)
     points = GetPoints(A, k)
@@ -149,9 +149,9 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
 #    PrintLine('#endif')
 #    PrintLine()
 #    indent = indent_save
-    PrintLine('void compute(bool compute_flag, output_type output[CHANNEL_NUM_O][BURST_LENGTH],')
+    PrintLine('void compute(bool compute_flag, output_type output[CHANNEL_NUM_O][BURST_LENGTH*%d],' % dram_chan)
     indent += 1
-    PrintLine('input_type input[CHANNEL_NUM_I][BURST_LENGTH],')
+    PrintLine('input_type input[CHANNEL_NUM_I][BURST_LENGTH*%d],' % dram_chan)
     if extra_params:
         for param_name, param in extra_params.items():
             if 'dup' in param:
@@ -190,7 +190,7 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
 
     PrintLine('// produce output')
     PrintLine('compute_epoch:', 0)
-    PrintLine('for(int32_t epoch = 0; epoch < BURST_LENGTH/UNROLL_FACTOR; ++epoch)')
+    PrintLine('for(int32_t epoch = 0; epoch < BURST_LENGTH*%d/UNROLL_FACTOR; ++epoch)' % dram_chan)
     PrintLine('{')
     indent += 1
     PrintLine('#pragma HLS dependence variable=FF inter false', 0)
@@ -316,16 +316,19 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     indent -= 1
     PrintLine('}')
 
-def PrintKernel(St, A, k, app_name, extra_params):
+def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     global indent
     buf = GetBuffer(St, A, k)
     points = GetPoints(A, k)
     PrintLine('extern "C"')
     PrintLine('{')
     PrintLine()
-    PrintLine('void %s_kernel(ap_uint<BURST_WIDTH>* var_output,' % app_name)
+    PrintLine('void %s_kernel(' % app_name)
     indent += 1
-    PrintLine('ap_uint<BURST_WIDTH>* var_input,')
+    for i in range(0, dram_chan):
+        PrintLine('ap_uint<BURST_WIDTH>* var_output_chan_%d,' % i)
+    for i in range(0, dram_chan):
+        PrintLine('ap_uint<BURST_WIDTH>* var_input_chan_%d,' % i)
     if extra_params:
         for param_name, param in extra_params.items():
             PrintLine('%s* var_%s,' % (param['type'], param_name))
@@ -340,14 +343,18 @@ def PrintKernel(St, A, k, app_name, extra_params):
     PrintLine('{')
     indent += 1
 
-    PrintLine('#pragma HLS INTERFACE m_axi port=var_output offset=slave depth=65536 bundle=gmem1 latency=120', 0)
-    PrintLine('#pragma HLS INTERFACE m_axi port=var_input offset=slave depth=65536 bundle=gmem2 latency=120', 0)
+    for i in range(0, dram_chan):
+        PrintLine('#pragma HLS INTERFACE m_axi port=var_output_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
+    for i in range(0, dram_chan):
+        PrintLine('#pragma HLS INTERFACE m_axi port=var_input_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
     if extra_params:
         for param_name, param in extra_params.items():
             PrintLine('#pragma HLS INTERFACE m_axi port=var_%s offset=slave depth=%d bundle=gmem3 latency=120' % (param_name, param['length']), 0)
     PrintLine()
-    PrintLine('#pragma HLS INTERFACE s_axilite port=var_output bundle=control', 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=var_input bundle=control', 0)
+    for i in range(0, dram_chan):
+        PrintLine('#pragma HLS INTERFACE s_axilite port=var_output_chan_%d bundle=control' % i, 0)
+    for i in range(0, dram_chan):
+        PrintLine('#pragma HLS INTERFACE s_axilite port=var_input_chan_%d bundle=control' % i, 0)
     if extra_params:
         for param_name in extra_params.keys():
             PrintLine('#pragma HLS INTERFACE s_axilite port=var_%s bundle=control' % param_name, 0)
@@ -361,10 +368,10 @@ def PrintKernel(St, A, k, app_name, extra_params):
     PrintLine('#pragma HLS INTERFACE s_axilite port=return bundle=control', 0)
     PrintLine()
 
-    PrintLine('input_type  input_0[CHANNEL_NUM_I][BURST_LENGTH];')
-    PrintLine('input_type  input_1[CHANNEL_NUM_I][BURST_LENGTH];')
-    PrintLine('output_type output_0[CHANNEL_NUM_O][BURST_LENGTH];')
-    PrintLine('output_type output_1[CHANNEL_NUM_O][BURST_LENGTH];')
+    PrintLine('input_type  input_0[CHANNEL_NUM_I][BURST_LENGTH*%d];' % dram_chan)
+    PrintLine('input_type  input_1[CHANNEL_NUM_I][BURST_LENGTH*%d];' % dram_chan)
+    PrintLine('output_type output_0[CHANNEL_NUM_O][BURST_LENGTH*%d];' % dram_chan)
+    PrintLine('output_type output_1[CHANNEL_NUM_O][BURST_LENGTH*%d];' % dram_chan)
     PrintLine('input_type FF[CHANNEL_NUM_I][%d];' % len(buf['FFs']))
     for fifo_length, fifo_list in buf['FIFOs'].items():
         PrintLine('input_type FIFO_%d[CHANNEL_NUM_I][%d][%d];' % (fifo_length/k, len(fifo_list), fifo_length/k) )
@@ -464,32 +471,38 @@ def PrintKernel(St, A, k, app_name, extra_params):
     PrintLine('store_flag = burst_index_in_total > 1;')
     PrintLine('if(burst_index_in_total%2==0)')
     PrintLine('{');indent += 1
-    PrintLine('load(load_flag, input_0, var_input);')
+    for i in range(0, dram_chan):
+        PrintLine('load<%d, %d>(load_flag, input_0, var_input_chan_%d);' % (i, dram_chan, i))
     PrintLine('compute(compute_flag, output_1, input_1, '+extra_params_str+'FF, '+''.join([('FIFO_%d, ' % (fifo_length/k)) for fifo_length in buf['FIFOs'].keys()])+'FIFO_ptrs, '+coords_str+'input_index_base);')
-    PrintLine('store(store_flag, var_output, output_0);')
+    for i in range(0, dram_chan):
+        PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_0);' % (i, dram_chan, i))
     indent -= 1;PrintLine('}')
     PrintLine('else')
     PrintLine('{');indent += 1
-    PrintLine('load(load_flag, input_1, var_input);')
+    for i in range(0, dram_chan):
+        PrintLine('load<%d, %d>(load_flag, input_1, var_input_chan_%d);' % (i, dram_chan, i))
     PrintLine('compute(compute_flag, output_0, input_0, '+extra_params_str+'FF, '+''.join([('FIFO_%d, ' % (fifo_length/k)) for fifo_length in buf['FIFOs'].keys()])+'FIFO_ptrs, '+coords_str+'input_index_base);')
-    PrintLine('store(store_flag, var_output, output_1);')
+    for i in range(0, dram_chan):
+        PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_1);' % (i, dram_chan, i))
     indent -= 1;PrintLine('}')
 
     PrintLine('if(load_flag)')
     PrintLine('{');indent += 1
-    PrintLine('var_input += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I;')
+    for i in range(0, dram_chan):
+        PrintLine('var_input_chan_%d += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I;' % i)
     PrintLine('burst_index_load += 1;')
     PrintLine('if(burst_index_load == tile_burst_num)')
     PrintLine('{');indent += 1
     PrintLine('burst_index_load = 0;')
-    PrintLine('var_input -= extra_space_i_coalesed;')
+    for i in range(0, dram_chan):
+        PrintLine('var_input_chan_%d -= extra_space_i_coalesed;' % i)
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
 
     PrintLine('if(compute_flag)')
     PrintLine('{');indent += 1
     PrintLine('burst_index_compute += 1;')
-    PrintLine('input_index_base  += BURST_LENGTH/UNROLL_FACTOR;')
+    PrintLine('input_index_base  += BURST_LENGTH*%d/UNROLL_FACTOR;' % dram_chan)
     PrintLine('if(burst_index_compute == tile_burst_num)')
     PrintLine('{');indent += 1
     PrintLine('burst_index_compute = 0;')
@@ -517,12 +530,14 @@ def PrintKernel(St, A, k, app_name, extra_params):
 
     PrintLine('if(store_flag)')
     PrintLine('{');indent += 1
-    PrintLine('var_output += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O;')
+    for i in range(0, dram_chan):
+        PrintLine('var_output_chan_%d += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O;' % i)
     PrintLine('burst_index_store += 1;')
     PrintLine('if(burst_index_store == tile_burst_num)')
     PrintLine('{');indent += 1
     PrintLine('burst_index_store = 0;')
-    PrintLine('var_output -= extra_space_o_coalesed;')
+    for i in range(0, dram_chan):
+        PrintLine('var_output_chan_%d -= extra_space_o_coalesed;' % i)
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
 
@@ -540,7 +555,8 @@ def PrintHeader(app_name):
 
 def PrintLoad(input_type):
     global indent
-    PrintLine('void load(bool load_flag, input_type to[CHANNEL_NUM_I][BURST_LENGTH], ap_uint<BURST_WIDTH>* from)')
+    PrintLine('template<int chan_idx, int chan_tot>')
+    PrintLine('void load(bool load_flag, input_type to[CHANNEL_NUM_I][BURST_LENGTH*chan_tot], ap_uint<BURST_WIDTH>* from)')
     PrintLine('{');indent += 1
     PrintLine('if(load_flag)')
     PrintLine('{');indent += 1
@@ -558,9 +574,9 @@ def PrintLoad(input_type):
     PrintLine('#pragma HLS unroll', 0)
     if input_type=='float' or input_type=='double':
         PrintLine('uint%d_t raw_bits = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % 32 if input_type=='float' else 64)
-        PrintLine('to[c][i*BURST_WIDTH/PIXEL_WIDTH_I+j] = *(input_type*)(&raw_bits);')
+        PrintLine('to[c][(i*BURST_WIDTH/PIXEL_WIDTH_I+j)*chan_tot+chan_idx] = *(input_type*)(&raw_bits);')
     else:
-        PrintLine('to[c][i*BURST_WIDTH/PIXEL_WIDTH_I+j] = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);')
+        PrintLine('to[c][(i*BURST_WIDTH/PIXEL_WIDTH_I+j)*chan_tot+chan_idx] = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
@@ -569,7 +585,8 @@ def PrintLoad(input_type):
 
 def PrintStore(output_type):
     global indent
-    PrintLine('void store(bool store_flag, ap_uint<BURST_WIDTH>* to, output_type from[CHANNEL_NUM_O][BURST_LENGTH])')
+    PrintLine('template<int chan_idx, int chan_tot>')
+    PrintLine('void store(bool store_flag, ap_uint<BURST_WIDTH>* to, output_type from[CHANNEL_NUM_O][BURST_LENGTH*chan_tot])')
     PrintLine('{');indent += 1
     PrintLine('if(store_flag)')
     PrintLine('{');indent += 1
@@ -586,10 +603,10 @@ def PrintStore(output_type):
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS unroll', 0)
     if output_type=='float' or output_type=='double':
-        PrintLine('output_type raw_bits = from[c][i*BURST_WIDTH/PIXEL_WIDTH_O+j];')
+        PrintLine('output_type raw_bits = from[c][(i*BURST_WIDTH/PIXEL_WIDTH_O+j)*chan_tot+chan_idx];')
         PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = *(uint%d_t*)(&raw_bits);' % 32 if output_type=='float' else 64)
     else:
-        PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][i*BURST_WIDTH/PIXEL_WIDTH_O+j];')
+        PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][(i*BURST_WIDTH/PIXEL_WIDTH_O+j)*chan_tot+chan_idx];')
     indent -= 1;PrintLine('}')
     PrintLine('to[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i] = tmp;')
     indent -= 1;PrintLine('}')
@@ -606,6 +623,7 @@ type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t'
 config = json.loads(sys.stdin.read())
 input_type = config['input_type']
 output_type = config['output_type']
+dram_chan = config['dram_chan']
 app_name = config['app_name']
 St = config.get('St', [0]*config['dim'])
 A = config['A']
@@ -634,7 +652,7 @@ PrintLoad(input_type[0])
 PrintLine()
 PrintStore(output_type[0])
 PrintLine()
-PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type)
+PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type, dram_chan)
 PrintLine()
-PrintKernel(St, A, k, app_name, extra_params)
+PrintKernel(St, A, k, app_name, extra_params, dram_chan)
 
