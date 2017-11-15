@@ -314,11 +314,11 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
 
         // align each linearized tile to multiples of BURST_WIDTH
         int64_t tile_pixel_num = TILE_SIZE_DIM_0*input_size_dim_1;
-        int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH+1;
-        int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_I);
-        int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_O);
-        int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
-        int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
+        int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH/4+1;
+        int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_I);
+        int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_O);
+        int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
+        int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
 
         uint16_t* var_input_buf_chan_0 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
         uint16_t* var_input_buf_chan_1 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
@@ -342,25 +342,25 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%BURST_LENGTH;
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/(BURST_LENGTH*4);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%(BURST_LENGTH*4);
                         int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_I+c*BURST_LENGTH+burst_residue;
+                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_I+c*BURST_LENGTH*4+burst_residue;
                         int64_t original_offset = (q*var_input_stride_1+p)*CHANNEL_NUM_I+c;
-                        switch(tiled_offset/(tile_num_dim_0*tile_size_linearized_i/4))
+                        switch(tiled_offset%4)
                         {
                             case 0:
-                                var_input_buf_chan_0[tiled_offset%(tile_num_dim_0*tile_size_linearized_i/4)] = var_input[original_offset];
+                                var_input_buf_chan_0[tiled_offset/4] = var_input[original_offset];
                                 break;
                             case 1:
-                                var_input_buf_chan_1[tiled_offset%(tile_num_dim_0*tile_size_linearized_i/4)] = var_input[original_offset];
+                                var_input_buf_chan_1[tiled_offset/4] = var_input[original_offset];
                                 break;
                             case 2:
-                                var_input_buf_chan_2[tiled_offset%(tile_num_dim_0*tile_size_linearized_i/4)] = var_input[original_offset];
+                                var_input_buf_chan_2[tiled_offset/4] = var_input[original_offset];
                                 break;
                             case 3:
-                                var_input_buf_chan_3[tiled_offset%(tile_num_dim_0*tile_size_linearized_i/4)] = var_input[original_offset];
+                                var_input_buf_chan_3[tiled_offset/4] = var_input[original_offset];
                                 break;
                         }
                     }
@@ -573,10 +573,9 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         printf("HOST: output_size_dim_0 = %d, output_size_dim_1 = %d\n", output_size_dim_0, output_size_dim_1);
         printf("HOST: var_output_min_0 = %d, var_output_min_1 = %d\n", var_output_min_0, var_output_min_1);
 
-        int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I);
-        int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O);
+        int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I)/4;
+        int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O)/4;
         int32_t total_burst_num = tile_num_dim_0*tile_burst_num;
-        printf("HOST: tile_burst_num = %d, total_burst_num = %d\n", tile_burst_num, total_burst_num);
 
         int kernel_arg = 0;
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_0_cl);
@@ -679,26 +678,26 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%BURST_LENGTH;
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/(BURST_LENGTH*4);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%(BURST_LENGTH*4);
                         int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_O+c*BURST_LENGTH+burst_residue;
+                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_O+c*BURST_LENGTH*4+burst_residue;
                         int64_t original_offset = (q*var_output_stride_1+p)*CHANNEL_NUM_O+c;
                         //printf("p=%d, q=%d, i=%d, j=%d, tiled_offset = %d, original_offset = %d, var_output_buf[tiled_offset] = %d\n",p,q,i,j,tiled_offset, original_offset, var_output_buf[tiled_offset]);
-                        switch(tiled_offset/(tile_num_dim_0*tile_size_linearized_o/4))
+                        switch(tiled_offset%4)
                         {
                             case 0:
-                                var_output[original_offset] = var_output_buf_chan_0[tiled_offset%(tile_num_dim_0*tile_size_linearized_o/4)];
+                                var_output[original_offset] = var_output_buf_chan_0[tiled_offset/4];
                                 break;
                             case 1:
-                                var_output[original_offset] = var_output_buf_chan_1[tiled_offset%(tile_num_dim_0*tile_size_linearized_o/4)];
+                                var_output[original_offset] = var_output_buf_chan_1[tiled_offset/4];
                                 break;
                             case 2:
-                                var_output[original_offset] = var_output_buf_chan_2[tiled_offset%(tile_num_dim_0*tile_size_linearized_o/4)];
+                                var_output[original_offset] = var_output_buf_chan_2[tiled_offset/4];
                                 break;
                             case 3:
-                                var_output[original_offset] = var_output_buf_chan_3[tiled_offset%(tile_num_dim_0*tile_size_linearized_o/4)];
+                                var_output[original_offset] = var_output_buf_chan_3[tiled_offset/4];
                                 break;
                         }
                     }
