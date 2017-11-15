@@ -1229,7 +1229,7 @@ burst:
         if(compute_flag)
         {
             burst_index_compute += 1;
-            input_index_base  += BURST_LENGTH*2/UNROLL_FACTOR;
+            input_index_base  += BURST_LENGTH*4/UNROLL_FACTOR;
             if(burst_index_compute == tile_burst_num)
             {
                 burst_index_compute = 0;
