@@ -18,10 +18,11 @@ HOST_ARGS ?= 7994 1000
 HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH)
 
 SRC ?= src
-OBJ ?= obj
-BIN ?= bin
-BIT ?= bit
-RPT ?= rpt
+OBJ ?= obj/$(word 2,$(subst :, ,$(XDEVICE)))
+BIN ?= bin/$(word 2,$(subst :, ,$(XDEVICE)))
+BIT ?= bit/$(word 2,$(subst :, ,$(XDEVICE)))
+RPT ?= rpt/$(word 2,$(subst :, ,$(XDEVICE)))
+TMP ?= tmp/$(word 2,$(subst :, ,$(XDEVICE)))
 
 AWS_AFI_DIR ?= afis
 AWS_AFI_LOG ?= logs
@@ -47,7 +48,7 @@ HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DTILE_SIZE_DIM_1=$(TILE_SIZ
 
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
-CLCXX_OPT += -s -g
+CLCXX_OPT += -s -g --temp_dir $(TMP)
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1) -DBURST_LENGTH=$(BURST_LENGTH) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 CLCXX_OPT += --max_memory_ports $(APP)_kernel
 CLCXX_OPT += --xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM0.core.OCL_REGION_0.M00_AXI
@@ -125,12 +126,12 @@ $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SRC)/$(KERNEL_SRCS) $(SRC)/$(APP)_params.h
 	@mkdir -p $(OBJ)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -c -o $@ $<
 	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@cp _xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/vivado_hls.log $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@cp _xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/*.rpt $(RPT)/$(HW_XCLBIN:.xclbin=)
+	@cp $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/vivado_hls.log $(RPT)/$(HW_XCLBIN:.xclbin=)
+	@cp $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/*.rpt $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@rm -rf $$(ls -d .Xil/* 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 
 $(BIN)/emconfig.json:
 	@mkdir -p $(BIN)
-	cd $(BIN);$(WITH_SDACCEL) emconfigutil --platform $(XDEVICE) $(DEVICE_REPO_OPT) --od .
+	$(WITH_SDACCEL) emconfigutil --platform $(XDEVICE) $(DEVICE_REPO_OPT) --od $(BIN)
 
