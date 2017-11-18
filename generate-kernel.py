@@ -159,10 +159,6 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
             else:
                 dup = ''
             PrintLine('%s %s%s[UNROLL_FACTOR][%d],' % (param['type'], param_name, dup, param['length']))
-    PrintLine('input_type FF[CHANNEL_NUM_I][%d],' % len(buf['FFs']))
-    for fifo_length, fifo_list in buf['FIFOs'].items():
-        PrintLine('input_type FIFO_%d[CHANNEL_NUM_I][%d][%d],' % (fifo_length/k, len(fifo_list), fifo_length/k))
-    PrintLine('int32_t FIFO_ptrs[%d],' % len(buf['FIFOs']))
     for i in range(0, len(St)):
         PrintLine('int32_t %s_base[UNROLL_FACTOR],' % coords_in_tile[i])
     for i in range(0, len(St)-1):
@@ -171,6 +167,19 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     indent -= 1
     PrintLine('{')
     indent += 1
+
+    # array declaration
+    PrintLine('static input_type FF[CHANNEL_NUM_I][%d];' % len(buf['FFs']))
+    for fifo_length, fifo_list in buf['FIFOs'].items():
+        PrintLine('static input_type FIFO_%d[CHANNEL_NUM_I][%d][%d];' % (fifo_length/k, len(fifo_list), fifo_length/k))
+    PrintLine('static int32_t FIFO_ptrs[%d] = {0};' % len(buf['FIFOs']))
+    PrintLine('#pragma HLS array_partition variable=FF complete dim=0', 0)
+    for fifo_length in buf['FIFOs'].keys():
+        PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=1' % (fifo_length/k), 0)
+        PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=2' % (fifo_length/k), 0)
+    PrintLine('#pragma HLS array_partition variable=FIFO_ptrs complete', 0)
+    PrintLine()
+
     PrintLine('if(compute_flag)')
     PrintLine('{')
     indent += 1
@@ -372,9 +381,6 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('input_type  input_1[CHANNEL_NUM_I][BURST_LENGTH*%d];' % dram_chan)
     PrintLine('output_type output_0[CHANNEL_NUM_O][BURST_LENGTH*%d];' % dram_chan)
     PrintLine('output_type output_1[CHANNEL_NUM_O][BURST_LENGTH*%d];' % dram_chan)
-    PrintLine('input_type FF[CHANNEL_NUM_I][%d];' % len(buf['FFs']))
-    for fifo_length, fifo_list in buf['FIFOs'].items():
-        PrintLine('input_type FIFO_%d[CHANNEL_NUM_I][%d][%d];' % (fifo_length/k, len(fifo_list), fifo_length/k) )
     PrintLine('#pragma HLS array_partition variable=input_0 complete dim=1', 0)
     PrintLine('#pragma HLS array_partition variable=input_0 cyclic factor=%d dim=2' % input_partition, 0)
     PrintLine('#pragma HLS array_partition variable=input_1 complete dim=1', 0)
@@ -383,10 +389,6 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('#pragma HLS array_partition variable=output_0 cyclic factor=%d dim=2' % output_partition, 0)
     PrintLine('#pragma HLS array_partition variable=output_1 complete dim=1', 0)
     PrintLine('#pragma HLS array_partition variable=output_1 cyclic factor=%d dim=2' % output_partition, 0)
-    PrintLine('#pragma HLS array_partition variable=FF complete dim=0', 0)
-    for fifo_length in buf['FIFOs'].keys():
-        PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=1' % (fifo_length/k), 0)
-        PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=2' % (fifo_length/k), 0)
     PrintLine()
 
     for i in range(0, len(St)-1):
@@ -397,7 +399,6 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('int32_t burst_index_load = 0;')
     PrintLine('int32_t burst_index_compute = 0;')
     PrintLine('int32_t burst_index_store = 0;')
-    PrintLine('int32_t FIFO_ptrs[%d] = {0};' % len(buf['FIFOs']))
     PrintLine('int32_t input_index_base = 0;')
     PrintLine()
 
@@ -407,7 +408,6 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
         PrintLine('int32_t %s_base = 0;' % coords_in_orig[i])
     PrintLine()
 
-    PrintLine('#pragma HLS array_partition variable=FIFO_ptrs complete', 0)
     for i in range(0, len(St)):
         PrintLine('#pragma HLS array_partition variable=%s_base complete' % coords_in_tile[i], 0)
     PrintLine()
@@ -473,7 +473,7 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('{');indent += 1
     for i in range(0, dram_chan):
         PrintLine('load<%d, %d>(load_flag, input_0, var_input_chan_%d);' % (i, dram_chan, i))
-    PrintLine('compute(compute_flag, output_1, input_1, '+extra_params_str+'FF, '+''.join([('FIFO_%d, ' % (fifo_length/k)) for fifo_length in buf['FIFOs'].keys()])+'FIFO_ptrs, '+coords_str+'input_index_base);')
+    PrintLine('compute(compute_flag, output_1, input_1, '+coords_str+'input_index_base);')
     for i in range(0, dram_chan):
         PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_0);' % (i, dram_chan, i))
     indent -= 1;PrintLine('}')
@@ -481,7 +481,7 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('{');indent += 1
     for i in range(0, dram_chan):
         PrintLine('load<%d, %d>(load_flag, input_1, var_input_chan_%d);' % (i, dram_chan, i))
-    PrintLine('compute(compute_flag, output_0, input_0, '+extra_params_str+'FF, '+''.join([('FIFO_%d, ' % (fifo_length/k)) for fifo_length in buf['FIFOs'].keys()])+'FIFO_ptrs, '+coords_str+'input_index_base);')
+    PrintLine('compute(compute_flag, output_0, input_0, '+coords_str+'input_index_base);')
     for i in range(0, dram_chan):
         PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_1);' % (i, dram_chan, i))
     indent -= 1;PrintLine('}')
