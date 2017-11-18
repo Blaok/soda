@@ -353,28 +353,28 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     indent += 1
 
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS INTERFACE m_axi port=var_output_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
+        PrintLine('#pragma HLS interface m_axi port=var_output_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS INTERFACE m_axi port=var_input_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
+        PrintLine('#pragma HLS interface m_axi port=var_input_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
     if extra_params:
         for param_name, param in extra_params.items():
-            PrintLine('#pragma HLS INTERFACE m_axi port=var_%s offset=slave depth=%d bundle=gmem3 latency=120' % (param_name, param['length']), 0)
+            PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem3 latency=120' % (param_name, param['length']), 0)
     PrintLine()
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS INTERFACE s_axilite port=var_output_chan_%d bundle=control' % i, 0)
+        PrintLine('#pragma HLS interface s_axilite port=var_output_chan_%d bundle=control' % i, 0)
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS INTERFACE s_axilite port=var_input_chan_%d bundle=control' % i, 0)
+        PrintLine('#pragma HLS interface s_axilite port=var_input_chan_%d bundle=control' % i, 0)
     if extra_params:
         for param_name in extra_params.keys():
-            PrintLine('#pragma HLS INTERFACE s_axilite port=var_%s bundle=control' % param_name, 0)
+            PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param_name, 0)
     for i in range(0, len(St)-1):
-        PrintLine('#pragma HLS INTERFACE s_axilite port=tile_num_dim_%d bundle=control' % i, 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=input_size_dim_%d bundle=control' % (len(St)-1), 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=tile_burst_num bundle=control', 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=extra_space_i_coalesed bundle=control', 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=extra_space_o_coalesed bundle=control', 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=total_burst_num bundle=control', 0)
-    PrintLine('#pragma HLS INTERFACE s_axilite port=return bundle=control', 0)
+        PrintLine('#pragma HLS interface s_axilite port=tile_num_dim_%d bundle=control' % i, 0)
+    PrintLine('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % (len(St)-1), 0)
+    PrintLine('#pragma HLS interface s_axilite port=tile_burst_num bundle=control', 0)
+    PrintLine('#pragma HLS interface s_axilite port=extra_space_i_coalesed bundle=control', 0)
+    PrintLine('#pragma HLS interface s_axilite port=extra_space_o_coalesed bundle=control', 0)
+    PrintLine('#pragma HLS interface s_axilite port=total_burst_num bundle=control', 0)
+    PrintLine('#pragma HLS interface s_axilite port=return bundle=control', 0)
     PrintLine()
 
     PrintLine('input_type  input_0[CHANNEL_NUM_I][BURST_LENGTH*%d];' % dram_chan)
