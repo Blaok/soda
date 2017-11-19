@@ -358,7 +358,7 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
         PrintLine('#pragma HLS interface m_axi port=var_input_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
     if extra_params:
         for param_name, param in extra_params.items():
-            PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem3 latency=120' % (param_name, param['length']), 0)
+            PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem0 latency=120' % (param_name, param['length']), 0)
     PrintLine()
     for i in range(0, dram_chan):
         PrintLine('#pragma HLS interface s_axilite port=var_output_chan_%d bundle=control' % i, 0)
