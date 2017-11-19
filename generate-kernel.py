@@ -5,6 +5,8 @@ import math
 import operator
 import os
 import sys
+from fractions import Fraction
+from functools import reduce
 
 # input
 #input_type = 'uint16_t'
@@ -623,6 +625,38 @@ def PrintGuard(var, val):
     PrintLine('#error %s != %d' % (var, val))
     PrintLine('#endif//%s != %d' % (var, val))
 
+# for generating iterative
+def GetA(A,  num_iter):
+    if num_iter < 1:
+        return None
+    if num_iter == 1:
+        return A
+    A1 = GetA(A, num_iter-1)
+    A2 = {}
+    for a1 in A1.values():
+        for a in A.values():
+            a2 = [o1+o2 for o1, o2 in zip(a[0], a1[0])]
+            A2[str(a2)] = (a2, A2.get(str(a2), (a2, 0))[1]+a[1]*a1[1])
+    return A2
+
+def gcd(*numbers):
+    from fractions import gcd
+    return reduce(gcd, numbers)
+
+def lcm(*numbers):
+    def lcm(a, b):
+        return (a * b) // gcd(a, b)
+    return reduce(lcm, numbers, 1)
+
+def GetAdderTree(variables, count):
+    global compute_content
+    if len(variables)>1:
+        r1 = GetAdderTree(variables[0:int(len(variables)/2)], count)
+        r2 = GetAdderTree(variables[int(len(variables)/2):], r1[1])
+        compute_content += ['float tmp_adder_%d = %s+%s;' % (r2[1], r1[0], r2[0])]
+        return ('tmp_adder_%d' % r2[1], r2[1]+1)
+    return (variables[0], count)
+
 type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
 config = json.loads(sys.stdin.read())
 input_type = config['input_type']
@@ -637,7 +671,23 @@ pixel_width_i = type_width[input_type[0]]
 pixel_width_o = type_width[output_type[0]]
 input_partition = burst_width/pixel_width_i*dram_chan/2 if burst_width/pixel_width_i*dram_chan/2 > k/2 else k/2
 output_partition = burst_width/pixel_width_o*dram_chan/2 if burst_width/pixel_width_o*dram_chan/2 > k/2 else k/2
-compute_content = config['compute_content']
+
+# generate compute content if it is not present in the config but iter and coeff are
+compute_content = []
+if 'compute_content' in config:
+    compute_content = config['compute_content']
+elif ('iter' in config or 'ITER' in os.environ) and 'coeff' in config:
+    num_iter = int(os.environ.get('ITER', config['iter']))
+    coeff = [Fraction(x) for x in config['coeff']]
+    if len(A) != len(coeff):
+        sys.stderr.write('A and coeff must have the same length\n')
+        sys.exit(1)
+    A = {str(a):(a, c) for a, c in zip(A, coeff)}
+    A = (GetA(A, num_iter))
+    final_var = GetAdderTree(['input_%s*%ff' % ('_'.join([str(x) for x in a[0]]), (1.*a[1].numerator)/a[1].denominator) for a in A.values()], 0)
+    compute_content += ['output_type output_point = %s;' % (final_var[0],), 'output[0][output_index_offset] = output_point;' ,'']
+    A = [a[0] for a in A.values()]
+
 extra_params = config.get('extra_params', None)
 i = 0
 while (('TILE_SIZE_DIM_%d' % i) in os.environ):
