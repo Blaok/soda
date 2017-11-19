@@ -60,7 +60,7 @@ CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
 
 csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN)
-	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	ulimit -s unlimited;XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
 	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
