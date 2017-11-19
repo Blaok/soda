@@ -477,7 +477,7 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('{');indent += 1
     for i in range(0, dram_chan):
         PrintLine('load<%d, %d>(load_flag, input_0, var_input_chan_%d);' % (i, dram_chan, i))
-    PrintLine('compute(compute_flag, output_1, input_1, '+coords_str+'input_index_base);')
+    PrintLine('compute(compute_flag, output_1, input_1, '+extra_params_str+coords_str+'input_index_base);')
     for i in range(0, dram_chan):
         PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_0);' % (i, dram_chan, i))
     indent -= 1;PrintLine('}')
@@ -485,7 +485,7 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('{');indent += 1
     for i in range(0, dram_chan):
         PrintLine('load<%d, %d>(load_flag, input_1, var_input_chan_%d);' % (i, dram_chan, i))
-    PrintLine('compute(compute_flag, output_0, input_0, '+coords_str+'input_index_base);')
+    PrintLine('compute(compute_flag, output_0, input_0, '+extra_params_str+coords_str+'input_index_base);')
     for i in range(0, dram_chan):
         PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_1);' % (i, dram_chan, i))
     indent -= 1;PrintLine('}')
