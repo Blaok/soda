@@ -573,7 +573,7 @@ def PrintLoad(input_type):
     PrintLine('for(int i = 0; i < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I); ++i)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS pipeline II=1', 0)
-    PrintLine('ap_uint<BURST_WIDTH> tmp(from[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i]);')
+    PrintLine('ap_uint<BURST_WIDTH> tmp(from[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I))+i]);')
     PrintLine('load_coalesced:', 0)
     PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
     PrintLine('{');indent += 1
