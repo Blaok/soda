@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls check-afi-status check-aws-bucket mktemp
+.PHONY: csim cosim hw hls exe bitstream check-afi-status check-aws-bucket mktemp
 
 APP ?= blur
 SDA_VER := 2017.1
@@ -66,14 +66,20 @@ cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
 	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 ifeq ($(XDEVICE),"xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
+bitstream: $(BIT)/$(HW_XCLBIN)
+
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
 	$(WITH_SDACCEL) $^ $(HOST_ARGS)
 else
+bitstream: $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
+
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
 	$(WITH_SDACCEL) $^ $(HOST_ARGS)
 endif
 
 hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
+
+exe: $(BIN)/$(HOST_BIN)
 
 check-afi-status:
 	@echo -n 'AFI state: ';aws ec2 describe-fpga-images --fpga-image-ids $$(jq -r '.FpgaImageId' $(BIT)/$(HW_XCLBIN:.xclbin=.afi))|jq '.FpgaImages[0].State.Code' -r
