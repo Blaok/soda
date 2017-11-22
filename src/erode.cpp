@@ -13,8 +13,8 @@
 #include <sys/stat.h>
 #include <CL/opencl.h>
 
-#include "edge.h"
-#include "edge_params.h"
+#include "erode.h"
+#include "erode_params.h"
 
 int load_file_to_memory(const char *filename, char **result)
 { 
@@ -120,7 +120,7 @@ int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
     return halide_error_code_access_out_of_bounds;
 }
 
-static int edge_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+static int erode_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
     uint8_t *var_input = (uint8_t *)(var_input_buffer->host);
     (void)var_input;
     const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
@@ -501,7 +501,7 @@ static int edge_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
             exit(EXIT_FAILURE);
         }
 
-        kernel = clCreateKernel(program, "edge_kernel", &err);
+        kernel = clCreateKernel(program, "erode_kernel", &err);
         if (!kernel || err != CL_SUCCESS) {
             printf("FATAL: Failed to create compute kernel %d\n", err);
             exit(EXIT_FAILURE);
@@ -716,7 +716,7 @@ static int edge_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
     return 0;
 }
 
-int edge(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+int erode(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
     uint8_t *var_input = (uint8_t *)(var_input_buffer->host);
     (void)var_input;
     const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
@@ -777,7 +777,7 @@ int edge(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xc
     (void)var_output_stride_3;
     int32_t var_output_elem_size = var_output_buffer->elem_size;
     (void)var_output_elem_size;
-    int32_t assign_81 = edge_wrapped(var_input_buffer, var_output_buffer, xclbin);
+    int32_t assign_81 = erode_wrapped(var_input_buffer, var_output_buffer, xclbin);
     bool assign_82 = assign_81 == 0;
     if (!assign_82)     {
         return assign_81;

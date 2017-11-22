@@ -23,10 +23,11 @@
 #define PIXEL_WIDTH_O 32        // in bits
 #define CHANNEL_NUM_I 1
 #define CHANNEL_NUM_O 1
-#define STENCIL_DIM_0 9         // in pixels
-#define STENCIL_DIM_1 9         // in pixels
-#define STENCIL_DIM_2 9         // in pixels
-#define STENCIL_DISTANCE (TILE_SIZE_DIM_0*TILE_SIZE_DIM_1*8+TILE_SIZE_DIM_0*4+4)
+#define STENCIL_DIM_0 3         // in pixels
+#define STENCIL_DIM_1 3         // in pixels
+#define STENCIL_DIM_2 3         // in pixels
+//#define STENCIL_DISTANCE (TILE_SIZE_DIM_0*TILE_SIZE_DIM_1*8+TILE_SIZE_DIM_0*4+4)
+#define STENCIL_DISTANCE (TILE_SIZE_DIM_0*TILE_SIZE_DIM_1*2)
 
 // determined by params above
 #define BURST_EPOCH_I (BURST_LENGTH*PIXEL_WIDTH_I/BUSRT_WIDTH)

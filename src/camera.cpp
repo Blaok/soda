@@ -24,7 +24,7 @@ inline float float_from_bits(uint32_t bits)
     {
         uint32_t as_uint;
         float as_float;
-        
+
     } u;
     u.as_uint = bits;
     return u.as_float;
@@ -33,14 +33,14 @@ inline float float_from_bits(uint32_t bits)
 inline float pow_f32(float x, float y) {return powf(x, y);}
 
 int load_file_to_memory(const char *filename, char **result)
-{ 
+{
     uint32_t size = 0;
     FILE *f = fopen(filename, "rb");
     if (f == NULL)
     {
         *result = NULL;
         return -1;
-    } 
+    }
     fseek(f, 0, SEEK_END);
     size = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -49,7 +49,7 @@ int load_file_to_memory(const char *filename, char **result)
     {
         free(*result);
         return -2;
-    } 
+    }
     fclose(f);
     (*result)[size] = 0;
     return size;
@@ -394,14 +394,20 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
 
         // align each linearized tile to multiples of BURST_WIDTH
         int64_t tile_pixel_num = TILE_SIZE_DIM_0*input_size_dim_1;
-        int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH+1;
-        int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_I);
-        int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_O);
-        int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
-        int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
+        int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH/4+1;
+        int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_I);
+        int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_O);
+        int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
+        int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
 
-        uint16_t* var_input_buf = new uint16_t[tile_num_dim_0*tile_size_linearized_i];
-        uint8_t* var_output_buf = new uint8_t[tile_num_dim_0*tile_size_linearized_o];
+        uint16_t* var_input_buf_chan_0 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
+        uint16_t* var_input_buf_chan_1 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
+        uint16_t* var_input_buf_chan_2 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
+        uint16_t* var_input_buf_chan_3 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
+        uint8_t* var_output_buf_chan_0 = new uint8_t[tile_num_dim_0*tile_size_linearized_o/4];
+        uint8_t* var_output_buf_chan_1 = new uint8_t[tile_num_dim_0*tile_size_linearized_o/4];
+        uint8_t* var_output_buf_chan_2 = new uint8_t[tile_num_dim_0*tile_size_linearized_o/4];
+        uint8_t* var_output_buf_chan_3 = new uint8_t[tile_num_dim_0*tile_size_linearized_o/4];
 
         // tiling
         for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
@@ -416,13 +422,28 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%BURST_LENGTH;
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/(BURST_LENGTH*4);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%(BURST_LENGTH*4);
                         int32_t p = tile_index_dim_0*((TILE_SIZE_DIM_0)-(STENCIL_DIM_0)+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_I+c*BURST_LENGTH+burst_residue;
-                        int64_t original_offset = q*var_input_stride_1+p*var_input_stride_0;
-                        var_input_buf[tiled_offset] = var_input[original_offset];
+                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_I+c*BURST_LENGTH*4+burst_residue;
+                        int64_t original_offset = (q*var_input_stride_1+p*var_input_stride_0)*CHANNEL_NUM_I+c;
+                        if(tile_num_dim_0*tile_size_linearized_i/4<=tiled_offset/4)
+                        switch(tiled_offset%4)
+                        {
+                            case 0:
+                                var_input_buf_chan_0[tiled_offset/4] = var_input[original_offset];
+                                break;
+                            case 1:
+                                var_input_buf_chan_1[tiled_offset/4] = var_input[original_offset];
+                                break;
+                            case 2:
+                                var_input_buf_chan_2[tiled_offset/4] = var_input[original_offset];
+                                break;
+                            case 3:
+                                var_input_buf_chan_3[tiled_offset/4] = var_input[original_offset];
+                                break;
+                        }
                     }
                 }
             }
@@ -518,19 +539,25 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
         cl_platform_id platforms[16];       // platform id
         cl_platform_id platform_id;         // platform id
         cl_uint platform_count;
-        cl_device_id device_id;             // compute device id 
+        cl_device_id device_id;             // compute device id
         cl_context context;                 // compute context
         cl_command_queue commands;          // compute command queue
         cl_program program;                 // compute program
         cl_kernel kernel;                   // compute kernel
-       
+
         char cl_platform_vendor[1001];
-       
-        cl_mem var_input_cl;                   // device memory used for the input array
-        cl_mem var_output_cl;               // device memory used for the output array
+
+        cl_mem var_input_chan_0_cl;                   // device memory used for the input array
+        cl_mem var_input_chan_1_cl;                   // device memory used for the input array
+        cl_mem var_input_chan_2_cl;                   // device memory used for the input array
+        cl_mem var_input_chan_3_cl;                   // device memory used for the input array
+        cl_mem var_output_chan_0_cl;               // device memory used for the output array
+        cl_mem var_output_chan_1_cl;               // device memory used for the output array
+        cl_mem var_output_chan_2_cl;               // device memory used for the output array
+        cl_mem var_output_chan_3_cl;               // device memory used for the output array
         cl_mem var_matrix_cl;                   // device memory used for the input array
         cl_mem var_curve_cl;               // device memory used for the output array
-   
+
         // Get all platforms and then select Xilinx platform
         err = clGetPlatformIDs(16, platforms, &platform_count);
         if (err != CL_SUCCESS)
@@ -560,10 +587,10 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
             printf("ERROR: Platform Xilinx not found. Exit.\n");
             exit(EXIT_FAILURE);
         }
-      
+
         // Connect to a compute device
         // find all devices and then select the target device
-        cl_device_id devices[16];  // compute device id 
+        cl_device_id devices[16];  // compute device id
         cl_uint device_count;
         unsigned int device_found = 0;
         char cl_device_name[1001];
@@ -575,7 +602,7 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
             exit(EXIT_FAILURE);
         }
 
-        //iterate all devices to select the target device. 
+        //iterate all devices to select the target device.
         for (unsigned i=0; i<device_count; i++) {
             err = clGetDeviceInfo(devices[i], CL_DEVICE_NAME, 1024, cl_device_name, 0);
             if (err != CL_SUCCESS) {
@@ -590,7 +617,7 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
                 printf("INFO: Selected %s as the target device\n", cl_device_name);
             }
         }
-        
+
         if (!device_found) {
             printf("ERROR: Target device %s not found. Exit.\n", target_device_name);
             exit(EXIT_FAILURE);
@@ -605,8 +632,8 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
                 printf("Test failed\n");
                 exit(EXIT_FAILURE);
             }
-      
-        // Create a compute context 
+
+        // Create a compute context
         //
         context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
         if (!context)
@@ -631,7 +658,7 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
 
         // Create Program Objects
         //
-      
+
         // Load binary from disk
         unsigned char *kernelbinary;
         printf("INFO: Loading %s\n", xclbin);
@@ -676,27 +703,65 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
                 exit(EXIT_FAILURE);
             }
 
+        cl_mem_ext_ptr_t input_ext_chan_0, output_ext_chan_0;
+        cl_mem_ext_ptr_t input_ext_chan_1, output_ext_chan_1;
+        cl_mem_ext_ptr_t input_ext_chan_2, output_ext_chan_2;
+        cl_mem_ext_ptr_t input_ext_chan_3, output_ext_chan_3;
+        output_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+        output_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
+        output_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
+        output_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
+        input_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+        input_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
+        input_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
+        input_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
+        input_ext_chan_0.obj = 0;
+        input_ext_chan_0.param = 0;
+        input_ext_chan_1.obj = 0;
+        input_ext_chan_1.param = 0;
+        input_ext_chan_2.obj = 0;
+        input_ext_chan_2.param = 0;
+        input_ext_chan_3.obj = 0;
+        input_ext_chan_3.param = 0;
+        output_ext_chan_0.obj = 0;
+        output_ext_chan_0.param = 0;
+        output_ext_chan_1.obj = 0;
+        output_ext_chan_1.param = 0;
+        output_ext_chan_2.obj = 0;
+        output_ext_chan_2.param = 0;
+        output_ext_chan_3.obj = 0;
+        output_ext_chan_3.param = 0;
+
         // Create the input and output arrays in device memory for our calculation
         //
         var_matrix_cl    = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(int16_t) * 12, NULL, NULL);
         var_curve_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint8_t) * 1024, NULL, NULL);
-        var_input_cl     = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i), NULL, NULL);
-        var_output_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(uint8_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o), NULL, NULL);
-        if (!var_input_cl || !var_output_cl)
+        var_input_chan_0_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_0, NULL);
+        var_input_chan_1_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_1, NULL);
+        var_input_chan_2_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_2, NULL);
+        var_input_chan_3_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_3, NULL);
+        var_output_chan_0_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint8_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_0, NULL);
+        var_output_chan_1_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint8_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_1, NULL);
+        var_output_chan_2_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint8_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_2, NULL);
+        var_output_chan_3_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint8_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_3, NULL);
+        if (!var_input_chan_0_cl || !var_output_chan_0_cl || !var_input_chan_1_cl || !var_output_chan_1_cl || !var_input_chan_2_cl || !var_output_chan_2_cl || !var_input_chan_3_cl || !var_output_chan_3_cl)
         {
             printf("Error: Failed to allocate device memory!\n");
             printf("Test failed\n");
             exit(EXIT_FAILURE);
         }
-        
-        // Write our data set into the input array in device memory 
+
+        // Write our data set into the input array in device memory
         //
         timespec write_begin, write_end;
         cl_event writeevent;
         clock_gettime(CLOCK_REALTIME, &write_begin);
         err = clEnqueueWriteBuffer(commands, var_matrix_cl, CL_FALSE, 0, sizeof(int16_t) * 12, var_matrix, 0, NULL, NULL);
         err = clEnqueueWriteBuffer(commands, var_curve_cl,  CL_FALSE, 0, sizeof(uint8_t) * 1024, var_curve, 0, NULL, NULL);
-        err = clEnqueueWriteBuffer(commands, var_input_cl,  CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i, var_input_buf, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_0_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_0, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_1_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_1, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_2_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_2, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_3_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_3, 0, NULL, &writeevent);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to write to input!\n");
@@ -715,27 +780,34 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
         printf("HOST: output_size_dim_0 = %d, output_size_dim_1 = %d\n", output_size_dim_0, output_size_dim_1);
         printf("HOST: var_output_min_0 = %d, var_output_min_1 = %d\n", var_output_min_0, var_output_min_1);
 
-        int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I);
-        int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O);
+        int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I)/4;
+        int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O)/4;
         int32_t total_burst_num = tile_num_dim_0*tile_burst_num;
 
-        err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &var_output_cl);
-        err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &var_input_cl);
-        err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &var_matrix_cl);
-        err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &var_curve_cl);
-        err |= clSetKernelArg(kernel, 4, sizeof(tile_num_dim_0), &tile_num_dim_0);
-        err |= clSetKernelArg(kernel, 5, sizeof(input_size_dim_1), &input_size_dim_1);
-        err |= clSetKernelArg(kernel, 6, sizeof(tile_burst_num), &tile_burst_num);
-        err |= clSetKernelArg(kernel, 7, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
-        err |= clSetKernelArg(kernel, 8, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
-        err |= clSetKernelArg(kernel, 9, sizeof(total_burst_num), &total_burst_num);
+        int kernel_arg = 0;
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_0_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_1_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_2_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_3_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_0_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_1_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_2_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_3_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_matrix_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_curve_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(tile_num_dim_0), &tile_num_dim_0);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(input_size_dim_1), &input_size_dim_1);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(tile_burst_num), &tile_burst_num);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(total_burst_num), &total_burst_num);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to set kernel arguments\n");
 			printf("ERROR code: %d\n", err);
             exit(EXIT_FAILURE);
         }
-        
+
         cl_event execute;
         if(NULL==getenv("XCL_EMULATION_MODE"))
         {
@@ -772,7 +844,10 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer( commands, var_output_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_o, var_output_buf, 0, NULL, &readevent );  
+        err = clEnqueueReadBuffer(commands, var_output_chan_0_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_0, 0, NULL, &readevent);
+        err = clEnqueueReadBuffer(commands, var_output_chan_1_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_1, 0, NULL, &readevent);
+        err = clEnqueueReadBuffer(commands, var_output_chan_2_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_2, 0, NULL, &readevent);
+        err = clEnqueueReadBuffer(commands, var_output_chan_3_cl, CL_FALSE, 0, sizeof(uint8_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_3, 0, NULL, &readevent);
         if (err != CL_SUCCESS)
         {
             printf("ERROR: Failed to read output %d\n", err);
@@ -797,8 +872,10 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
         //
         clReleaseMemObject(var_matrix_cl);
         clReleaseMemObject(var_curve_cl);
-        clReleaseMemObject(var_input_cl);
-        clReleaseMemObject(var_output_cl);
+        clReleaseMemObject(var_input_chan_0_cl);
+        clReleaseMemObject(var_input_chan_1_cl);
+        clReleaseMemObject(var_output_chan_0_cl);
+        clReleaseMemObject(var_output_chan_1_cl);
         clReleaseProgram(program);
         clReleaseKernel(kernel);
         clReleaseCommandQueue(commands);
@@ -816,23 +893,43 @@ static int camera_wrapped(float var_color_temp, float var_gamma, float var_contr
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%BURST_LENGTH;
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/(BURST_LENGTH*4);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%(BURST_LENGTH*4);
                         int32_t p = tile_index_dim_0*((TILE_SIZE_DIM_0)-(STENCIL_DIM_0)+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = ((tile_index_dim_0*tile_burst_num+burst_index)*BURST_LENGTH)*CHANNEL_NUM_O+c*BURST_LENGTH+burst_residue;
+                        int64_t tiled_offset = ((tile_index_dim_0*tile_burst_num+burst_index)*BURST_LENGTH*4)*CHANNEL_NUM_O+c*BURST_LENGTH*4+burst_residue;
                         int64_t original_offset = q*var_output_stride_1+p*var_output_stride_0+c*var_output_stride_2;
                         if(p<output_size_dim_0 && q<output_size_dim_1)
                         {
-                            var_processed[original_offset] = var_output_buf[tiled_offset];
+                            switch(tiled_offset%4)
+                            {
+                                case 0:
+                                    var_processed[original_offset] = var_output_buf_chan_0[tiled_offset/4];
+                                    break;
+                                case 1:
+                                    var_processed[original_offset] = var_output_buf_chan_1[tiled_offset/4];
+                                    break;
+                                case 2:
+                                    var_processed[original_offset] = var_output_buf_chan_2[tiled_offset/4];
+                                    break;
+                                case 3:
+                                    var_processed[original_offset] = var_output_buf_chan_3[tiled_offset/4];
+                                    break;
+                            }
                         }
                     }
                 }
             }
         }
 
-        delete[] var_output_buf;
-        delete[] var_input_buf;
+        delete[] var_output_buf_chan_0;
+        delete[] var_output_buf_chan_1;
+        delete[] var_output_buf_chan_2;
+        delete[] var_output_buf_chan_3;
+        delete[] var_input_buf_chan_0;
+        delete[] var_input_buf_chan_1;
+        delete[] var_input_buf_chan_2;
+        delete[] var_input_buf_chan_3;
     } // if assign_5
     return 0;
 }
