@@ -171,15 +171,22 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     indent += 1
 
     # array declaration
-    PrintLine('static input_type FF[CHANNEL_NUM_I][%d];' % len(buf['FFs']))
+    if len(buf['FFs'])>0:
+        PrintLine('static input_type FF[CHANNEL_NUM_I][%d];' % len(buf['FFs']))
+
     for fifo_length, fifo_list in buf['FIFOs'].items():
         PrintLine('static input_type FIFO_%d[CHANNEL_NUM_I][%d][%d];' % (fifo_length/k, len(fifo_list), fifo_length/k))
-    PrintLine('static int32_t FIFO_ptrs[%d] = {0};' % len(buf['FIFOs']))
-    PrintLine('#pragma HLS array_partition variable=FF complete dim=0', 0)
+    if len(buf['FIFOs'])>0:
+        PrintLine('static int32_t FIFO_ptrs[%d] = {0};' % len(buf['FIFOs']))
+
+    if len(buf['FFs'])>0:
+        PrintLine('#pragma HLS array_partition variable=FF complete dim=0', 0)
+
     for fifo_length in buf['FIFOs'].keys():
         PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=1' % (fifo_length/k), 0)
         PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=2' % (fifo_length/k), 0)
-    PrintLine('#pragma HLS array_partition variable=FIFO_ptrs complete', 0)
+    if len(buf['FIFOs'])>0:
+        PrintLine('#pragma HLS array_partition variable=FIFO_ptrs complete', 0)
     PrintLine()
 
     PrintLine('if(compute_flag)')
@@ -204,7 +211,8 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     PrintLine('for(int32_t epoch = 0; epoch < BURST_LENGTH*%d/UNROLL_FACTOR; ++epoch)' % dram_chan)
     PrintLine('{')
     indent += 1
-    PrintLine('#pragma HLS dependence variable=FF inter false', 0)
+    if len(buf['FFs'])>0:
+        PrintLine('#pragma HLS dependence variable=FF inter false', 0)
     for fifo_length in buf['FIFOs'].keys():
         PrintLine('#pragma HLS dependence variable=FIFO_%d inter false' % (fifo_length/k), 0)
 #    indent_save = indent
