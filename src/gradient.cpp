@@ -314,14 +314,20 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
 
         // align each linearized tile to multiples of BURST_WIDTH
         int64_t tile_pixel_num = TILE_SIZE_DIM_0*input_size_dim_1;
-        int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH+1;
-        int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_I);
-        int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*CHANNEL_NUM_O);
-        int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
-        int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH-tile_pixel_num : 0);
+        int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH/4+1;
+        int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_I);
+        int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_O);
+        int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
+        int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
 
-        float* var_input_buf = new float[tile_num_dim_0*tile_size_linearized_i];
-        float* var_output_buf = new float[tile_num_dim_0*tile_size_linearized_o];
+        float* var_input_buf_chan_0 = new float[tile_num_dim_0*tile_size_linearized_i/4];
+        float* var_input_buf_chan_1 = new float[tile_num_dim_0*tile_size_linearized_i/4];
+        float* var_input_buf_chan_2 = new float[tile_num_dim_0*tile_size_linearized_i/4];
+        float* var_input_buf_chan_3 = new float[tile_num_dim_0*tile_size_linearized_i/4];
+        float* var_output_buf_chan_0 = new float[tile_num_dim_0*tile_size_linearized_o/4];
+        float* var_output_buf_chan_1 = new float[tile_num_dim_0*tile_size_linearized_o/4];
+        float* var_output_buf_chan_2 = new float[tile_num_dim_0*tile_size_linearized_o/4];
+        float* var_output_buf_chan_3 = new float[tile_num_dim_0*tile_size_linearized_o/4];
 
         // tiling
         for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
@@ -336,13 +342,27 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%BURST_LENGTH;
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/(BURST_LENGTH*4);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%(BURST_LENGTH*4);
                         int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_I+c*BURST_LENGTH+burst_residue;
+                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_I+c*BURST_LENGTH*4+burst_residue;
                         int64_t original_offset = (q*var_input_stride_1+p)*CHANNEL_NUM_I+c;
-                        var_input_buf[tiled_offset] = var_input[original_offset];
+                        switch(tiled_offset%4)
+                        {
+                            case 0:
+                                var_input_buf_chan_0[tiled_offset/4] = var_input[original_offset];
+                                break;
+                            case 1:
+                                var_input_buf_chan_1[tiled_offset/4] = var_input[original_offset];
+                                break;
+                            case 2:
+                                var_input_buf_chan_2[tiled_offset/4] = var_input[original_offset];
+                                break;
+                            case 3:
+                                var_input_buf_chan_3[tiled_offset/4] = var_input[original_offset];
+                                break;
+                        }
                     }
                 }
             }
@@ -368,8 +388,14 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
        
         char cl_platform_vendor[1001];
        
-        cl_mem var_input_cl;                   // device memory used for the input array
-        cl_mem var_output_cl;               // device memory used for the output array
+        cl_mem var_input_chan_0_cl;                   // device memory used for the input array
+        cl_mem var_input_chan_1_cl;                   // device memory used for the input array
+        cl_mem var_input_chan_2_cl;                   // device memory used for the input array
+        cl_mem var_input_chan_3_cl;                   // device memory used for the input array
+        cl_mem var_output_chan_0_cl;               // device memory used for the output array
+        cl_mem var_output_chan_1_cl;               // device memory used for the output array
+        cl_mem var_output_chan_2_cl;               // device memory used for the output array
+        cl_mem var_output_chan_3_cl;               // device memory used for the output array
    
         err = clGetPlatformIDs(16, platforms, &platform_count);
         if (err != CL_SUCCESS)
@@ -481,9 +507,44 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
             exit(EXIT_FAILURE);
         }
 
-        var_input_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY, sizeof(float) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i), NULL, NULL);
-        var_output_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o), NULL, NULL);
-        if (!var_input_cl || !var_output_cl)
+        cl_mem_ext_ptr_t input_ext_chan_0, output_ext_chan_0;
+        cl_mem_ext_ptr_t input_ext_chan_1, output_ext_chan_1;
+        cl_mem_ext_ptr_t input_ext_chan_2, output_ext_chan_2;
+        cl_mem_ext_ptr_t input_ext_chan_3, output_ext_chan_3;
+        output_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+        output_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
+        output_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
+        output_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
+        input_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+        input_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
+        input_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
+        input_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
+        input_ext_chan_0.obj = 0;
+        input_ext_chan_0.param = 0;
+        input_ext_chan_1.obj = 0;
+        input_ext_chan_1.param = 0;
+        input_ext_chan_2.obj = 0;
+        input_ext_chan_2.param = 0;
+        input_ext_chan_3.obj = 0;
+        input_ext_chan_3.param = 0;
+        output_ext_chan_0.obj = 0;
+        output_ext_chan_0.param = 0;
+        output_ext_chan_1.obj = 0;
+        output_ext_chan_1.param = 0;
+        output_ext_chan_2.obj = 0;
+        output_ext_chan_2.param = 0;
+        output_ext_chan_3.obj = 0;
+        output_ext_chan_3.param = 0;
+
+        var_input_chan_0_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_0, NULL);
+        var_input_chan_1_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_1, NULL);
+        var_input_chan_2_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_2, NULL);
+        var_input_chan_3_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_3, NULL);
+        var_output_chan_0_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_0, NULL);
+        var_output_chan_1_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_1, NULL);
+        var_output_chan_2_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_2, NULL);
+        var_output_chan_3_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(float) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_3, NULL);
+        if (!var_input_chan_0_cl || !var_output_chan_0_cl || !var_input_chan_1_cl || !var_output_chan_1_cl || !var_input_chan_2_cl || !var_output_chan_2_cl || !var_input_chan_3_cl || !var_output_chan_3_cl)
         {
             printf("FATAL: Failed to allocate device memory\n");
             exit(EXIT_FAILURE);
@@ -492,7 +553,10 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         timespec write_begin, write_end;
         cl_event writeevent;
         clock_gettime(CLOCK_REALTIME, &write_begin);
-        err = clEnqueueWriteBuffer(commands, var_input_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_i, var_input_buf, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_0_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_0, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_1_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_1, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_2_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_2, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_3_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_3, 0, NULL, &writeevent);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to write to input !\n");
@@ -509,18 +573,25 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         printf("HOST: output_size_dim_0 = %d, output_size_dim_1 = %d\n", output_size_dim_0, output_size_dim_1);
         printf("HOST: var_output_min_0 = %d, var_output_min_1 = %d\n", var_output_min_0, var_output_min_1);
 
-        int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I);
-        int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O);
+        int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I)/4;
+        int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O)/4;
         int32_t total_burst_num = tile_num_dim_0*tile_burst_num;
 
-        err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &var_output_cl);
-        err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &var_input_cl);
-        err |= clSetKernelArg(kernel, 2, sizeof(tile_num_dim_0), &tile_num_dim_0);
-        err |= clSetKernelArg(kernel, 3, sizeof(input_size_dim_1), &input_size_dim_1);
-        err |= clSetKernelArg(kernel, 4, sizeof(tile_burst_num), &tile_burst_num);
-        err |= clSetKernelArg(kernel, 5, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
-        err |= clSetKernelArg(kernel, 6, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
-        err |= clSetKernelArg(kernel, 7, sizeof(total_burst_num), &total_burst_num);
+        int kernel_arg = 0;
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_0_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_1_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_2_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_3_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_0_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_1_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_2_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_3_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(tile_num_dim_0), &tile_num_dim_0);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(input_size_dim_1), &input_size_dim_1);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(tile_burst_num), &tile_burst_num);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(total_burst_num), &total_burst_num);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to set kernel arguments\n");
@@ -562,7 +633,10 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer(commands, var_output_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_o, var_output_buf, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_0_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_0, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_1_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_1, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_2_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_2, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_3_cl, CL_FALSE, 0, sizeof(float) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_3, 0, NULL, &readevent );
         if (err != CL_SUCCESS)
         {
             printf("ERROR: Failed to read output %d\n", err);
@@ -583,8 +657,14 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
         printf("PCIe read time:        %lf us\n", elapsed_time);
         printf("PCIe read throughput:  %lf GB/s\n", output_size_dim_0*output_size_dim_1*var_output_elem_size/elapsed_time/1e3);
 
-        clReleaseMemObject(var_input_cl);
-        clReleaseMemObject(var_output_cl);
+        clReleaseMemObject(var_input_chan_0_cl);
+        clReleaseMemObject(var_input_chan_1_cl);
+        clReleaseMemObject(var_input_chan_2_cl);
+        clReleaseMemObject(var_input_chan_3_cl);
+        clReleaseMemObject(var_output_chan_0_cl);
+        clReleaseMemObject(var_output_chan_1_cl);
+        clReleaseMemObject(var_output_chan_2_cl);
+        clReleaseMemObject(var_output_chan_3_cl);
         clReleaseProgram(program);
         clReleaseKernel(kernel);
         clReleaseCommandQueue(commands);
@@ -602,20 +682,40 @@ static int gradient_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buf
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/BURST_LENGTH;
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%BURST_LENGTH;
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/(BURST_LENGTH*4);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%(BURST_LENGTH*4);
                         int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH)*CHANNEL_NUM_O+c*BURST_LENGTH+burst_residue;
+                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_O+c*BURST_LENGTH*4+burst_residue;
                         int64_t original_offset = (q*var_output_stride_1+p)*CHANNEL_NUM_O+c;
                         //printf("p=%d, q=%d, i=%d, j=%d, tiled_offset = %d, original_offset = %d, var_output_buf[tiled_offset] = %d\n",p,q,i,j,tiled_offset, original_offset, var_output_buf[tiled_offset]);
-                        var_output[original_offset] = var_output_buf[tiled_offset];
+                        switch(tiled_offset%4)
+                        {
+                            case 0:
+                                var_output[original_offset] = var_output_buf_chan_0[tiled_offset/4];
+                                break;
+                            case 1:
+                                var_output[original_offset] = var_output_buf_chan_1[tiled_offset/4];
+                                break;
+                            case 2:
+                                var_output[original_offset] = var_output_buf_chan_2[tiled_offset/4];
+                                break;
+                            case 3:
+                                var_output[original_offset] = var_output_buf_chan_3[tiled_offset/4];
+                                break;
+                        }
                     }
                 }
             }
         }
-        delete[] var_output_buf;
-        delete[] var_input_buf;
+        delete[] var_output_buf_chan_0;
+        delete[] var_output_buf_chan_1;
+        delete[] var_output_buf_chan_2;
+        delete[] var_output_buf_chan_3;
+        delete[] var_input_buf_chan_0;
+        delete[] var_input_buf_chan_1;
+        delete[] var_input_buf_chan_2;
+        delete[] var_input_buf_chan_3;
     } // if assign_5
     return 0;
 }

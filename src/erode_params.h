@@ -1,5 +1,5 @@
-#ifndef JACOBI2D_PARAMS_H_
-#define JACOBI2D_PARAMS_H_
+#ifndef EDGE_PARAMS_H_
+#define EDGE_PARAMS_H_
 
 // determined arbitrarily
 #ifndef TILE_SIZE_DIM_0
@@ -9,21 +9,20 @@
 #define BURST_LENGTH 100000     // in pixels
 #endif//BURST_LENGTH
 #ifndef UNROLL_FACTOR
-#define UNROLL_FACTOR 8
+#define UNROLL_FACTOR 32
 #endif//UNROLL_FACTOR
 
 // determined by platform
 #define BURST_WIDTH 512         // in bits
 
 // determined by application
-#define PIXEL_WIDTH_I 32        // in bits
-#define PIXEL_WIDTH_O 32        // in bits
+#define PIXEL_WIDTH_I 8        // in bits
+#define PIXEL_WIDTH_O 8        // in bits
 #define CHANNEL_NUM_I 1
 #define CHANNEL_NUM_O 1
-#define STENCIL_DIM_0 3        // in pixels
+#define STENCIL_DIM_0 3         // in pixels
 #define STENCIL_DIM_1 3         // in pixels
-//#define STENCIL_DISTANCE ((TILE_SIZE_DIM_0)*14+6)
-#define STENCIL_DISTANCE ((TILE_SIZE_DIM_0)*2)
+#define STENCIL_DISTANCE ((TILE_SIZE_DIM_0)*2+2)
 
 // determined by params above
 #define BURST_EPOCH_I (BURST_LENGTH*PIXEL_WIDTH_I/BUSRT_WIDTH)
@@ -44,4 +43,4 @@
 #error BURST_LENGTH % (BURST_WIDTH/PIXEL_WIDTH_O) must be 0
 #endif//BURST_LENGTH % (BURST_WIDTH/PIXEL_WIDTH_O)
 
-#endif//JACOBI2D_PARAMS_H_
+#endif//EDGE_PARAMS_H_
