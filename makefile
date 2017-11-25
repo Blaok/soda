@@ -66,14 +66,14 @@ cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
 	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 ifeq ($(XDEVICE),"xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
-bitstream: $(BIT)/$(HW_XCLBIN)
-
-hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
-	$(WITH_SDACCEL) $^ $(HOST_ARGS)
-else
 bitstream: $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
+	$(WITH_SDACCEL) $^ $(HOST_ARGS)
+else
+bitstream: $(BIT)/$(HW_XCLBIN)
+
+hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
 	$(WITH_SDACCEL) $^ $(HOST_ARGS)
 endif
 
@@ -104,20 +104,20 @@ $(OBJ)/%-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH).o: $(SRC)/%.cpp $(SRC)/$(AP
 $(BIT)/$(CSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json $(SRC)/$(APP)_params.h
 	@mkdir -p $(BIT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_CSIM_OPT) $(CLCXX_OPT) -o $@ $<
-	@rm -rf $$(ls -d .Xil/*-${HOSTNAME} 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
+	@rm -rf $$(ls -d .Xil/*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 
 $(BIT)/$(COSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json $(SRC)/$(APP)_params.h
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
-	@rm -rf $$(ls -d .Xil/*-${HOSTNAME} 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
+	@rm -rf $$(ls -d .Xil/*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 
 $(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 	@mkdir -p $(BIT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -l -o $@ $<
-	@rm -rf $$(ls -d .Xil/*-${HOSTNAME} 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
+	@rm -rf $$(ls -d .Xil/*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 
 check-aws-bucket:
@@ -134,7 +134,7 @@ $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SRC)/$(KERNEL_SRCS) $(SRC)/$(APP)_params.h
 	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@cp $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/vivado_hls.log $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@cp $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/*.rpt $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@rm -rf $$(ls -d .Xil/*-${HOSTNAME} 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
+	@rm -rf $$(ls -d .Xil/*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 
 $(BIN)/emconfig.json:
