@@ -142,4 +142,6 @@ $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SRC)/$(KERNEL_SRCS) $(SRC)/$(APP)_params.h
 $(BIN)/emconfig.json:
 	@mkdir -p $(BIN)
 	$(WITH_SDACCEL) emconfigutil --platform $(XDEVICE) $(DEVICE_REPO_OPT) --od $(BIN)
+	@rm -rf $$(ls -d .Xil/configutil-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep emconfigutil|tr '\n' '|'))-")
+	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 
