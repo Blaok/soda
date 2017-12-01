@@ -88,7 +88,7 @@ mktemp:
 	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
 $(SRC)/$(KERNEL_SRCS): $(SRC)/$(APP).json
-	UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) ./generate-kernel.py < $^ > $@
+	TMP=$$(mktemp --suffix='generate-kernel.py');if ./generate-kernel.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};fi
 
 $(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH).o)
 	@mkdir -p $(BIN)
