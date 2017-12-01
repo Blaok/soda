@@ -135,25 +135,13 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     global indent
     buf = GetBuffer(St, A, k)
     points = GetPoints(A, k)
-#    indent_save = indent
-#    indent = 0
-#    PrintLine('#if %d!=(UNROLL_FACTOR)' % k)
-#    PrintLine('#error UNROLL_FACTOR != %d' % k)
-#    PrintLine('#endif')
-#    PrintLine()
-#    for dim, size in enumerate(St):
-#        PrintLine('#if %d!=(TILE_SIZE_DIM%d)' % (size, dim))
-#        PrintLine('#error TILE_SIZE_DIM%d != %d' % (dim, size))
-#        PrintLine('#endif')
-#        PrintLine()
-#    PrintLine('#if ((%s*(PIXEL_WIDTH))%%(BURST_WIDTH))!=0' % '*'.join(['(TILE_SIZE_DIM%d)'%x for x in range(0, len(St))]))
-#    PrintLine('#error TILE_SIZE%BURST_WIDTH != 0')
-#    PrintLine('#endif')
-#    PrintLine()
-#    indent = indent_save
-    PrintLine('void compute(bool compute_flag, output_type output[CHANNEL_NUM_O][BURST_LENGTH*%d],' % dram_chan)
+
+    PrintLine('void compute(')
     indent += 1
-    PrintLine('input_type input[CHANNEL_NUM_I][BURST_LENGTH*%d],' % dram_chan)
+    for i in range(0, dram_chan):
+        PrintLine('hls::stream<ap_uint<BURST_WIDTH> >& to_%d,' % i)
+    for i in range(0, dram_chan):
+        PrintLine('hls::stream<ap_uint<BURST_WIDTH> >& from_%d,' % i)
     if extra_params:
         for param_name, param in extra_params.items():
             if 'dup' in param:
@@ -161,23 +149,34 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
             else:
                 dup = ''
             PrintLine('%s %s%s[UNROLL_FACTOR][%d],' % (param['type'], param_name, dup, param['length']))
-    for i in range(0, len(St)):
-        PrintLine('int32_t %s_base[UNROLL_FACTOR],' % coords_in_tile[i])
+    PrintLine('int64_t coalesced_data_num,')
+    PrintLine('int64_t tile_data_num,')
     for i in range(0, len(St)-1):
-        PrintLine('int32_t %s_base,' % coords_in_orig[i])
-    PrintLine('int32_t input_index_base)')
+        PrintLine('int32_t tile_num_dim_%d,' % i)
+    PrintLine('int32_t input_size_dim_%d)' % (len(St)-1))
     indent -= 1
     PrintLine('{')
     indent += 1
 
+    for i in range(0, len(St)-1):
+        PrintLine('int32_t tile_index_dim_%d = 0;' % i)
+    PrintLine()
+
+    PrintLine('int32_t i_base[UNROLL_FACTOR] = {%s};' % (', '.join(['%d-STENCIL_DISTANCE' % x for x in range(0, k)])))
+    for i in range(1, len(St)):
+        PrintLine('int32_t %c_base[UNROLL_FACTOR] = {0};' % coords_in_tile[i])
+    for i in range(0, len(St)-1):
+        PrintLine('int32_t %c_base = 0;' % coords_in_orig[i])
+    for i in range(0, len(St)):
+        PrintLine('#pragma HLS array_partition variable=%s_base complete' % coords_in_tile[i], 0)
+    PrintLine()
+
     # array declaration
     if len(buf['FFs'])>0:
-        PrintLine('static input_type FF[CHANNEL_NUM_I][%d];' % len(buf['FFs']))
+        PrintLine('input_type FF[CHANNEL_NUM_I][%d];' % len(buf['FFs']))
 
     for fifo_length, fifo_list in buf['FIFOs'].items():
-        PrintLine('static input_type FIFO_%d[CHANNEL_NUM_I][%d][%d];' % (fifo_length/k, len(fifo_list), fifo_length/k))
-    if len(buf['FIFOs'])>0:
-        PrintLine('static int32_t FIFO_ptrs[%d] = {0};' % len(buf['FIFOs']))
+        PrintLine('input_type FIFO_%d[CHANNEL_NUM_I][%d][%d];' % (fifo_length/k, len(fifo_list), fifo_length/k))
 
     if len(buf['FFs'])>0:
         PrintLine('#pragma HLS array_partition variable=FF complete dim=0', 0)
@@ -185,59 +184,65 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     for fifo_length in buf['FIFOs'].keys():
         PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=1' % (fifo_length/k), 0)
         PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=2' % (fifo_length/k), 0)
-    if len(buf['FIFOs'])>0:
-        PrintLine('#pragma HLS array_partition variable=FIFO_ptrs complete', 0)
     PrintLine()
 
-    PrintLine('if(compute_flag)')
-    PrintLine('{')
-    indent += 1
-    i = 0
     for fifo_length in buf['FIFOs'].keys():
-        PrintLine('int32_t& FIFO_%d_ptr = FIFO_ptrs[%d];' % (fifo_length/k, i))
-        i += 1
+        PrintLine('int%d_t FIFO_%d_ptr = 0;' % (2**math.ceil(math.log2(math.log2(fifo_length/k))), fifo_length/k))
     PrintLine()
 
     PrintLine('input_type input_points[CHANNEL_NUM_I][UNROLL_FACTOR][%d];' % len(A))
     for idx, item in enumerate(A):
         PrintLine('//         input_points[CHANNEL_NUM_I][UNROLL_FACTOR][%d] <=> (%s)' % (idx, str(item)[1:-1]))
-    PrintLine('input_type input_buffer[CHANNEL_NUM_I][UNROLL_FACTOR];')
+    PrintLine('input_type input_buffer[CHANNEL_NUM_I][UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR)];' % dram_chan)
+    PrintLine('output_type output_buffer[CHANNEL_NUM_O][UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_O/UNROLL_FACTOR)];' % dram_chan)
     PrintLine('#pragma HLS array_partition variable=input_points complete dim=0', 0)
     PrintLine('#pragma HLS array_partition variable=input_buffer complete dim=0', 0)
+    PrintLine('#pragma HLS array_partition variable=output_buffer complete dim=0', 0)
+    PrintLine()
+
+    for i in range(0, len(St)-1):
+        PrintLine('int32_t %c_base_counter = 0;' % coords_in_orig[i])
     PrintLine()
 
     PrintLine('// produce output')
     PrintLine('compute_epoch:', 0)
-    PrintLine('for(int32_t epoch = 0; epoch < BURST_LENGTH*%d/UNROLL_FACTOR; ++epoch)' % dram_chan)
+    PrintLine('for(int32_t epoch = 0; epoch < coalesced_data_num*(BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR); ++epoch)' % dram_chan)
     PrintLine('{')
     indent += 1
     if len(buf['FFs'])>0:
         PrintLine('#pragma HLS dependence variable=FF inter false', 0)
     for fifo_length in buf['FIFOs'].keys():
         PrintLine('#pragma HLS dependence variable=FIFO_%d inter false' % (fifo_length/k), 0)
-#    indent_save = indent
-#    indent = 0
-#    PrintLine('#pragma HLS array_partition variable=FF complete')
-#    for fifo_length in buf['FIFOs'].keys():
-#        PrintLine('#pragma HLS array_partition variable=FIFO_%d complete dim=1' % (fifo_length/k))
-#    indent = indent_save
-    PrintLine('int32_t input_index = epoch + input_index_base;')
     PrintLine('#pragma HLS pipeline II=1', 0)
-    PrintLine('compute_load_channel:', 0)
-    PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
-    PrintLine('{')
-    indent += 1
+
+    PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_i/k-1))
+    PrintLine('{'); indent += 1
+    PrintLine('case 0:')
+    PrintLine('{'); indent += 1
+    for i in range(0, dram_chan):
+        PrintLine('ap_uint<BURST_WIDTH> tmp_%d;' % i)
+    for i in range(0, dram_chan):
+        PrintLine('from_%d>>tmp_%d;' % (i, i))
+    PrintLine('load_coalesced:', 0)
+    PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
+    PrintLine('{'); indent += 1
     PrintLine('#pragma HLS unroll', 0)
-    PrintLine('compute_load_unrolled:', 0)
-    PrintLine('for(int32_t unroll_index = 0; unroll_index<UNROLL_FACTOR; ++unroll_index)')
-    PrintLine('{')
-    indent += 1
+    for i in range(0, dram_chan):
+        PrintLine('input_buffer[0][j*%d+%d] = tmp_%d((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % (dram_chan, i, i))
+    indent -= 1; PrintLine('}')
+    PrintLine('break;')
+    indent -= 1; PrintLine('}')
+    PrintLine('default:')
+    PrintLine('{'); indent += 1
+    PrintLine('load_shift:', 0)
+    PrintLine('for(int j = 0; j < UNROLL_FACTOR; ++j)')
+    PrintLine('{'); indent += 1
     PrintLine('#pragma HLS unroll', 0)
-    PrintLine('input_buffer[c][unroll_index] = input[c][epoch*UNROLL_FACTOR+unroll_index];')
-    indent -= 1
-    PrintLine('}')
-    indent -= 1
-    PrintLine('}')
+    for i in range(0, int(burst_width/pixel_width_i*dram_chan/k-1)):
+        PrintLine('input_buffer[0][j+UNROLL_FACTOR*%d] = input_buffer[0][j+UNROLL_FACTOR*%d];' % (i, i+1))
+    indent -= 1; PrintLine('}')
+    indent -= 1; PrintLine('}')
+    indent -= 1; PrintLine('}')
     PrintLine()
 
     for c in range(0, input_type[1]):
@@ -246,11 +251,6 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
                 PrintLine('input_type FIFO_%d_%d_%d = FIFO_%d[%d][%d][FIFO_%d_ptr];'% (fifo_length/k, c, idx, fifo_length/k, c, idx, fifo_length/k))
     PrintLine()
 
-#    PrintLine('compute_chain_channel:', 0)
-#    PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
-#    PrintLine('{')
-#    indent += 1
-#    PrintLine('#pragma HLS unroll', 0)
     for c in range(0, input_type[1]):
         for idx, item in enumerate(buf['inputs']):
             for unroll_index in points[item].keys():
@@ -262,10 +262,7 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
             for idx, item in enumerate(buf['FIFOs'][fifo_length]):
                 for unroll_index in points[item].keys():
                     PrintLine("input_points[%d][%d][%d] = FIFO_%d_%d_%d; // (%s)" % (c, unroll_index, points[item][unroll_index], fifo_length/k, c, idx, str(A[points[item][unroll_index]])[1:-1]))
-                    #PrintLine("input_points[%d][%d][%d] = FIFO_%d[%d][%d][FIFO_%d_ptr]; // (%s)" % (c, unroll_index, points[item][unroll_index], fifo_length/k, c, idx, fifo_length/k, str(A[points[item][unroll_index]])[1:-1]))
 
-#    indent -= 1
-#    PrintLine('}')
     PrintLine()
 
     PrintLine('compute_unrolled:', 0)
@@ -277,7 +274,6 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     for i in range(0, len(St)-1):
         PrintLine('int32_t %s = %s_base+%s;' % ((coords_in_orig[i],)*2 + (coords_in_tile[i],)))
     PrintLine('int32_t %s = %s;' % (coords_in_orig[len(St)-1],coords_in_tile[len(St)-1]))
-    PrintLine('int32_t output_index_offset = epoch*UNROLL_FACTOR+unroll_index;')
     PrintLine()
     for idx, item in enumerate(A):
         PrintLine('input_type input_%s = input_points[0][unroll_index][%d];' % ('_'.join([str(x) for x in item]), idx))
@@ -286,6 +282,14 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     for line in compute_content:
         if len(line) > 0:
             PrintLine(line.replace('\n','').replace('\r',''))
+    PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_i/k-1))
+    PrintLine('{'); indent += 1
+    for i in range(0, int(burst_width*dram_chan/pixel_width_i/k)):
+        PrintLine('case %d:' % i)
+        PrintLine('{'); indent += 1
+        PrintLine('output_buffer[0][unroll_index+UNROLL_FACTOR*%d] = result;' % i)
+        indent -= 1;PrintLine('}')
+    indent -= 1;PrintLine('}')
     PrintLine()
 
     PrintLine('%s += UNROLL_FACTOR;' % coords_in_tile[0])
@@ -310,11 +314,6 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     indent -= 1;PrintLine('} // for unroll_index')
     PrintLine()
 
-    #PrintLine('compute_finalize_channel:', 0)
-    #PrintLine('for(int32_t c = 0; c<CHANNEL_NUM_I; ++c)')
-    #PrintLine('{')
-    #indent += 1
-    #PrintLine('#pragma HLS unroll', 0)
     for c in range(0, input_type[1]):
         first = True
         for idx, item in enumerate(buf['inputs']):
@@ -323,19 +322,44 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
             else:
                 PrintLine()
             PrintUpdate(GetProduceMap(buf), GetConsumeMap(buf), {'inputs':{'index':idx, 'produce':item}}, input_type)
-    #indent -= 1
-    #PrintLine('}')
     PrintLine()
+
     for fifo_length in buf['FIFOs'].keys():
         PrintLine('FIFO_%d_ptr = FIFO_%d_ptr==(%d-1) ? 0 : FIFO_%d_ptr+1;' % (fifo_length/k, fifo_length/k, fifo_length/k, fifo_length/k))
-    indent -= 1
-    PrintLine('}')
-    indent -= 1
-    PrintLine('}')
-    indent -= 1
-    PrintLine('}')
+    PrintLine()
 
-def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
+    PrintLine('if((epoch&%d)==%d)' % ((burst_width*dram_chan/pixel_width_i/k-1), burst_width*dram_chan/pixel_width_i/k-1))
+    PrintLine('{'); indent += 1
+    PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join(['tmp_%d' % x for x in range(0, dram_chan)])))
+    PrintLine('store_coalesced:', 0)
+    PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
+    PrintLine('{'); indent += 1
+    PrintLine('#pragma HLS unroll', 0)
+    for i in range(0, dram_chan):
+        PrintLine('tmp_%d((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = output_buffer[0][j*%d+%d];' % (i, dram_chan, i))
+    indent -= 1; PrintLine('}')
+    for i in range(0, dram_chan):
+        PrintLine('to_%d<<tmp_%d;' % (i, i))
+    indent -= 1; PrintLine('}')
+    PrintLine()
+
+    PrintLine('++p_base_counter;')
+    PrintLine('if(p_base_counter == tile_data_num)')
+    PrintLine('{'); indent += 1
+    PrintLine('p_base_counter = 0;')
+    PrintLine('reset_bases:', 0)
+    PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+    PrintLine('{'); indent += 1
+    PrintLine('#pragma HLS unroll', 0)
+    PrintLine('i_base[unroll_index] = unroll_index-STENCIL_DISTANCE;')
+    PrintLine('j_base[unroll_index] = 0;')
+    indent -= 1; PrintLine('}')
+    PrintLine('p_base += TILE_SIZE_DIM_0-STENCIL_DIM_0+1;')
+    indent -= 1; PrintLine('}')
+    indent -= 1; PrintLine('}')
+    indent -= 1; PrintLine('}')
+
+def PrintKernel(St, A, k, app_name, extra_params, dram_chan, dram_separate):
     global indent
     buf = GetBuffer(St, A, k)
     points = GetPoints(A, k)
@@ -345,95 +369,57 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     PrintLine('void %s_kernel(' % app_name)
     indent += 1
     for i in range(0, dram_chan):
-        PrintLine('ap_uint<BURST_WIDTH>* var_output_chan_%d,' % i)
+        PrintLine('ap_uint<BURST_WIDTH>* var_output_%d,' % i)
     for i in range(0, dram_chan):
-        PrintLine('ap_uint<BURST_WIDTH>* var_input_chan_%d,' % i)
+        PrintLine('ap_uint<BURST_WIDTH>* var_input_%d,' % i)
     if extra_params:
         for param_name, param in extra_params.items():
             PrintLine('%s* var_%s,' % (param['type'], param_name))
+    PrintLine('int64_t coalesced_data_num,')
+    PrintLine('int64_t tile_data_num,')
     for i in range(0, len(St)-1):
         PrintLine('int32_t tile_num_dim_%d,' % i)
-    PrintLine('int32_t input_size_dim_%d,' % (len(St)-1))
-    PrintLine('int64_t tile_burst_num,')
-    PrintLine('int64_t extra_space_i_coalesed,')
-    PrintLine('int64_t extra_space_o_coalesed,')
-    PrintLine('int32_t total_burst_num)')
+    PrintLine('int32_t input_size_dim_%d)' % (len(St)-1))
     indent -= 1
     PrintLine('{')
     indent += 1
 
+    chan = 0
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS interface m_axi port=var_output_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
+        PrintLine('#pragma HLS interface m_axi port=var_output_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, chan), 0)
+        chan += 1
+    if not dram_separate:
+        chan = 0
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS interface m_axi port=var_input_chan_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, i), 0)
+        PrintLine('#pragma HLS interface m_axi port=var_input_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (i, chan), 0)
+        chan += 1
     if extra_params:
         for param_name, param in extra_params.items():
             PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem0 latency=120' % (param_name, param['length']), 0)
     PrintLine()
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS interface s_axilite port=var_output_chan_%d bundle=control' % i, 0)
+        PrintLine('#pragma HLS interface s_axilite port=var_output_%d bundle=control' % i, 0)
     for i in range(0, dram_chan):
-        PrintLine('#pragma HLS interface s_axilite port=var_input_chan_%d bundle=control' % i, 0)
+        PrintLine('#pragma HLS interface s_axilite port=var_input_%d bundle=control' % i, 0)
     if extra_params:
         for param_name in extra_params.keys():
             PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param_name, 0)
+    PrintLine('#pragma HLS interface s_axilite port=coalesced_data_num bundle=control', 0)
+    PrintLine('#pragma HLS interface s_axilite port=tile_data_num bundle=control', 0)
     for i in range(0, len(St)-1):
         PrintLine('#pragma HLS interface s_axilite port=tile_num_dim_%d bundle=control' % i, 0)
     PrintLine('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % (len(St)-1), 0)
-    PrintLine('#pragma HLS interface s_axilite port=tile_burst_num bundle=control', 0)
-    PrintLine('#pragma HLS interface s_axilite port=extra_space_i_coalesed bundle=control', 0)
-    PrintLine('#pragma HLS interface s_axilite port=extra_space_o_coalesed bundle=control', 0)
-    PrintLine('#pragma HLS interface s_axilite port=total_burst_num bundle=control', 0)
     PrintLine('#pragma HLS interface s_axilite port=return bundle=control', 0)
     PrintLine()
 
-    PrintLine('input_type  input_0[CHANNEL_NUM_I][BURST_LENGTH*%d];' % dram_chan)
-    PrintLine('input_type  input_1[CHANNEL_NUM_I][BURST_LENGTH*%d];' % dram_chan)
-    PrintLine('output_type output_0[CHANNEL_NUM_O][BURST_LENGTH*%d];' % dram_chan)
-    PrintLine('output_type output_1[CHANNEL_NUM_O][BURST_LENGTH*%d];' % dram_chan)
-    #PrintLine('#pragma HLS resource variable=input_0 core=XPM_MEMORY uram', 0)
-    #PrintLine('#pragma HLS resource variable=input_1 core=XPM_MEMORY uram', 0)
-    #PrintLine('#pragma HLS resource variable=output_0 core=XPM_MEMORY uram', 0)
-    #PrintLine('#pragma HLS resource variable=output_1 core=XPM_MEMORY uram', 0)
-    PrintLine('#pragma HLS array_partition variable=input_0 complete dim=1', 0)
-    PrintLine('#pragma HLS array_partition variable=input_0 cyclic factor=%d dim=2' % input_partition, 0)
-    PrintLine('#pragma HLS array_partition variable=input_1 complete dim=1', 0)
-    PrintLine('#pragma HLS array_partition variable=input_1 cyclic factor=%d dim=2' % input_partition, 0)
-    PrintLine('#pragma HLS array_partition variable=output_0 complete dim=1', 0)
-    PrintLine('#pragma HLS array_partition variable=output_0 cyclic factor=%d dim=2' % output_partition, 0)
-    PrintLine('#pragma HLS array_partition variable=output_1 complete dim=1', 0)
-    PrintLine('#pragma HLS array_partition variable=output_1 cyclic factor=%d dim=2' % output_partition, 0)
-    PrintLine()
-
-    for i in range(0, len(St)-1):
-        PrintLine('int32_t tile_index_dim_%d = 0;' % i)
-    PrintLine('bool    load_flag;')
-    PrintLine('bool compute_flag;')
-    PrintLine('bool   store_flag;')
-    PrintLine('int32_t burst_index_load = 0;')
-    PrintLine('int32_t burst_index_compute = 0;')
-    PrintLine('int32_t burst_index_store = 0;')
-    PrintLine('int32_t input_index_base = 0;')
-    PrintLine()
-
-    for i in range(0, len(St)):
-        PrintLine('int32_t %s_base[UNROLL_FACTOR];' % coords_in_tile[i])
-    for i in range(0, len(St)-1):
-        PrintLine('int32_t %s_base = 0;' % coords_in_orig[i])
-    PrintLine()
-
-    for i in range(0, len(St)):
-        PrintLine('#pragma HLS array_partition variable=%s_base complete' % coords_in_tile[i], 0)
-    PrintLine()
-
-    PrintLine('bases_init:', 0)
-    PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-    PrintLine('{');indent+=1
-    PrintLine('#pragma HLS unroll', 0)
-    PrintLine('i_base[unroll_index] = unroll_index - STENCIL_DISTANCE;')
-    for i in range(1, len(St)):
-        PrintLine('%s_base[unroll_index] = 0;' % coords_in_tile[i])
-    indent-=1;PrintLine('}')
+    for i in range(0, dram_chan):
+        PrintLine('hls::stream<ap_uint<BURST_WIDTH> >  input_stream_%d( "input_stream_%d");' % (i, i))
+    for i in range(0, dram_chan):
+        PrintLine('hls::stream<ap_uint<BURST_WIDTH> > output_stream_%d("output_stream_%d");' % (i, i))
+    for i in range(0, dram_chan):
+        PrintLine('#pragma HLS stream variable=input_stream_%d depth=32' % i, 0)
+    for i in range(0, dram_chan):
+        PrintLine('#pragma HLS stream variable=output_stream_%d depth=32' % i, 0)
     PrintLine()
 
     if extra_params:
@@ -477,91 +463,22 @@ def PrintKernel(St, A, k, app_name, extra_params, dram_chan):
     extra_params_str = ''.join([var+', ' for var in extra_params.keys()]) if extra_params else ''
     coords_str = ''.join([coords_in_tile[i]+'_base, ' for i in range(0, len(St))]) + ''.join([coords_in_orig[i]+'_base, ' for i in range(0, len(St)-1)])
 
-    PrintLine('burst:', 0)
-    PrintLine('for(int32_t burst_index_in_total = 0; burst_index_in_total < total_burst_num+2; ++burst_index_in_total)')
-    PrintLine('{');indent += 1
-    PrintLine('load_flag = burst_index_in_total < total_burst_num;')
-    PrintLine('compute_flag = burst_index_in_total > 0 && burst_index_in_total < total_burst_num+1;')
-    PrintLine('store_flag = burst_index_in_total > 1;')
-    PrintLine('if(burst_index_in_total%2==0)')
-    PrintLine('{');indent += 1
+    PrintLine('#pragma HLS dataflow', 0)
     for i in range(0, dram_chan):
-        PrintLine('load<%d, %d>(load_flag, input_0, var_input_chan_%d);' % (i, dram_chan, i))
-    PrintLine('compute(compute_flag, output_1, input_1, '+extra_params_str+coords_str+'input_index_base);')
+        PrintLine('load(input_stream_%d, var_input_%d, coalesced_data_num);' % (i, i))
+    output_stream = ', '.join(['output_stream_%d' % x for x in range(0, dram_chan)])
+    input_stream = ', '.join(['input_stream_%d' % x for x in range(0, dram_chan)])
+    tile_num_dim = ', '.join(['tile_num_dim_%d' % x for x in range(0, len(St)-1)])
+    PrintLine('compute(%s, %s, coalesced_data_num, tile_data_num, %s, input_size_dim_%d);' % (output_stream, input_stream, tile_num_dim, len(St)-1))
     for i in range(0, dram_chan):
-        PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_0);' % (i, dram_chan, i))
-    indent -= 1;PrintLine('}')
-    PrintLine('else')
-    PrintLine('{');indent += 1
-    for i in range(0, dram_chan):
-        PrintLine('load<%d, %d>(load_flag, input_1, var_input_chan_%d);' % (i, dram_chan, i))
-    PrintLine('compute(compute_flag, output_0, input_0, '+extra_params_str+coords_str+'input_index_base);')
-    for i in range(0, dram_chan):
-        PrintLine('store<%d, %d>(store_flag, var_output_chan_%d, output_1);' % (i, dram_chan, i))
-    indent -= 1;PrintLine('}')
+        PrintLine('store(var_output_%d, output_stream_%d, coalesced_data_num);' % (i, i))
 
-    PrintLine('if(load_flag)')
-    PrintLine('{');indent += 1
-    for i in range(0, dram_chan):
-        PrintLine('var_input_chan_%d += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I)*CHANNEL_NUM_I;' % i)
-    PrintLine('burst_index_load += 1;')
-    PrintLine('if(burst_index_load == tile_burst_num)')
-    PrintLine('{');indent += 1
-    PrintLine('burst_index_load = 0;')
-    for i in range(0, dram_chan):
-        PrintLine('var_input_chan_%d -= extra_space_i_coalesed;' % i)
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
-
-    PrintLine('if(compute_flag)')
-    PrintLine('{');indent += 1
-    PrintLine('burst_index_compute += 1;')
-    PrintLine('input_index_base  += BURST_LENGTH*%d/UNROLL_FACTOR;' % dram_chan)
-    PrintLine('if(burst_index_compute == tile_burst_num)')
-    PrintLine('{');indent += 1
-    PrintLine('burst_index_compute = 0;')
-    PrintLine('input_index_base = 0;')
-    PrintLine('tile_index_dim_0 += 1;')
-    PrintLine('%s_base += (TILE_SIZE_DIM_0-STENCIL_DIM_0+1);' % coords_in_orig[0])
-    PrintLine('if(tile_index_dim_0==tile_num_dim_0)')
-    PrintLine('{');indent += 1
-    PrintLine('tile_index_dim_0 = 0;')
-    if(len(St)>2):
-        PrintLine('tile_index_dim_1 += 1;')
-        PrintLine('if(tile_index_dim_1==tile_num_dim_1)')
-        PrintLine('{');indent += 1
-        PrintLine('tile_index_dim_1 = 0;')
-        if(len(St)>3):
-            PrintLine('tile_index_dim_2 += 2;')
-            PrintLine('if(tile_index_dim_2==tile_num_dim_2)')
-            PrintLine('{');indent += 1
-            PrintLine('tile_index_dim_2 = 0;')
-            indent -= 1;PrintLine('}')
-        indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
-
-    PrintLine('if(store_flag)')
-    PrintLine('{');indent += 1
-    for i in range(0, dram_chan):
-        PrintLine('var_output_chan_%d += BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O)*CHANNEL_NUM_O;' % i)
-    PrintLine('burst_index_store += 1;')
-    PrintLine('if(burst_index_store == tile_burst_num)')
-    PrintLine('{');indent += 1
-    PrintLine('burst_index_store = 0;')
-    for i in range(0, dram_chan):
-        PrintLine('var_output_chan_%d -= extra_space_o_coalesed;' % i)
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
-
-    indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
     PrintLine()
     PrintLine('}//extern "C"')
 
 def PrintHeader(app_name):
-    for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio', 'string', 'ap_int']:
+    for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio', 'string', 'ap_int', 'hls_stream']:
         PrintLine('#include<%s.h>' % header)
     PrintLine()
     PrintLine('#include"%s_params.h"' % app_name)
@@ -569,62 +486,25 @@ def PrintHeader(app_name):
 
 def PrintLoad(input_type):
     global indent
-    PrintLine('template<int chan_idx, int chan_tot>')
-    PrintLine('void load(bool load_flag, input_type to[CHANNEL_NUM_I][BURST_LENGTH*chan_tot], ap_uint<BURST_WIDTH>* from)')
-    PrintLine('{');indent += 1
-    PrintLine('if(load_flag)')
-    PrintLine('{');indent += 1
-    PrintLine('load_channel:', 0)
-    PrintLine('for(int c = 0; c < CHANNEL_NUM_I; ++c)')
+    PrintLine('void load(hls::stream<ap_uint<BURST_WIDTH> > &to, ap_uint<BURST_WIDTH>* from, int data_num)')
     PrintLine('{');indent += 1
     PrintLine('load_epoch:', 0)
-    PrintLine('for(int i = 0; i < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I); ++i)')
+    PrintLine('for(int i = 0; i < data_num; ++i)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS pipeline II=1', 0)
-    PrintLine('ap_uint<BURST_WIDTH> tmp(from[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_I))+i]);')
-    PrintLine('load_coalesced:', 0)
-    PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
-    PrintLine('{');indent += 1
-    PrintLine('#pragma HLS unroll', 0)
-    if input_type=='float' or input_type=='double':
-        PrintLine('uint%d_t raw_bits = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % 32 if input_type=='float' else 64)
-        PrintLine('to[c][(i*BURST_WIDTH/PIXEL_WIDTH_I+j)*chan_tot+chan_idx] = *(input_type*)(&raw_bits);')
-    else:
-        PrintLine('to[c][(i*BURST_WIDTH/PIXEL_WIDTH_I+j)*chan_tot+chan_idx] = tmp((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);')
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
+    PrintLine('to<<from[i];')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
 
 def PrintStore(output_type):
     global indent
-    PrintLine('template<int chan_idx, int chan_tot>')
-    PrintLine('void store(bool store_flag, ap_uint<BURST_WIDTH>* to, output_type from[CHANNEL_NUM_O][BURST_LENGTH*chan_tot])')
-    PrintLine('{');indent += 1
-    PrintLine('if(store_flag)')
-    PrintLine('{');indent += 1
-    PrintLine('store_channel:', 0)
-    PrintLine('for(int c = 0; c < CHANNEL_NUM_O; ++c)')
+    PrintLine('void store(ap_uint<BURST_WIDTH>* to, hls::stream<ap_uint<BURST_WIDTH> > &from, int data_num)')
     PrintLine('{');indent += 1
     PrintLine('store_epoch:', 0)
-    PrintLine('for(int i = 0; i < BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O); ++i)')
+    PrintLine('for(int i = 0; i < data_num; ++i)')
     PrintLine('{');indent += 1
     PrintLine('#pragma HLS pipeline II=1', 0)
-    PrintLine('ap_uint<BURST_WIDTH> tmp;')
-    PrintLine('store_coalesced:', 0)
-    PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
-    PrintLine('{');indent += 1
-    PrintLine('#pragma HLS unroll', 0)
-    if output_type=='float' or output_type=='double':
-        PrintLine('output_type raw_bits = from[c][(i*BURST_WIDTH/PIXEL_WIDTH_O+j)*chan_tot+chan_idx];')
-        PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = *(uint%d_t*)(&raw_bits);' % 32 if output_type=='float' else 64)
-    else:
-        PrintLine('tmp((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = from[c][(i*BURST_WIDTH/PIXEL_WIDTH_O+j)*chan_tot+chan_idx];')
-    indent -= 1;PrintLine('}')
-    PrintLine('to[c*(BURST_LENGTH/(BURST_WIDTH/PIXEL_WIDTH_O))+i] = tmp;')
-    indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
+    PrintLine('from>>to[i];')
     indent -= 1;PrintLine('}')
     indent -= 1;PrintLine('}')
 
@@ -669,7 +549,10 @@ type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t'
 config = json.loads(sys.stdin.read())
 input_type = config['input_type']
 output_type = config['output_type']
-dram_chan = config['dram_chan']
+dram_chan = int(os.environ.get('DRAM_CHAN', config['dram_chan']))
+dram_separate = ('DRAM_SEPARATE' in os.environ) or ('dram_separate' in config and config['dram_separate'])
+if dram_separate:
+    dram_chan = int(dram_chan/2)
 app_name = config['app_name']
 St = config.get('St', [0]*config['dim'])
 A = config['A']
@@ -716,5 +599,5 @@ PrintStore(output_type[0])
 PrintLine()
 PrintCompute(St, A, k, compute_content, input_partition, output_partition, extra_params, input_type, dram_chan)
 PrintLine()
-PrintKernel(St, A, k, app_name, extra_params, dram_chan)
+PrintKernel(St, A, k, app_name, extra_params, dram_chan, dram_separate)
 
