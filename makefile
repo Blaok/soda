@@ -4,18 +4,17 @@ APP ?= blur
 SDA_VER := 2017.1
 TILE_SIZE_DIM_0 ?= 8000
 #TILE_SIZE_DIM_1 ?= 1024
-BURST_LENGTH ?= 131072
 UNROLL_FACTOR ?= 64
 HOST_ARGS ?= 8000 8000
 
-CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)-unroll$(UNROLL_FACTOR)-burst$(BURST_LENGTH).xclbin
-COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)-unroll$(UNROLL_FACTOR)-burst$(BURST_LENGTH).xclbin
-HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)-unroll$(UNROLL_FACTOR)-burst$(BURST_LENGTH).xclbin
+CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).xclbin
+COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).xclbin
+HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).xclbin
 
-KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)-unroll$(UNROLL_FACTOR).cpp
+KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).cpp
 KERNEL_NAME ?= $(APP)_kernel
 HOST_SRCS ?= $(APP)_run.cpp $(APP).cpp
-HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH)
+HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))
 
 SRC ?= src
 OBJ ?= obj/$(word 2,$(subst :, ,$(XDEVICE)))
@@ -44,12 +43,12 @@ ifeq ($(SDA_VER),2017.2)
 else
 	HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
 endif
-HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1) -DBURST_LENGTH=$(BURST_LENGTH) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
+HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g --temp_dir $(TMP)
-CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) -DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1) -DBURST_LENGTH=$(BURST_LENGTH) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
+CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 CLCXX_OPT += --max_memory_ports $(APP)_kernel
 CLCXX_OPT += --xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM0.core.OCL_REGION_0.M00_AXI
 CLCXX_OPT += --xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM1.core.OCL_REGION_0.M01_AXI
@@ -88,13 +87,13 @@ mktemp:
 	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
 $(SRC)/$(KERNEL_SRCS): $(SRC)/$(APP).json
-	TMP=$$(mktemp --suffix='generate-kernel.py');if ./generate-kernel.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};fi
+	@TMP=$$(mktemp --suffix='generate-kernel.py');if UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) ./generate-kernel.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};exit 1;fi
 
-$(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH).o)
+$(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o)
 	@mkdir -p $(BIN)
 	$(WITH_SDACCEL) $(CXX) $(HOST_LFLAGS) $^ -o $@
 
-$(OBJ)/%-tile$(TILE_SIZE_DIM_0)-burst$(BURST_LENGTH).o: $(SRC)/%.cpp $(SRC)/$(APP)_params.h
+$(OBJ)/%-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o: $(SRC)/%.cpp $(SRC)/$(APP)_params.h
 	@mkdir -p $(OBJ)
 	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
 	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -c $< -o $@
