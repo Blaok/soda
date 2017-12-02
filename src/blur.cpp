@@ -312,22 +312,34 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         // allocate buffer for tiled input/output
         int32_t tile_num_dim_0 = (output_size_dim_0+TILE_SIZE_DIM_0-STENCIL_DIM_0)/(TILE_SIZE_DIM_0-STENCIL_DIM_0+1);
 
+        // change #chan if there is a env var defined
+        int dram_chan = 4;
+        bool dram_separate = false;
+        if(nullptr!=getenv("DRAM_CHAN"))
+        {
+            dram_chan = atoi(getenv("DRAM_CHAN"));
+        }
+        if(nullptr!=getenv("DRAM_SEPARATE"))
+        {
+            dram_separate = true;
+            dram_chan /= 2;
+        }
+        printf("DRAM_CHAN: %d\n", dram_chan);
+
         // align each linearized tile to multiples of BURST_WIDTH
         int64_t tile_pixel_num = TILE_SIZE_DIM_0*input_size_dim_1;
-        int64_t tile_burst_num = (tile_pixel_num-1)/BURST_LENGTH/4+1;
-        int64_t tile_size_linearized_i = (CHANNEL_NUM_I == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_I);
-        int64_t tile_size_linearized_o = (CHANNEL_NUM_O == 1 ? tile_pixel_num : tile_burst_num*BURST_LENGTH*4*CHANNEL_NUM_O);
-        int64_t extra_space_i = (CHANNEL_NUM_I == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
-        int64_t extra_space_o = (CHANNEL_NUM_O == 1 ? tile_burst_num*BURST_LENGTH*4-tile_pixel_num : 0);
+        int64_t tile_burst_num = (tile_pixel_num-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan*CHANNEL_NUM_I)+1;
+        int64_t tile_size_linearized_i = tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan*CHANNEL_NUM_I);
+        int64_t tile_size_linearized_o = tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan*CHANNEL_NUM_O);
 
-        uint16_t* var_input_buf_chan_0 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
-        uint16_t* var_input_buf_chan_1 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
-        uint16_t* var_input_buf_chan_2 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
-        uint16_t* var_input_buf_chan_3 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/4];
-        uint16_t* var_output_buf_chan_0 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/4];
-        uint16_t* var_output_buf_chan_1 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/4];
-        uint16_t* var_output_buf_chan_2 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/4];
-        uint16_t* var_output_buf_chan_3 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/4];
+        uint16_t* var_input_buf_chan_0 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/dram_chan];
+        uint16_t* var_input_buf_chan_1 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/dram_chan];
+        uint16_t* var_input_buf_chan_2 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/dram_chan];
+        uint16_t* var_input_buf_chan_3 = new uint16_t[tile_num_dim_0*tile_size_linearized_i/dram_chan];
+        uint16_t* var_output_buf_chan_0 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/dram_chan];
+        uint16_t* var_output_buf_chan_1 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/dram_chan];
+        uint16_t* var_output_buf_chan_2 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/dram_chan];
+        uint16_t* var_output_buf_chan_3 = new uint16_t[tile_num_dim_0*tile_size_linearized_o/dram_chan];
 
         // tiling
         for(int32_t tile_index_dim_0 = 0; tile_index_dim_0 < tile_num_dim_0; ++tile_index_dim_0)
@@ -342,25 +354,25 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/(BURST_LENGTH*4);
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%(BURST_LENGTH*4);
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i)%(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan);
                         int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_I+c*BURST_LENGTH*4+burst_residue;
+                        int64_t tiled_offset = tile_index_dim_0*tile_size_linearized_i+(burst_index*(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan))*CHANNEL_NUM_I+c*(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+burst_residue;
                         int64_t original_offset = (q*var_input_stride_1+p)*CHANNEL_NUM_I+c;
-                        switch(tiled_offset%4)
+                        switch(tiled_offset%dram_chan)
                         {
                             case 0:
-                                var_input_buf_chan_0[tiled_offset/4] = var_input[original_offset];
+                                var_input_buf_chan_0[tiled_offset/dram_chan] = var_input[original_offset];
                                 break;
                             case 1:
-                                var_input_buf_chan_1[tiled_offset/4] = var_input[original_offset];
+                                var_input_buf_chan_1[tiled_offset/dram_chan] = var_input[original_offset];
                                 break;
                             case 2:
-                                var_input_buf_chan_2[tiled_offset/4] = var_input[original_offset];
+                                var_input_buf_chan_2[tiled_offset/dram_chan] = var_input[original_offset];
                                 break;
                             case 3:
-                                var_input_buf_chan_3[tiled_offset/4] = var_input[original_offset];
+                                var_input_buf_chan_3[tiled_offset/dram_chan] = var_input[original_offset];
                                 break;
                         }
                     }
@@ -511,14 +523,33 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         cl_mem_ext_ptr_t input_ext_chan_1, output_ext_chan_1;
         cl_mem_ext_ptr_t input_ext_chan_2, output_ext_chan_2;
         cl_mem_ext_ptr_t input_ext_chan_3, output_ext_chan_3;
-        output_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
-        output_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
-        output_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
-        output_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
-        input_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
-        input_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
-        input_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
-        input_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
+        if(dram_separate)
+        {
+            switch(dram_chan)
+            {
+                case 2:
+                    output_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+                    output_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
+                    input_ext_chan_0.flags = XCL_MEM_DDR_BANK2;
+                    input_ext_chan_1.flags = XCL_MEM_DDR_BANK3;
+                    break;
+                case 1:
+                    output_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+                    input_ext_chan_0.flags = XCL_MEM_DDR_BANK1;
+                    break;
+            }
+        }
+        else
+        {
+            output_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+            output_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
+            output_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
+            output_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
+            input_ext_chan_0.flags = XCL_MEM_DDR_BANK0;
+            input_ext_chan_1.flags = XCL_MEM_DDR_BANK1;
+            input_ext_chan_2.flags = XCL_MEM_DDR_BANK2;
+            input_ext_chan_3.flags = XCL_MEM_DDR_BANK3;
+        }
         input_ext_chan_0.obj = 0;
         input_ext_chan_0.param = 0;
         input_ext_chan_1.obj = 0;
@@ -536,15 +567,15 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         output_ext_chan_3.obj = 0;
         output_ext_chan_3.param = 0;
 
-        var_input_chan_0_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_0, NULL);
-        var_input_chan_1_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_1, NULL);
-        var_input_chan_2_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_2, NULL);
-        var_input_chan_3_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i+extra_space_i)/4, & input_ext_chan_3, NULL);
-        var_output_chan_0_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_0, NULL);
-        var_output_chan_1_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_1, NULL);
-        var_output_chan_2_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_2, NULL);
-        var_output_chan_3_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o+extra_space_o)/4, &output_ext_chan_3, NULL);
-        if (!var_input_chan_0_cl || !var_output_chan_0_cl || !var_input_chan_1_cl || !var_output_chan_1_cl || !var_input_chan_2_cl || !var_output_chan_2_cl || !var_input_chan_3_cl || !var_output_chan_3_cl)
+        var_input_chan_0_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_0, NULL);
+        var_input_chan_1_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_1, NULL);
+        var_input_chan_2_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_2, NULL);
+        var_input_chan_3_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_3, NULL);
+        var_output_chan_0_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_0, NULL);
+        var_output_chan_1_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_1, NULL);
+        var_output_chan_2_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_2, NULL);
+        var_output_chan_3_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_3, NULL);
+        if (!var_input_chan_0_cl || !var_output_chan_0_cl || !var_input_chan_1_cl || !var_output_chan_1_cl || !var_input_chan_2_cl || !var_output_chan_2_cl|| !var_input_chan_3_cl || !var_output_chan_3_cl)
         {
             printf("FATAL: Failed to allocate device memory\n");
             exit(EXIT_FAILURE);
@@ -552,11 +583,11 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         
         timespec write_begin, write_end;
         cl_event writeevent;
-        clock_gettime(CLOCK_REALTIME, &write_begin);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_0, 0, NULL, &writeevent);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_1, 0, NULL, &writeevent);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_2, 0, NULL, &writeevent);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/4, var_input_buf_chan_3, 0, NULL, &writeevent);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &write_begin);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_0, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_1, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_2, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_3, 0, NULL, &writeevent);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to write to input !\n");
@@ -564,7 +595,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         }
 
         clWaitForEvents(1, &writeevent);
-        clock_gettime(CLOCK_REALTIME, &write_end);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &write_end);
 
         err = 0;
         printf("HOST: tile_num_dim_0 = %d, TILE_SIZE_DIM_0 = %d\n", tile_num_dim_0, TILE_SIZE_DIM_0);
@@ -573,25 +604,29 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         printf("HOST: output_size_dim_0 = %d, output_size_dim_1 = %d\n", output_size_dim_0, output_size_dim_1);
         printf("HOST: var_output_min_0 = %d, var_output_min_1 = %d\n", var_output_min_0, var_output_min_1);
 
-        int64_t extra_space_i_coalesed = extra_space_i/(BURST_WIDTH/PIXEL_WIDTH_I)/4;
-        int64_t extra_space_o_coalesed = extra_space_o/(BURST_WIDTH/PIXEL_WIDTH_O)/4;
-        int32_t total_burst_num = tile_num_dim_0*tile_burst_num;
-
         int kernel_arg = 0;
+        int64_t tile_data_num = ((int64_t(input_size_dim_1)*TILE_SIZE_DIM_0-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+1)*(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan/UNROLL_FACTOR);
+        int64_t coalesced_data_num = ((int64_t(input_size_dim_1)*TILE_SIZE_DIM_0-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+1)*tile_num_dim_0;
+        printf("HOST: tile_data_num = %ld, coalesced_data_num = %ld\n", tile_data_num, coalesced_data_num);
+
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_0_cl);
+        if(dram_chan>1)
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_1_cl);
+        if(dram_chan>2)
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_2_cl);
+        if(dram_chan>3)
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_output_chan_3_cl);
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_0_cl);
+        if(dram_chan>1)
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_1_cl);
+        if(dram_chan>2)
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_2_cl);
+        if(dram_chan>3)
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_input_chan_3_cl);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(coalesced_data_num), &coalesced_data_num);
+        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(tile_data_num), &tile_data_num);
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(tile_num_dim_0), &tile_num_dim_0);
         err |= clSetKernelArg(kernel, kernel_arg++, sizeof(input_size_dim_1), &input_size_dim_1);
-        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(tile_burst_num), &tile_burst_num);
-        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(extra_space_i_coalesed), &extra_space_i_coalesed);
-        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(extra_space_o_coalesed), &extra_space_o_coalesed);
-        err |= clSetKernelArg(kernel, kernel_arg++, sizeof(total_burst_num), &total_burst_num);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to set kernel arguments\n");
@@ -617,7 +652,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         // using the maximum number of work group items for this device
         //
         timespec execute_begin, execute_end;
-        clock_gettime(CLOCK_REALTIME, &execute_begin);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &execute_begin);
         err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
         if (err)
         {
@@ -626,17 +661,17 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         }
 
         clWaitForEvents(1, &execute);
-        clock_gettime(CLOCK_REALTIME, &execute_end);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &execute_end);
 
         // Read back the results from the device to verify the output
         //
         timespec read_begin, read_end;
         cl_event readevent;
-        clock_gettime(CLOCK_REALTIME, &read_begin);
-        err = clEnqueueReadBuffer(commands, var_output_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_0, 0, NULL, &readevent );
-        err = clEnqueueReadBuffer(commands, var_output_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_1, 0, NULL, &readevent );
-        err = clEnqueueReadBuffer(commands, var_output_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_2, 0, NULL, &readevent );
-        err = clEnqueueReadBuffer(commands, var_output_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/4, var_output_buf_chan_3, 0, NULL, &readevent );
+        clock_gettime(CLOCK_MONOTONIC_RAW, &read_begin);
+        err = clEnqueueReadBuffer(commands, var_output_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_0, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_1, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_2, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_3, 0, NULL, &readevent );
         if (err != CL_SUCCESS)
         {
             printf("ERROR: Failed to read output %d\n", err);
@@ -644,18 +679,14 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         }
 
         clWaitForEvents(1, &readevent);
-        clock_gettime(CLOCK_REALTIME, &read_end);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &read_end);
 
         double elapsed_time = 0.;
         elapsed_time = (double(write_end.tv_sec-write_begin.tv_sec)+(write_end.tv_nsec-write_begin.tv_nsec)/1e9)*1e6;
-        printf("PCIe write time:       %lf us\n", elapsed_time);
-        printf("PCIe write throughput: %lf GB/s\n", input_size_dim_0*input_size_dim_1*var_input_elem_size/elapsed_time/1e3);
         elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;
         printf("Kernel run time:       %lf us\n", elapsed_time);
         printf("Kernel throughput:     %lf pixel/ns\n", input_size_dim_0*input_size_dim_1/elapsed_time/1e3);
         elapsed_time = (double(read_end.tv_sec-read_begin.tv_sec)+(read_end.tv_nsec-read_begin.tv_nsec)/1e9)*1e6;
-        printf("PCIe read time:        %lf us\n", elapsed_time);
-        printf("PCIe read throughput:  %lf GB/s\n", output_size_dim_0*output_size_dim_1*var_output_elem_size/elapsed_time/1e3);
 
         clReleaseMemObject(var_input_chan_0_cl);
         clReleaseMemObject(var_input_chan_1_cl);
@@ -678,26 +709,27 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/(BURST_LENGTH*4);
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%(BURST_LENGTH*4);
+                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);
+                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);
                         int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_O+c*BURST_LENGTH*4+burst_residue;
+                        //int64_t tiled_offset = (tile_index_dim_0*tile_pixel_num+burst_index*BURST_LENGTH*4)*CHANNEL_NUM_O+c*BURST_LENGTH*4+burst_residue;
+                        int64_t tiled_offset = tile_index_dim_0*tile_size_linearized_o+(burst_index*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan))*CHANNEL_NUM_O+c*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan)+burst_residue;
                         int64_t original_offset = (q*var_output_stride_1+p)*CHANNEL_NUM_O+c;
                         //printf("p=%d, q=%d, i=%d, j=%d, tiled_offset = %d, original_offset = %d, var_output_buf[tiled_offset] = %d\n",p,q,i,j,tiled_offset, original_offset, var_output_buf[tiled_offset]);
-                        switch(tiled_offset%4)
+                        switch(tiled_offset%dram_chan)
                         {
                             case 0:
-                                var_output[original_offset] = var_output_buf_chan_0[tiled_offset/4];
+                                var_output[original_offset] = var_output_buf_chan_0[tiled_offset/dram_chan];
                                 break;
                             case 1:
-                                var_output[original_offset] = var_output_buf_chan_1[tiled_offset/4];
+                                var_output[original_offset] = var_output_buf_chan_1[tiled_offset/dram_chan];
                                 break;
                             case 2:
-                                var_output[original_offset] = var_output_buf_chan_2[tiled_offset/4];
+                                var_output[original_offset] = var_output_buf_chan_2[tiled_offset/dram_chan];
                                 break;
                             case 3:
-                                var_output[original_offset] = var_output_buf_chan_3[tiled_offset/4];
+                                var_output[original_offset] = var_output_buf_chan_3[tiled_offset/dram_chan];
                                 break;
                         }
                     }
