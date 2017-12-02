@@ -581,7 +581,7 @@ elif ('iter' in config or 'ITER' in os.environ) and 'coeff' in config:
 
 extra_params = config.get('extra_params', None)
 i = 0
-while (('TILE_SIZE_DIM_%d' % i) in os.environ):
+while (i < config['dim']-1 and ('TILE_SIZE_DIM_%d' % i) in os.environ):
     St[i] = int(os.environ[('TILE_SIZE_DIM_%d' % i)])
     i += 1
 
