@@ -33,7 +33,6 @@ WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
 
 HOST_CFLAGS = -std=c++0x -g -Wall -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/include/1_2
 HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -lrt -ldl -lpthread -lz $(shell libpng-config --ldflags)
-#HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -llmx6.0 -ldl -lpthread -lz $(shell libpng-config --ldflags)
 
 XDEVICE ?= xilinx:adm-pcie-7v3:1ddr:3.0
 XDEVICE := xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0
@@ -49,17 +48,17 @@ CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL
 CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g --temp_dir $(TMP)
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
-CLCXX_OPT += --max_memory_ports $(APP)_kernel
-CLCXX_OPT += --xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM0.core.OCL_REGION_0.M00_AXI
-CLCXX_OPT += --xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM1.core.OCL_REGION_0.M01_AXI
-CLCXX_OPT += --xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM2.core.OCL_REGION_0.M02_AXI
-CLCXX_OPT += --xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM3.core.OCL_REGION_0.M03_AXI
+CLCXX_OPT += $(if $(shell grep -E "^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem0" $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM0.core.OCL_REGION_0.M00_AXI)
+CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem1' $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM1.core.OCL_REGION_0.M01_AXI)
+CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem2' $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM2.core.OCL_REGION_0.M02_AXI)
+CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem3' $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM3.core.OCL_REGION_0.M03_AXI)
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
 
 csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN)
-	ulimit -s unlimited;XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@ulimit -s unlimited;XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
 	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
@@ -87,6 +86,7 @@ mktemp:
 	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
 $(SRC)/$(KERNEL_SRCS): $(SRC)/$(APP).json
+	@echo UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) ./generate-kernel.py\<$^\>$@
 	@TMP=$$(mktemp --suffix='generate-kernel.py');if UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) ./generate-kernel.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};exit 1;fi
 
 $(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o)
