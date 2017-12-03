@@ -6,12 +6,13 @@ TILE_SIZE_DIM_0 ?= 8000
 #TILE_SIZE_DIM_1 ?= 1024
 UNROLL_FACTOR ?= 64
 HOST_ARGS ?= 8000 8000
+DRAM_CHAN ?= 1
 
-CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).xclbin
-COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).xclbin
-HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).xclbin
+CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
+COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
+HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
 
-KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR).cpp
+KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).cpp
 KERNEL_NAME ?= $(APP)_kernel
 HOST_SRCS ?= $(APP)_run.cpp $(APP).cpp
 HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))
@@ -48,17 +49,17 @@ CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL
 CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g --temp_dir $(TMP)
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
-CLCXX_OPT += $(if $(shell grep -E "^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem0" $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM0.core.OCL_REGION_0.M00_AXI)
-CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem1' $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM1.core.OCL_REGION_0.M01_AXI)
-CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem2' $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM2.core.OCL_REGION_0.M02_AXI)
-CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem3' $(SRC)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM3.core.OCL_REGION_0.M03_AXI)
+CLCXX_OPT += $(if $(shell grep -E "^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem0" $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM0.core.OCL_REGION_0.M00_AXI)
+CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem1' $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM1.core.OCL_REGION_0.M01_AXI)
+CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem2' $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM2.core.OCL_REGION_0.M02_AXI)
+CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem3' $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM3.core.OCL_REGION_0.M03_AXI)
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
 
 csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN)
-	@echo XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@ulimit -s unlimited;XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@ulimit -s unlimited;DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
 	XCL_EMULATION_MODE=true $(WITH_SDACCEL) $^ $(HOST_ARGS)
@@ -85,9 +86,9 @@ check-afi-status:
 mktemp:
 	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
-$(SRC)/$(KERNEL_SRCS): $(SRC)/$(APP).json
-	@echo UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) ./generate-kernel.py\<$^\>$@
-	@TMP=$$(mktemp --suffix='generate-kernel.py');if UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) ./generate-kernel.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};exit 1;fi
+$(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).json
+	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) ./generate-kernel.py\<$^\>$@
+	@TMP=$$(mktemp --suffix='generate-kernel.py');if DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) ./generate-kernel.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};exit 1;fi
 
 $(BIN)/$(HOST_BIN): $(HOST_SRCS:%.cpp=$(OBJ)/%-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o)
 	@mkdir -p $(BIN)
@@ -100,13 +101,13 @@ $(OBJ)/%-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o: $
 
 -include $(OBJ)/$(HOST_SRCS:%.cpp=%.d)
 
-$(BIT)/$(CSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json $(SRC)/$(APP)_params.h
+$(BIT)/$(CSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS) $(BIN)/emconfig.json $(SRC)/$(APP)_params.h
 	@mkdir -p $(BIT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_CSIM_OPT) $(CLCXX_OPT) -o $@ $<
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 
-$(BIT)/$(COSIM_XCLBIN): $(SRC)/$(KERNEL_SRCS) $(BIN)/emconfig.json $(SRC)/$(APP)_params.h
+$(BIT)/$(COSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS) $(BIN)/emconfig.json $(SRC)/$(APP)_params.h
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
@@ -129,7 +130,7 @@ endif
 $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin): check-aws-bucket $(BIT)/$(HW_XCLBIN)
 	@TMP=$$(mktemp -d);ln -rs ${BIT}/$(HW_XCLBIN) $${TMP};pushd $${TMP} >/dev/null;create-sdaccel-afi -xclbin=$(HW_XCLBIN) -o=$(HW_XCLBIN:.xclbin=) -s3_bucket=$(AWS_BUCKET) -s3_dcp_key=$(AWS_AFI_DIR) -s3_logs_key=$(AWS_AFI_LOG);popd >/dev/null;mv $${TMP}/$(HW_XCLBIN:.xclbin=.awsxclbin) $(BIT);mv $${TMP}/*afi_id.txt $(BIT)/$(HW_XCLBIN:.xclbin=.afi);rm -rf $${TMP}
 
-$(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SRC)/$(KERNEL_SRCS) $(SRC)/$(APP)_params.h
+$(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(TMP)/$(KERNEL_SRCS) $(SRC)/$(APP)_params.h
 	@mkdir -p $(OBJ)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -c -o $@ $<
 	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
