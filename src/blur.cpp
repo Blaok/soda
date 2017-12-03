@@ -605,7 +605,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         printf("HOST: var_output_min_0 = %d, var_output_min_1 = %d\n", var_output_min_0, var_output_min_1);
 
         int kernel_arg = 0;
-        int64_t tile_data_num = ((int64_t(input_size_dim_1)*TILE_SIZE_DIM_0-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+1)*(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan/UNROLL_FACTOR);
+        int64_t tile_data_num = ((int64_t(input_size_dim_1)*TILE_SIZE_DIM_0-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+1)*BURST_WIDTH/PIXEL_WIDTH_I*dram_chan/UNROLL_FACTOR;
         int64_t coalesced_data_num = ((int64_t(input_size_dim_1)*TILE_SIZE_DIM_0-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+1)*tile_num_dim_0;
         printf("HOST: tile_data_num = %ld, coalesced_data_num = %ld\n", tile_data_num, coalesced_data_num);
 
