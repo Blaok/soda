@@ -193,8 +193,14 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     PrintLine('input_type input_points[CHANNEL_NUM_I][UNROLL_FACTOR][%d];' % len(A))
     for idx, item in enumerate(A):
         PrintLine('//         input_points[CHANNEL_NUM_I][UNROLL_FACTOR][%d] <=> (%s)' % (idx, str(item)[1:-1]))
-    PrintLine('input_type input_buffer[CHANNEL_NUM_I][UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR)];' % dram_chan)
-    PrintLine('output_type output_buffer[CHANNEL_NUM_O][UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_O/UNROLL_FACTOR)];' % dram_chan)
+    if burst_width*dram_chan/pixel_width_i/k <= 1:
+        PrintLine('input_type input_buffer[CHANNEL_NUM_I][UNROLL_FACTOR];')
+    else:
+        PrintLine('input_type input_buffer[CHANNEL_NUM_I][UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR)];' % dram_chan)
+    if burst_width*dram_chan/pixel_width_o/k <= 1:
+        PrintLine('output_type output_buffer[CHANNEL_NUM_O][UNROLL_FACTOR];')
+    else:
+        PrintLine('output_type output_buffer[CHANNEL_NUM_O][UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_O/UNROLL_FACTOR)];' % dram_chan)
     PrintLine('#pragma HLS array_partition variable=input_points complete dim=0', 0)
     PrintLine('#pragma HLS array_partition variable=input_buffer complete dim=0', 0)
     PrintLine('#pragma HLS array_partition variable=output_buffer complete dim=0', 0)
@@ -206,7 +212,7 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
 
     PrintLine('// produce output')
     PrintLine('compute_epoch:', 0)
-    PrintLine('for(int32_t epoch = 0; epoch < coalesced_data_num*(BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR); ++epoch)' % dram_chan)
+    PrintLine('for(int32_t epoch = 0; epoch < coalesced_data_num*BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR; ++epoch)' % dram_chan)
     PrintLine('{')
     indent += 1
     if len(buf['FFs'])>0:
@@ -215,34 +221,51 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
         PrintLine('#pragma HLS dependence variable=FIFO_%d inter false' % (fifo_length/k), 0)
     PrintLine('#pragma HLS pipeline II=1', 0)
 
-    PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_i/k-1))
-    PrintLine('{'); indent += 1
-    PrintLine('case 0:')
-    PrintLine('{'); indent += 1
-    for i in range(0, dram_chan):
-        PrintLine('ap_uint<BURST_WIDTH> tmp_%d;' % i)
-    for i in range(0, dram_chan):
-        PrintLine('from_%d>>tmp_%d;' % (i, i))
-    PrintLine('load_coalesced:', 0)
-    PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
-    PrintLine('{'); indent += 1
-    PrintLine('#pragma HLS unroll', 0)
-    for i in range(0, dram_chan):
-        PrintLine('input_buffer[0][j*%d+%d] = tmp_%d((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % (dram_chan, i, i))
-    indent -= 1; PrintLine('}')
-    PrintLine('break;')
-    indent -= 1; PrintLine('}')
-    PrintLine('default:')
-    PrintLine('{'); indent += 1
-    PrintLine('load_shift:', 0)
-    PrintLine('for(int j = 0; j < UNROLL_FACTOR; ++j)')
-    PrintLine('{'); indent += 1
-    PrintLine('#pragma HLS unroll', 0)
-    for i in range(0, int(burst_width/pixel_width_i*dram_chan/k-1)):
-        PrintLine('input_buffer[0][j+UNROLL_FACTOR*%d] = input_buffer[0][j+UNROLL_FACTOR*%d];' % (i, i+1))
-    indent -= 1; PrintLine('}')
-    indent -= 1; PrintLine('}')
-    indent -= 1; PrintLine('}')
+    if burst_width*dram_chan/pixel_width_i/k <= 1:
+        ratio_i = int(pixel_width_i*k/dram_chan/burst_width)
+        PrintLine('{'); indent += 1
+        PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join([('tmp_%d' % x) for x in range(0, dram_chan*ratio_i)])))
+        for i in range(0, ratio_i):
+            for j in range(0, dram_chan):
+                PrintLine('from_%d>>tmp_%d;' % (j, i*dram_chan+j))
+        PrintLine('load_coalesced:', 0)
+        PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
+        PrintLine('{'); indent += 1
+        PrintLine('#pragma HLS unroll', 0)
+        for i in range(0, ratio_i):
+            for j in range(0, dram_chan):
+                PrintLine('input_buffer[0][BURST_WIDTH/PIXEL_WIDTH_I*%d*%d+j*%d+%d] = tmp_%d((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % (dram_chan, i, dram_chan, j, i*dram_chan+j))
+        indent -= 1; PrintLine('}')
+        indent -= 1; PrintLine('}')
+    else:
+        PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_i/k-1))
+        PrintLine('{'); indent += 1
+        PrintLine('case 0:')
+        PrintLine('{'); indent += 1
+        for i in range(0, dram_chan):
+            PrintLine('ap_uint<BURST_WIDTH> tmp_%d;' % i)
+        for i in range(0, dram_chan):
+            PrintLine('from_%d>>tmp_%d;' % (i, i))
+        PrintLine('load_coalesced:', 0)
+        PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
+        PrintLine('{'); indent += 1
+        PrintLine('#pragma HLS unroll', 0)
+        for i in range(0, dram_chan):
+            PrintLine('input_buffer[0][j*%d+%d] = tmp_%d((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % (dram_chan, i, i))
+        indent -= 1; PrintLine('}')
+        PrintLine('break;')
+        indent -= 1; PrintLine('}')
+        PrintLine('default:')
+        PrintLine('{'); indent += 1
+        PrintLine('load_shift:', 0)
+        PrintLine('for(int j = 0; j < UNROLL_FACTOR; ++j)')
+        PrintLine('{'); indent += 1
+        PrintLine('#pragma HLS unroll', 0)
+        for i in range(0, int(burst_width/pixel_width_i*dram_chan/k-1)):
+            PrintLine('input_buffer[0][j+UNROLL_FACTOR*%d] = input_buffer[0][j+UNROLL_FACTOR*%d];' % (i, i+1))
+        indent -= 1; PrintLine('}')
+        indent -= 1; PrintLine('}')
+        indent -= 1; PrintLine('}')
     PrintLine()
 
     for c in range(0, input_type[1]):
@@ -282,14 +305,17 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
     for line in compute_content:
         if len(line) > 0:
             PrintLine(line.replace('\n','').replace('\r',''))
-    PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_i/k-1))
-    PrintLine('{'); indent += 1
-    for i in range(0, int(burst_width*dram_chan/pixel_width_i/k)):
-        PrintLine('case %d:' % i)
+    if burst_width*dram_chan/pixel_width_o/k <= 1:
+        PrintLine('output_buffer[0][unroll_index] = result;')
+    else:
+        PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_o/k-1))
         PrintLine('{'); indent += 1
-        PrintLine('output_buffer[0][unroll_index+UNROLL_FACTOR*%d] = result;' % i)
+        for i in range(0, int(burst_width*dram_chan/pixel_width_o/k)):
+            PrintLine('case %d:' % i)
+            PrintLine('{'); indent += 1
+            PrintLine('output_buffer[0][unroll_index+UNROLL_FACTOR*%d] = result;' % i)
+            indent -= 1;PrintLine('}')
         indent -= 1;PrintLine('}')
-    indent -= 1;PrintLine('}')
     PrintLine()
 
     PrintLine('%s += UNROLL_FACTOR;' % coords_in_tile[0])
@@ -328,19 +354,36 @@ def PrintCompute(St, A, k, compute_content, input_partition, output_partition, e
         PrintLine('FIFO_%d_ptr = FIFO_%d_ptr==(%d-1) ? 0 : FIFO_%d_ptr+1;' % (fifo_length/k, fifo_length/k, fifo_length/k, fifo_length/k))
     PrintLine()
 
-    PrintLine('if((epoch&%d)==%d)' % ((burst_width*dram_chan/pixel_width_i/k-1), burst_width*dram_chan/pixel_width_i/k-1))
-    PrintLine('{'); indent += 1
-    PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join(['tmp_%d' % x for x in range(0, dram_chan)])))
-    PrintLine('store_coalesced:', 0)
-    PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
-    PrintLine('{'); indent += 1
-    PrintLine('#pragma HLS unroll', 0)
-    for i in range(0, dram_chan):
-        PrintLine('tmp_%d((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = output_buffer[0][j*%d+%d];' % (i, dram_chan, i))
-    indent -= 1; PrintLine('}')
-    for i in range(0, dram_chan):
-        PrintLine('to_%d<<tmp_%d;' % (i, i))
-    indent -= 1; PrintLine('}')
+    if burst_width*dram_chan/pixel_width_o/k <= 1:
+        ratio_o = int(pixel_width_o*k/dram_chan/burst_width)
+        PrintLine('{'); indent += 1
+        PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join([('tmp_%d' % x) for x in range(0, dram_chan*ratio_o)])))
+        PrintLine('store_coalesced:', 0)
+        PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
+        PrintLine('{'); indent += 1
+        PrintLine('#pragma HLS unroll', 0)
+        for i in range(0, ratio_i):
+            for j in range(0, dram_chan):
+                PrintLine('tmp_%d((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = output_buffer[0][BURST_WIDTH/PIXEL_WIDTH_O*%d*%d+j*%d+%d];' % (i*dram_chan+j, dram_chan, i, dram_chan, j))
+        indent -= 1; PrintLine('}')
+        for i in range(0, ratio_o):
+            for j in range(0, dram_chan):
+                PrintLine('to_%d<<tmp_%d;' % (j, i*dram_chan+j))
+        indent -= 1; PrintLine('}')
+    else:
+        PrintLine('if((epoch&%d)==%d)' % ((burst_width*dram_chan/pixel_width_i/k-1), burst_width*dram_chan/pixel_width_i/k-1))
+        PrintLine('{'); indent += 1
+        PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join(['tmp_%d' % x for x in range(0, dram_chan)])))
+        PrintLine('store_coalesced:', 0)
+        PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
+        PrintLine('{'); indent += 1
+        PrintLine('#pragma HLS unroll', 0)
+        for i in range(0, dram_chan):
+            PrintLine('tmp_%d((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = output_buffer[0][j*%d+%d];' % (i, dram_chan, i))
+        indent -= 1; PrintLine('}')
+        for i in range(0, dram_chan):
+            PrintLine('to_%d<<tmp_%d;' % (i, i))
+        indent -= 1; PrintLine('}')
     PrintLine()
 
     PrintLine('++p_base_counter;')
