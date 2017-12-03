@@ -50,6 +50,15 @@ def GetPoints(A, k):
             all_points[j+i][i] = idx
     return all_points
 
+def GetStencilDistance(A, St):
+    A_serialized = [Serialize(x, St) for x in A]
+    return max(A_serialized) - min(A_serialized)
+
+def GetStencilDim(A):
+    min_in_dims = [min([point[dim] for point in A]) for dim in range(0, len(A[0]))]
+    max_in_dims = [max([point[dim] for point in A]) for dim in range(0, len(A[0]))]
+    return [max_index-min_index+1 for max_index, min_index in zip(max_in_dims, min_in_dims)]
+
 def GetBuffer(St, A, k):
     FFs = []    # [outputs]
     FIFOs = {}  # {length:[outputs]}
@@ -524,8 +533,6 @@ def PrintHeader(app_name):
     for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio', 'string', 'ap_int', 'hls_stream']:
         PrintLine('#include<%s.h>' % header)
     PrintLine()
-    PrintLine('#include"%s_params.h"' % app_name)
-    PrintLine()
 
 def PrintLoad(input_type):
     global indent
@@ -555,6 +562,11 @@ def PrintGuard(var, val):
     PrintLine('#if %s != %d' % (var, val))
     PrintLine('#error %s != %d' % (var, val))
     PrintLine('#endif//%s != %d' % (var, val))
+
+def PrintDefine(var, val):
+    PrintLine('#ifndef %s' % var)
+    PrintLine('#define %s %d' % (var, val))
+    PrintLine('#endif//%s' % var)
 
 # for generating iterative
 def GetA(A,  num_iter):
@@ -630,12 +642,32 @@ while (i < config['dim']-1 and ('TILE_SIZE_DIM_%d' % i) in os.environ):
 
 indent = 0
 PrintHeader(app_name)
+
 PrintLine('typedef %s input_type;' % input_type[0])
 PrintLine('typedef %s output_type;' % output_type[0])
+PrintLine()
+
+PrintDefine('BURST_WIDTH', burst_width)
+PrintDefine('PIXEL_WIDTH_I', pixel_width_i)
+PrintDefine('PIXEL_WIDTH_O', pixel_width_o)
+for i, dim in enumerate(GetStencilDim(A)):
+    PrintDefine('STENCIL_DIM_%d' % i, dim)
+PrintDefine('STENCIL_DISTANCE', GetStencilDistance(A, St))
+PrintDefine('CHANNEL_NUM_I', input_type[1])
+PrintDefine('CHANNEL_NUM_O', output_type[1])
+PrintLine()
+
 PrintGuard('UNROLL_FACTOR', k)
 for i in range(0, len(St)-1):
     PrintGuard('TILE_SIZE_DIM_%d' % i, St[i])
+PrintGuard('BURST_WIDTH', burst_width)
+PrintGuard('PIXEL_WIDTH_I', pixel_width_i)
+PrintGuard('PIXEL_WIDTH_O', pixel_width_o)
+for i, dim in enumerate(GetStencilDim(A)):
+    PrintGuard('STENCIL_DIM_%d' % i, dim)
+PrintGuard('STENCIL_DISTANCE', GetStencilDistance(A, St))
 PrintLine()
+
 PrintLoad(input_type[0])
 PrintLine()
 PrintStore(output_type[0])
