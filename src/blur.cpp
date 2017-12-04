@@ -435,10 +435,10 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
    
         err = clGetPlatformIDs(16, platforms, &platform_count);
         if (err != CL_SUCCESS)
-            {
-                printf("FATAL: Failed to find an OpenCL platform\n");
-                exit(EXIT_FAILURE);
-            }
+        {
+            printf("FATAL: Failed to find an OpenCL platform\n");
+            exit(EXIT_FAILURE);
+        }
         printf("INFO: Found %d platforms\n", platform_count);
 
         int platform_found = 0;
