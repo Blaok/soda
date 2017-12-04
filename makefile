@@ -31,28 +31,39 @@ CLCXX ?= xocc
 
 XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
+SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0
 
 HOST_CFLAGS = -std=c++0x -g -Wall -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/include/1_2
 HOST_LFLAGS = -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -lrt -ldl -lpthread -lz $(shell libpng-config --ldflags)
 
+ifdef AWS_BUCKET
+XDEVICE ?= xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0
+else # AWS_BUCKET
 XDEVICE ?= xilinx:adm-pcie-7v3:1ddr:3.0
-XDEVICE := xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0
-ifeq ($(SDA_VER),2017.2)
-	XILINX_SDX ?= /opt/tools/xilinx/SDx/$(SDA_VER)
-	HOST_CFLAGS += -DTARGET_DEVICE=\"$(subst :,_,$(subst .,_,$(XDEVICE)))\"
-else
-	HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
+endif # AWS_BUCKET
+
+ifeq (,$(findstring $(XDEVICE),$(SUPPORTED_XDEVICES)))
+$(error $(XDEVICE) is not supported)
 endif
+
+ifeq ($(SDA_VER),2017.2)
+XILINX_SDX ?= /opt/tools/xilinx/SDx/$(SDA_VER)
+HOST_CFLAGS += -DTARGET_DEVICE=\"$(subst :,_,$(subst .,_,$(XDEVICE)))\"
+else # ($(SDA_VER),2017.2)
+HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
+endif # ($(SDA_VER),2017.2)
 HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
 CLCXX_OPT += -s -g --temp_dir $(TMP)
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
+ifeq ($(XDEVICE),"xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 CLCXX_OPT += $(if $(shell grep -E "^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem0" $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM0.core.OCL_REGION_0.M00_AXI)
 CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem1' $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM1.core.OCL_REGION_0.M01_AXI)
 CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem2' $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM2.core.OCL_REGION_0.M02_AXI)
 CLCXX_OPT += $(if $(shell grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem3' $(TMP)/$(KERNEL_SRCS)),--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_GMEM3.core.OCL_REGION_0.M03_AXI)
+endif # ($(XDEVICE),"xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
@@ -69,12 +80,12 @@ bitstream: $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
 	$(WITH_SDACCEL) $^ $(HOST_ARGS)
-else
+else # ($(XDEVICE),"xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 bitstream: $(BIT)/$(HW_XCLBIN)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
 	$(WITH_SDACCEL) $^ $(HOST_ARGS)
-endif
+endif # ($(XDEVICE),"xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 
 hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 
@@ -125,7 +136,7 @@ $(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 check-aws-bucket:
 ifndef AWS_BUCKET
 	$(error AWS_BUCKET must be set to an available AWS S3 bucket)
-endif
+endif # AWS_BUCKET
 
 $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin): check-aws-bucket $(BIT)/$(HW_XCLBIN)
 	@TMP=$$(mktemp -d);ln -rs ${BIT}/$(HW_XCLBIN) $${TMP};pushd $${TMP} >/dev/null;create-sdaccel-afi -xclbin=$(HW_XCLBIN) -o=$(HW_XCLBIN:.xclbin=) -s3_bucket=$(AWS_BUCKET) -s3_dcp_key=$(AWS_AFI_DIR) -s3_logs_key=$(AWS_AFI_LOG);popd >/dev/null;mv $${TMP}/$(HW_XCLBIN:.xclbin=.awsxclbin) $(BIT);mv $${TMP}/*afi_id.txt $(BIT)/$(HW_XCLBIN:.xclbin=.afi);rm -rf $${TMP}
