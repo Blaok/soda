@@ -334,7 +334,6 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
             dram_separate = true;
             dram_chan /= 2;
         }
-        printf("DRAM_CHAN: %d\n", dram_chan);
 
         // align each linearized tile to multiples of BURST_WIDTH
         int64_t tile_pixel_num = TILE_SIZE_DIM_0*input_size_dim_1;
@@ -616,6 +615,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         clock_gettime(CLOCK_MONOTONIC_RAW, &write_end);
 
         err = 0;
+        printf("HOST: Using %d DRAM channels%s\n", dram_chan, dram_separate ? ", separated" : "");
         printf("HOST: tile_num_dim_0 = %d, TILE_SIZE_DIM_0 = %d\n", tile_num_dim_0, TILE_SIZE_DIM_0);
         printf("HOST: var_input_extent_0 = %d, var_input_extent_1 = %d\n", input_size_dim_0, input_size_dim_1);
         printf("HOST: var_input_min_0 = %d, var_input_min_1 = %d\n", var_input_min_0, var_input_min_1);
