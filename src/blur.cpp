@@ -16,7 +16,7 @@
 #include "blur.h"
 #include "blur_params.h"
 
-int load_file_to_memory(const char *filename, char **result)
+int load_xclbin2_to_memory(const char *filename, char **result, char** device)
 { 
     size_t size = 0;
     FILE *f = fopen(filename, "rb");
@@ -24,11 +24,21 @@ int load_file_to_memory(const char *filename, char **result)
     {
         *result = NULL;
         return -1;
-    } 
+    }
+    char magic[8];
+    fread(magic, 8, 1, f);
+    if(strcmp(magic, "xclbin2")!=0)
+    {
+        *result = nullptr;
+        printf("ERROR: not a valid xclbin2 file.\n");
+        return -2;
+    }
+    fread(device, 64, 1, f);
     fseek(f, 0, SEEK_END);
     size = ftell(f);
     fseek(f, 0, SEEK_SET);
     *result = (char *)malloc(size+1);
+    *device = (*result)+8+32+256+8+6*8;
     if (size != fread(*result, sizeof(char), size, f))
     {
         free(*result);
@@ -381,12 +391,6 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         }
 
         // prepare for opencl
-#if defined(SDA_PLATFORM) && !defined(TARGET_DEVICE)
-#define STR_VALUE(arg)      #arg
-#define GET_STRING(name) STR_VALUE(name)
-#define TARGET_DEVICE GET_STRING(SDA_PLATFORM)
-#endif
-        const char *target_device_name = TARGET_DEVICE;
         int err;                            // error code returned from api calls
 
         cl_platform_id platforms[16];       // platform id
@@ -408,6 +412,27 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         cl_mem var_output_chan_1_cl;               // device memory used for the output array
         cl_mem var_output_chan_2_cl;               // device memory used for the output array
         cl_mem var_output_chan_3_cl;               // device memory used for the output array
+
+        unsigned char *kernelbinary;
+        const char *device_name;
+        char target_device_name[64];
+        printf("INFO: Loading %s\n", xclbin);
+        int n_i = load_xclbin2_to_memory(xclbin, (char **) &kernelbinary, (char**)&device_name);
+        if (n_i < 0) {
+            printf("FATAL: Failed to load kernel from xclbin: %s\n", xclbin);
+            exit(EXIT_FAILURE);
+        }
+        for(int i = 0; i<64; ++i)
+        {
+            if(device_name[i]==':' || device_name[i]=='.')
+            {
+                target_device_name[i] = '_';
+            }
+            else
+            {
+                target_device_name[i] = device_name[i];
+            }
+        }
    
         err = clGetPlatformIDs(16, platforms, &platform_count);
         if (err != CL_SUCCESS)
@@ -452,11 +477,11 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
                 printf("FATAL: Failed to get device name for device %d\n", i);
                 exit(EXIT_FAILURE);
             }
-            //printf("CL_DEVICE_NAME %s\n", cl_device_name);
-            if(strcmp(cl_device_name, target_device_name) == 0) {
+            //printf("INFO: Find device %s\n", cl_device_name);
+            if(strcmp(cl_device_name, target_device_name) == 0 || strcmp(cl_device_name, device_name) == 0) {
                 device_id = devices[i];
                 device_found = 1;
-                printf("INFO: Selected %s as the target device\n", cl_device_name);
+                printf("INFO: Selected %s as the target device\n", target_device_name);
             }
         }
         
@@ -487,13 +512,6 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
 
         int status;
 
-        unsigned char *kernelbinary;
-        printf("INFO: Loading %s\n", xclbin);
-        int n_i = load_file_to_memory(xclbin, (char **) &kernelbinary);
-        if (n_i < 0) {
-            printf("FATAL: Failed to load kernel from xclbin: %s\n", xclbin);
-            exit(EXIT_FAILURE);
-        }
         size_t n = n_i;
         program = clCreateProgramWithBinary(context, 1, &device_id, &n,
                                            (const unsigned char **) &kernelbinary, &status, &err);
