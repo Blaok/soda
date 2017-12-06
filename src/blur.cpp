@@ -480,7 +480,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
             if(strcmp(cl_device_name, target_device_name) == 0 || strcmp(cl_device_name, device_name) == 0) {
                 device_id = devices[i];
                 device_found = 1;
-                printf("INFO: Selected %s as the target device\n", target_device_name);
+                printf("INFO: Selected %s as the target device\n", device_name);
             }
         }
         
