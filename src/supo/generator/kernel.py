@@ -508,7 +508,7 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
     printer.PrintLine()
     printer.PrintLine('}//extern "C"')
 
-def PrintHeader(printer, app_name):
+def PrintHeader(printer):
     for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio', 'string', 'ap_int', 'hls_stream']:
         printer.PrintLine('#include<%s.h>' % header)
     printer.PrintLine()
@@ -602,7 +602,7 @@ def PrintCode(stencil, output_file):
     input_partition = burst_width/pixel_width_i*dram_chan/2 if burst_width/pixel_width_i*dram_chan/2 > k/2 else k/2
     output_partition = burst_width/pixel_width_o*dram_chan/2 if burst_width/pixel_width_o*dram_chan/2 > k/2 else k/2
 
-    PrintHeader(printer, app_name)
+    PrintHeader(printer)
 
     printer.PrintLine('typedef %s input_type;' % input_type)
     printer.PrintLine('typedef %s output_type;' % output_type)
