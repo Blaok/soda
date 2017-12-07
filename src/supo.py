@@ -6,7 +6,7 @@ from textx.exceptions import TextXSyntaxError
 import logging
 import operator
 import sys
-import supo_code_gen
+import supo.generator.kernel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ def main():
     except TextXSyntaxError as e:
         logger.error(e)
     else:
-        stencil = supo_code_gen.Stencil(
+        stencil = supo.generator.kernel.Stencil(
             burst_width = supo_model.burst_width,
             dram_chan = supo_model.dram_chan,
             app_name = supo_model.app_name,
@@ -184,7 +184,7 @@ def main():
             k = supo_model.k,
             dram_separate = supo_model.dram_separate)
         with open('%s_kernel.cpp' % supo_model.app_name, 'w') as kernel_file:
-            supo_code_gen.PrintCode(stencil, kernel_file)
+            supo.generator.kernel.PrintCode(stencil, kernel_file)
 
 if __name__ == '__main__':
     main()
