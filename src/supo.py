@@ -5,8 +5,8 @@ from textx import metamodel_from_file
 from textx.exceptions import TextXSyntaxError
 import logging
 import operator
-import sys
 import supo.generator.kernel
+import sys
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,7 +21,6 @@ class SupoProgram(object):
         self.input = kwargs.pop('input')
         self.tile_size = self.input.tile_size
         self.dim = len(self.tile_size)
-        # TODO: get dims
         self.output = kwargs.pop('output')
         # TODO: check dims
         self.A = self.output.GetA()

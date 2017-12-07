@@ -37,11 +37,11 @@ def GetPoints(tile_size, A, k):
             all_points[j+i][i] = idx
     return all_points
 
-def Gettile_sizeencilDistance(A, tile_size):
+def GetStencilDistance(A, tile_size):
     A_serialized = [Serialize(x, tile_size) for x in A]
     return max(A_serialized) - min(A_serialized)
 
-def Gettile_sizeencilDim(A):
+def GetStencilDim(A):
     min_in_dims = [min([point[dim] for point in A]) for dim in range(0, len(A[0]))]
     max_in_dims = [max([point[dim] for point in A]) for dim in range(0, len(A[0]))]
     return [max_index-min_index+1 for max_index, min_index in zip(max_in_dims, min_in_dims)]
@@ -610,9 +610,9 @@ def PrintCode(stencil, output_file):
     PrintDefine(printer, 'BURST_WIDTH', burst_width)
     PrintDefine(printer, 'PIXEL_WIDTH_I', pixel_width_i)
     PrintDefine(printer, 'PIXEL_WIDTH_O', pixel_width_o)
-    for i, dim in enumerate(Gettile_sizeencilDim(A)):
+    for i, dim in enumerate(GetStencilDim(A)):
         PrintDefine(printer, 'STENCIL_DIM_%d' % i, dim)
-    PrintDefine(printer, 'STENCIL_DISTANCE', Gettile_sizeencilDistance(A, tile_size))
+    PrintDefine(printer, 'STENCIL_DISTANCE', GetStencilDistance(A, tile_size))
     PrintDefine(printer, 'CHANNEL_NUM_I', input_chan)
     PrintDefine(printer, 'CHANNEL_NUM_O', output_chan)
     printer.PrintLine()
@@ -623,9 +623,9 @@ def PrintCode(stencil, output_file):
     PrintGuard(printer, 'BURST_WIDTH', burst_width)
     PrintGuard(printer, 'PIXEL_WIDTH_I', pixel_width_i)
     PrintGuard(printer, 'PIXEL_WIDTH_O', pixel_width_o)
-    for i, dim in enumerate(Gettile_sizeencilDim(A)):
+    for i, dim in enumerate(GetStencilDim(A)):
         PrintGuard(printer, 'STENCIL_DIM_%d' % i, dim)
-    PrintGuard(printer, 'STENCIL_DISTANCE', Gettile_sizeencilDistance(A, tile_size))
+    PrintGuard(printer, 'STENCIL_DISTANCE', GetStencilDistance(A, tile_size))
     printer.PrintLine()
 
     PrintLoad(printer)
