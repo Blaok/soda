@@ -6,7 +6,8 @@ import os
 import sys
 from fractions import Fraction
 from functools import reduce
-from supo.generator.utils import coords_in_tile, coords_in_orig, type_width, Stencil, Printer
+sys.path.append(os.path.dirname(__file__))
+from utils import coords_in_tile, coords_in_orig, type_width, Stencil, Printer
 
 # serialize
 def Serialize(vec, tile_size):
