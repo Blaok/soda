@@ -7,15 +7,7 @@ import sys
 from fractions import Fraction
 from functools import reduce
 sys.path.append(os.path.dirname(__file__))
-from utils import coords_in_tile, coords_in_orig, type_width, Stencil, Printer
-
-# serialize
-def Serialize(vec, tile_size):
-    # convert vec to scalar coordinates
-    result = vec[0]
-    for i in range(1, len(tile_size)):
-        result += vec[i]*reduce(operator.mul, tile_size[0:i])
-    return result
+from utils import coords_in_tile, coords_in_orig, type_width, Stencil, Printer, GetStencilFromJSON, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim
 
 def GetChains(tile_size, A, k):
     A_dag = set()
@@ -37,15 +29,6 @@ def GetPoints(tile_size, A, k):
             all_points[j+i] = all_points.get(j+i, {})
             all_points[j+i][i] = idx
     return all_points
-
-def GetStencilDistance(A, tile_size):
-    A_serialized = [Serialize(x, tile_size) for x in A]
-    return max(A_serialized) - min(A_serialized)
-
-def GetStencilDim(A):
-    min_in_dims = [min([point[dim] for point in A]) for dim in range(0, len(A[0]))]
-    max_in_dims = [max([point[dim] for point in A]) for dim in range(0, len(A[0]))]
-    return [max_index-min_index+1 for max_index, min_index in zip(max_in_dims, min_in_dims)]
 
 def GetBuffer(tile_size, A, k):
     FFs = []    # [outputs]
@@ -535,16 +518,6 @@ def PrintStore(printer):
     printer.UnScope()
     printer.UnScope()
 
-def PrintGuard(printer, var, val):
-    printer.PrintLine('#if %s != %d' % (var, val))
-    printer.PrintLine('#error %s != %d' % (var, val))
-    printer.PrintLine('#endif//%s != %d' % (var, val))
-
-def PrintDefine(printer, var, val):
-    printer.PrintLine('#ifndef %s' % var)
-    printer.PrintLine('#define %s %d' % (var, val))
-    printer.PrintLine('#endif//%s' % var)
-
 # for generating iterative
 def GetA(A,  num_iter):
     if num_iter < 1:
@@ -638,59 +611,7 @@ def PrintCode(stencil, output_file):
     PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dram_separate)
 
 def main():
-    config = json.loads(sys.stdin.read())
-    input_type = config['input_type']
-    output_type = config['output_type']
-    dram_chan = int(os.environ.get('DRAM_CHAN', config['dram_chan']))
-    dram_separate = ('DRAM_SEPARATE' in os.environ) or ('dram_separate' in config and config['dram_separate'])
-    if dram_separate:
-        dram_chan = int(dram_chan/2)
-    app_name = config['app_name']
-    tile_size = config.get('St', [0]*config['dim'])
-    A = config['A']
-    k = int(os.environ.get('UNROLL_FACTOR', config['k']))
-    burst_width = config['burst_width']
-
-# generate compute content if it is not present in the config but iter and coeff are
-    compute_content = []
-    if 'compute_content' in config:
-        compute_content = config['compute_content']
-    elif ('iter' in config or 'ITER' in os.environ) and 'coeff' in config:
-        num_iter = int(os.environ.get('ITER', config['iter']))
-        coeff = [Fraction(x) for x in config['coeff']]
-        if len(A) != len(coeff):
-            sys.stderr.write('A and coeff must have the same length\n')
-            sys.exit(1)
-        A = {str(a):(a, c) for a, c in zip(A, coeff)}
-        A = (GetA(A, num_iter))
-        final_var = GetAdderTree(['input_%s*%ff' % ('_'.join([str(x) for x in a[0]]), (1.*a[1].numerator)/a[1].denominator) for a in A.values()], 0)
-        compute_content += ['output_type output_point = %s;' % (final_var[0],), 'output[0][output_index_offset] = output_point;' ,'']
-        A = [a[0] for a in A.values()]
-
-    extra_params = config.get('extra_params', None)
-    i = 0
-    while (i < config['dim']-1 and ('TILE_SIZE_DIM_%d' % i) in os.environ):
-        tile_size[i] = int(os.environ[('TILE_SIZE_DIM_%d' % i)])
-        i += 1
-
-    stencil = Stencil(
-        burst_width = burst_width,
-        app_name = app_name,
-        input_name = 'input',
-        input_type = input_type[0],
-        input_chan = input_type[1],
-        output_name = 'output',
-        output_type = output_type[0],
-        output_chan = output_type[1],
-        A = A,
-        dim = config['dim'],
-        extra_params = extra_params,
-        compute_content = compute_content,
-        dram_chan = dram_chan,
-        tile_size = tile_size,
-        k = k,
-        dram_separate = dram_separate)
-
+    stencil = GetStencilFromJSON(sys.stdin)
     PrintCode(stencil, sys.stdout)
 
 if __name__ == '__main__':
