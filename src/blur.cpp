@@ -1,51 +1,92 @@
-#include <assert.h>
-#include <float.h>
-#include <math.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <fcntl.h>
-#include <time.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <CL/opencl.h>
+#include<assert.h>
+#include<float.h>
+#include<math.h>
+#include<stdbool.h>
+#include<stdint.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<fcntl.h>
+#include<time.h>
+#include<unistd.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<CL/opencl.h>
 
-#include "blur.h"
-#include "blur_params.h"
+#include"blur.h"
+
+#ifndef BURST_WIDTH
+#define BURST_WIDTH 512
+#endif//BURST_WIDTH
+#ifndef PIXEL_WIDTH_I
+#define PIXEL_WIDTH_I 16
+#endif//PIXEL_WIDTH_I
+#ifndef PIXEL_WIDTH_O
+#define PIXEL_WIDTH_O 16
+#endif//PIXEL_WIDTH_O
+#ifndef STENCIL_DIM_0
+#define STENCIL_DIM_0 3
+#endif//STENCIL_DIM_0
+#ifndef STENCIL_DIM_1
+#define STENCIL_DIM_1 3
+#endif//STENCIL_DIM_1
+#ifndef STENCIL_DISTANCE
+#define STENCIL_DISTANCE 16002
+#endif//STENCIL_DISTANCE
+#ifndef CHANNEL_NUM_I
+#define CHANNEL_NUM_I 1
+#endif//CHANNEL_NUM_I
+#ifndef CHANNEL_NUM_O
+#define CHANNEL_NUM_O 1
+#endif//CHANNEL_NUM_O
 
 int load_xclbin2_to_memory(const char *filename, char **result, char** device)
-{ 
-    size_t size = 0;
+{
+    uint64_t size = 0;
     FILE *f = fopen(filename, "rb");
-    if (NULL == f)
+    if(nullptr == f)
     {
-        *result = NULL;
+        *result = nullptr;
+        fprintf(stderr, "ERROR: cannot open %s\n", filename);
         return -1;
     }
     char magic[8];
-    fread(magic, 8, 1, f);
+    unsigned char cipher[32];
+    unsigned char key_block[256];
+    uint64_t unique_id;
+    fread(magic, sizeof(magic), 1, f);
     if(strcmp(magic, "xclbin2")!=0)
     {
         *result = nullptr;
-        printf("ERROR: not a valid xclbin2 file.\n");
+        fprintf(stderr, "ERROR: %s is not a valid xclbin2 file\n", filename);
         return -2;
     }
-    fread(device, 64, 1, f);
-    fseek(f, 0, SEEK_END);
-    size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    *result = (char *)malloc(size+1);
-    *device = (*result)+8+32+256+8+6*8;
-    if (size != fread(*result, sizeof(char), size, f))
+    fread(cipher, sizeof(cipher), 1, f);
+    fread(key_block, sizeof(key_block), 1, f);
+    fread(&unique_id, sizeof(unique_id), 1, f);
+    fread(&size, sizeof(size), 1, f);
+    char* p = new char[size+1]();
+    *result = p;
+    memcpy(p, magic, sizeof(magic));
+    p += sizeof(magic);
+    memcpy(p, cipher, sizeof(cipher));
+    p += sizeof(cipher);
+    memcpy(p, key_block, sizeof(key_block));
+    p += sizeof(key_block);
+    memcpy(p, &unique_id, sizeof(unique_id));
+    p += sizeof(unique_id);
+    memcpy(p, &size, sizeof(size));
+    p += sizeof(size);
+    uint64_t size_left = size - sizeof(magic) - sizeof(cipher) - sizeof(key_block) - sizeof(unique_id) - sizeof(size);
+    if(size_left != fread(p, sizeof(char), size_left, f))
     {
-        free(*result);
-        return -2;
-    } 
+        delete[] p;
+        fprintf(stderr, "ERROR: %s is corrupted\n", filename);
+        return -3;
+    }
+    *device = p + 5*8;
+    printf("%lu %s\n", size, *device);
     fclose(f);
-    (*result)[size] = 0;
     return size;
 }
 
@@ -53,7 +94,8 @@ static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,
                                   int32_t min0, int32_t extent0, int32_t stride0,
                                   int32_t min1, int32_t extent1, int32_t stride1,
                                   int32_t min2, int32_t extent2, int32_t stride2,
-                                  int32_t min3, int32_t extent3, int32_t stride3) {
+                                  int32_t min3, int32_t extent3, int32_t stride3)
+{
     b->min[0] = min0;
     b->min[1] = min1;
     b->min[2] = min2;
@@ -130,10 +172,11 @@ int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
     return halide_error_code_access_out_of_bounds;
 }
 
-static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS
+{
     uint16_t *var_input = (uint16_t *)(var_input_buffer->host);
     (void)var_input;
-    const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
+    const bool var_input_host_and_dev_are_null = (var_input_buffer->host == nullptr) && (var_input_buffer->dev == 0);
     (void)var_input_host_and_dev_are_null;
     int32_t var_input_min_0 = var_input_buffer->min[0];
     (void)var_input_min_0;
@@ -147,10 +190,10 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
     (void)input_size_dim_0;
     int32_t input_size_dim_1 = var_input_buffer->extent[1];
     (void)input_size_dim_1;
-    int32_t var_input_extent_2 = var_input_buffer->extent[2];
-    (void)var_input_extent_2;
-    int32_t var_input_extent_3 = var_input_buffer->extent[3];
-    (void)var_input_extent_3;
+    int32_t input_size_dim_2 = var_input_buffer->extent[2];
+    (void)input_size_dim_2;
+    int32_t input_size_dim_3 = var_input_buffer->extent[3];
+    (void)input_size_dim_3;
     int32_t var_input_stride_0 = var_input_buffer->stride[0];
     (void)var_input_stride_0;
     int32_t var_input_stride_1 = var_input_buffer->stride[1];
@@ -163,7 +206,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
     (void)var_input_elem_size;
     uint16_t *var_output = (uint16_t *)(var_output_buffer->host);
     (void)var_output;
-    const bool var_output_host_and_dev_are_null = (var_output_buffer->host == NULL) && (var_output_buffer->dev == 0);
+    const bool var_output_host_and_dev_are_null = (var_output_buffer->host == nullptr) && (var_output_buffer->dev == 0);
     (void)var_output_host_and_dev_are_null;
     int32_t var_output_min_0 = var_output_buffer->min[0];
     (void)var_output_min_0;
@@ -177,10 +220,10 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
     (void)output_size_dim_0;
     int32_t output_size_dim_1 = var_output_buffer->extent[1];
     (void)output_size_dim_1;
-    int32_t var_output_extent_2 = var_output_buffer->extent[2];
-    (void)var_output_extent_2;
-    int32_t var_output_extent_3 = var_output_buffer->extent[3];
-    (void)var_output_extent_3;
+    int32_t output_size_dim_2 = var_output_buffer->extent[2];
+    (void)output_size_dim_2;
+    int32_t output_size_dim_3 = var_output_buffer->extent[3];
+    (void)output_size_dim_3;
     int32_t var_output_stride_0 = var_output_buffer->stride[0];
     (void)var_output_stride_0;
     int32_t var_output_stride_1 = var_output_buffer->stride[1];
@@ -195,128 +238,29 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
     {
         bool assign_0 = halide_rewrite_buffer(var_output_buffer, 2, var_output_min_0, output_size_dim_0, 1, var_output_min_1, output_size_dim_1, output_size_dim_0, 0, 0, 0, 0, 0, 0);
         (void)assign_0;
-    } // if var_output_host_and_dev_are_null
+    } // if (var_output_host_and_dev_are_null)
     if (var_input_host_and_dev_are_null)
     {
         int32_t assign_1 = output_size_dim_0 + 2;
         int32_t assign_2 = output_size_dim_1 + 2;
         bool assign_3 = halide_rewrite_buffer(var_input_buffer, 2, var_output_min_0, assign_1, 1, var_output_min_1, assign_2, assign_1, 0, 0, 0, 0, 0, 0);
         (void)assign_3;
-    } // if var_input_host_and_dev_are_null
+    } // if (var_input_host_and_dev_are_null)
     bool assign_4 = var_output_host_and_dev_are_null || var_input_host_and_dev_are_null;
     bool assign_5 = !(assign_4);
     if (assign_5)
     {
         bool assign_6 = var_output_elem_size == 2;
-        if (!assign_6)         {
-            int32_t assign_7 = halide_error_bad_elem_size(NULL, "Output buffer output", "uint16", var_output_elem_size, 2);
+        if (!assign_6)
+        {
+            int32_t assign_7 = halide_error_bad_elem_size(nullptr, "Buffer output", "uint16_t", var_output_elem_size, 2);
             return assign_7;
         }
         bool assign_8 = var_input_elem_size == 2;
-        if (!assign_8)         {
-            int32_t assign_9 = halide_error_bad_elem_size(NULL, "Input buffer input", "uint16", var_input_elem_size, 2);
+        if (!assign_8)
+        {
+            int32_t assign_9 = halide_error_bad_elem_size(nullptr, "Buffer input", "uint16_t", var_input_elem_size, 2);
             return assign_9;
-        }
-        bool assign_10 = var_input_min_0 <= var_output_min_0;
-        int32_t assign_11 = var_output_min_0 + output_size_dim_0;
-        int32_t assign_12 = assign_11 - input_size_dim_0;
-        int32_t assign_13 = assign_12 + 2;
-        bool assign_14 = assign_13 <= var_input_min_0;
-        bool assign_15 = assign_10 && assign_14;
-        if (!assign_15)         {
-            int32_t assign_16 = var_output_min_0 + output_size_dim_0;
-            int32_t assign_17 = assign_16 + 1;
-            int32_t assign_18 = var_input_min_0 + input_size_dim_0;
-            int32_t assign_19 = assign_18 + -1;
-            int32_t assign_20 = halide_error_access_out_of_bounds(NULL, "Input buffer input", 0, var_output_min_0, assign_17, var_input_min_0, assign_19);
-            return assign_20;
-        }
-        bool assign_21 = var_input_min_1 <= var_output_min_1;
-        int32_t assign_22 = var_output_min_1 + output_size_dim_1;
-        int32_t assign_23 = assign_22 - input_size_dim_1;
-        int32_t assign_24 = assign_23 + 2;
-        bool assign_25 = assign_24 <= var_input_min_1;
-        bool assign_26 = assign_21 && assign_25;
-        if (!assign_26)         {
-            int32_t assign_27 = var_output_min_1 + output_size_dim_1;
-            int32_t assign_28 = assign_27 + 1;
-            int32_t assign_29 = var_input_min_1 + input_size_dim_1;
-            int32_t assign_30 = assign_29 + -1;
-            int32_t assign_31 = halide_error_access_out_of_bounds(NULL, "Input buffer input", 1, var_output_min_1, assign_28, var_input_min_1, assign_30);
-            return assign_31;
-        }
-        bool assign_32 = var_output_stride_0 == 1;
-        if (!assign_32)         {
-            int32_t assign_33 = halide_error_constraint_violated(NULL, "output.stride.0", var_output_stride_0, "1", 1);
-            return assign_33;
-        }
-        bool assign_34 = var_input_stride_0 == 1;
-        if (!assign_34)         {
-            int32_t assign_35 = halide_error_constraint_violated(NULL, "input.stride.0", var_input_stride_0, "1", 1);
-            return assign_35;
-        }
-        int64_t assign_36 = (int64_t)(output_size_dim_1);
-        int64_t assign_37 = (int64_t)(output_size_dim_0);
-        int64_t assign_38 = assign_36 * assign_37;
-        int64_t assign_39 = (int64_t)(input_size_dim_1);
-        int64_t assign_40 = (int64_t)(input_size_dim_0);
-        int64_t assign_41 = assign_39 * assign_40;
-        int64_t assign_42 = (int64_t)(2147483647);
-        bool assign_43 = assign_37 <= assign_42;
-        if (!assign_43)         {
-            int64_t assign_44 = (int64_t)(output_size_dim_0);
-            int64_t assign_45 = (int64_t)(2147483647);
-            int32_t assign_46 = halide_error_buffer_allocation_too_large(NULL, "output", assign_44, assign_45);
-            return assign_46;
-        }
-        int64_t assign_47 = (int64_t)(output_size_dim_1);
-        int64_t assign_48 = (int64_t)(var_output_stride_1);
-        int64_t assign_49 = assign_47 * assign_48;
-        int64_t assign_50 = (int64_t)(2147483647);
-        bool assign_51 = assign_49 <= assign_50;
-        if (!assign_51)         {
-            int64_t assign_52 = (int64_t)(output_size_dim_1);
-            int64_t assign_53 = (int64_t)(var_output_stride_1);
-            int64_t assign_54 = assign_52 * assign_53;
-            int64_t assign_55 = (int64_t)(2147483647);
-            int32_t assign_56 = halide_error_buffer_allocation_too_large(NULL, "output", assign_54, assign_55);
-            return assign_56;
-        }
-        int64_t assign_57 = (int64_t)(2147483647);
-        bool assign_58 = assign_38 <= assign_57;
-        if (!assign_58)         {
-            int64_t assign_59 = (int64_t)(2147483647);
-            int32_t assign_60 = halide_error_buffer_extents_too_large(NULL, "output", assign_38, assign_59);
-            return assign_60;
-        }
-        int64_t assign_61 = (int64_t)(input_size_dim_0);
-        int64_t assign_62 = (int64_t)(2147483647);
-        bool assign_63 = assign_61 <= assign_62;
-        if (!assign_63)         {
-            int64_t assign_64 = (int64_t)(input_size_dim_0);
-            int64_t assign_65 = (int64_t)(2147483647);
-            int32_t assign_66 = halide_error_buffer_allocation_too_large(NULL, "input", assign_64, assign_65);
-            return assign_66;
-        }
-        int64_t assign_67 = (int64_t)(input_size_dim_1);
-        int64_t assign_68 = (int64_t)(var_input_stride_1);
-        int64_t assign_69 = assign_67 * assign_68;
-        int64_t assign_70 = (int64_t)(2147483647);
-        bool assign_71 = assign_69 <= assign_70;
-        if (!assign_71)         {
-            int64_t assign_72 = (int64_t)(input_size_dim_1);
-            int64_t assign_73 = (int64_t)(var_input_stride_1);
-            int64_t assign_74 = assign_72 * assign_73;
-            int64_t assign_75 = (int64_t)(2147483647);
-            int32_t assign_76 = halide_error_buffer_allocation_too_large(NULL, "input", assign_74, assign_75);
-            return assign_76;
-        }
-        int64_t assign_77 = (int64_t)(2147483647);
-        bool assign_78 = assign_41 <= assign_77;
-        if (!assign_78)         {
-            int64_t assign_79 = (int64_t)(2147483647);
-            int32_t assign_80 = halide_error_buffer_extents_too_large(NULL, "input", assign_41, assign_79);
-            return assign_80;
         }
 
         // allocate buffer for tiled input/output
@@ -443,7 +387,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
 
         int platform_found = 0;
         for (unsigned iplat = 0; iplat<platform_count; iplat++) {
-            err = clGetPlatformInfo(platforms[iplat], CL_PLATFORM_VENDOR, 1000, (void *)cl_platform_vendor,NULL);
+            err = clGetPlatformInfo(platforms[iplat], CL_PLATFORM_VENDOR, 1000, (void *)cl_platform_vendor,nullptr);
             if (err != CL_SUCCESS) {
                 printf("FATAL: clGetPlatformInfo(CL_PLATFORM_VENDOR) failed\n");
                 exit(EXIT_FAILURE);
@@ -491,13 +435,13 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
 
 
         err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ACCELERATOR,
-                             1, &device_id, NULL);
+                             1, &device_id, nullptr);
         if (err != CL_SUCCESS) {
             printf("FATAL: Failed to create a device group\n");
             exit(EXIT_FAILURE);
         }
       
-        context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
+        context = clCreateContext(0, 1, &device_id, nullptr, nullptr, &err);
         if (!context) {
             printf("FATAL: Failed to create a compute context\n");
             exit(EXIT_FAILURE);
@@ -520,7 +464,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         }
         free(kernelbinary);
 
-        err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
+        err = clBuildProgram(program, 0, nullptr, nullptr, nullptr, nullptr);
         if (err != CL_SUCCESS) {
             size_t len;
             char buffer[2048];
@@ -584,14 +528,14 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         output_ext_chan_3.obj = 0;
         output_ext_chan_3.param = 0;
 
-        var_input_chan_0_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_0, NULL);
-        var_input_chan_1_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_1, NULL);
-        var_input_chan_2_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_2, NULL);
-        var_input_chan_3_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_3, NULL);
-        var_output_chan_0_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_0, NULL);
-        var_output_chan_1_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_1, NULL);
-        var_output_chan_2_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_2, NULL);
-        var_output_chan_3_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_3, NULL);
+        var_input_chan_0_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_0, nullptr);
+        var_input_chan_1_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_1, nullptr);
+        var_input_chan_2_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_2, nullptr);
+        var_input_chan_3_cl  = clCreateBuffer(context,  CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_i)/dram_chan, & input_ext_chan_3, nullptr);
+        var_output_chan_0_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_0, nullptr);
+        var_output_chan_1_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_1, nullptr);
+        var_output_chan_2_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_2, nullptr);
+        var_output_chan_3_cl = clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, sizeof(uint16_t) * (tile_num_dim_0*tile_size_linearized_o)/dram_chan, &output_ext_chan_3, nullptr);
         if (!var_input_chan_0_cl || !var_output_chan_0_cl || !var_input_chan_1_cl || !var_output_chan_1_cl || !var_input_chan_2_cl || !var_output_chan_2_cl|| !var_input_chan_3_cl || !var_output_chan_3_cl)
         {
             printf("FATAL: Failed to allocate device memory\n");
@@ -601,10 +545,10 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         timespec write_begin, write_end;
         cl_event writeevent;
         clock_gettime(CLOCK_MONOTONIC_RAW, &write_begin);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_0, 0, NULL, &writeevent);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_1, 0, NULL, &writeevent);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_2, 0, NULL, &writeevent);
-        err = clEnqueueWriteBuffer(commands, var_input_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_3, 0, NULL, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_0, 0, nullptr, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_1, 0, nullptr, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_2, 0, nullptr, &writeevent);
+        err = clEnqueueWriteBuffer(commands, var_input_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_i/dram_chan, var_input_buf_chan_3, 0, nullptr, &writeevent);
         if (err != CL_SUCCESS)
         {
             printf("FATAL: Failed to write to input !\n");
@@ -653,11 +597,11 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         }
 
         cl_event execute;
-        if(NULL==getenv("XCL_EMULATION_MODE")) {
+        if(nullptr==getenv("XCL_EMULATION_MODE")) {
             printf("INFO: FPGA warm up\n");
             for(int i = 0; i<3; ++i)
             {
-                err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
+                err = clEnqueueTask(commands, kernel, 0, nullptr, &execute);
             }
             clWaitForEvents(1, &execute);
         }
@@ -671,7 +615,7 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         //
         timespec execute_begin, execute_end;
         clock_gettime(CLOCK_MONOTONIC_RAW, &execute_begin);
-        err = clEnqueueTask(commands, kernel, 0, NULL, &execute);
+        err = clEnqueueTask(commands, kernel, 0, nullptr, &execute);
         if (err)
         {
             printf("ERROR: Failed to execute kernel %d\n", err);
@@ -686,10 +630,10 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         timespec read_begin, read_end;
         cl_event readevent;
         clock_gettime(CLOCK_MONOTONIC_RAW, &read_begin);
-        err = clEnqueueReadBuffer(commands, var_output_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_0, 0, NULL, &readevent );
-        err = clEnqueueReadBuffer(commands, var_output_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_1, 0, NULL, &readevent );
-        err = clEnqueueReadBuffer(commands, var_output_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_2, 0, NULL, &readevent );
-        err = clEnqueueReadBuffer(commands, var_output_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_3, 0, NULL, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_0_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_0, 0, nullptr, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_1_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_1, 0, nullptr, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_2_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_2, 0, nullptr, &readevent );
+        err = clEnqueueReadBuffer(commands, var_output_chan_3_cl, CL_FALSE, 0, sizeof(uint16_t) * tile_num_dim_0*tile_size_linearized_o/dram_chan, var_output_buf_chan_3, 0, nullptr, &readevent );
         if (err != CL_SUCCESS)
         {
             printf("ERROR: Failed to read output %d\n", err);
@@ -762,14 +706,14 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         delete[] var_input_buf_chan_1;
         delete[] var_input_buf_chan_2;
         delete[] var_input_buf_chan_3;
-    } // if assign_5
+    } // if (assign_5)
     return 0;
 }
 
 int blur(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
     uint16_t *var_input = (uint16_t *)(var_input_buffer->host);
     (void)var_input;
-    const bool var_input_host_and_dev_are_null = (var_input_buffer->host == NULL) && (var_input_buffer->dev == 0);
+    const bool var_input_host_and_dev_are_null = (var_input_buffer->host == nullptr) && (var_input_buffer->dev == 0);
     (void)var_input_host_and_dev_are_null;
     int32_t var_input_min_0 = var_input_buffer->min[0];
     (void)var_input_min_0;
@@ -783,10 +727,10 @@ int blur(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xc
     (void)input_size_dim_0;
     int32_t input_size_dim_1 = var_input_buffer->extent[1];
     (void)input_size_dim_1;
-    int32_t var_input_extent_2 = var_input_buffer->extent[2];
-    (void)var_input_extent_2;
-    int32_t var_input_extent_3 = var_input_buffer->extent[3];
-    (void)var_input_extent_3;
+    int32_t input_size_dim_2 = var_input_buffer->extent[2];
+    (void)input_size_dim_2;
+    int32_t input_size_dim_3 = var_input_buffer->extent[3];
+    (void)input_size_dim_3;
     int32_t var_input_stride_0 = var_input_buffer->stride[0];
     (void)var_input_stride_0;
     int32_t var_input_stride_1 = var_input_buffer->stride[1];
@@ -799,7 +743,7 @@ int blur(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xc
     (void)var_input_elem_size;
     uint16_t *var_output = (uint16_t *)(var_output_buffer->host);
     (void)var_output;
-    const bool var_output_host_and_dev_are_null = (var_output_buffer->host == NULL) && (var_output_buffer->dev == 0);
+    const bool var_output_host_and_dev_are_null = (var_output_buffer->host == nullptr) && (var_output_buffer->dev == 0);
     (void)var_output_host_and_dev_are_null;
     int32_t var_output_min_0 = var_output_buffer->min[0];
     (void)var_output_min_0;
@@ -813,10 +757,10 @@ int blur(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xc
     (void)output_size_dim_0;
     int32_t output_size_dim_1 = var_output_buffer->extent[1];
     (void)output_size_dim_1;
-    int32_t var_output_extent_2 = var_output_buffer->extent[2];
-    (void)var_output_extent_2;
-    int32_t var_output_extent_3 = var_output_buffer->extent[3];
-    (void)var_output_extent_3;
+    int32_t output_size_dim_2 = var_output_buffer->extent[2];
+    (void)output_size_dim_2;
+    int32_t output_size_dim_3 = var_output_buffer->extent[3];
+    (void)output_size_dim_3;
     int32_t var_output_stride_0 = var_output_buffer->stride[0];
     (void)var_output_stride_0;
     int32_t var_output_stride_1 = var_output_buffer->stride[1];
