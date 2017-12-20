@@ -163,7 +163,7 @@ def GetStencilDistance(A, tile_size):
     return max(A_serialized) - min(A_serialized)
 
 def GetStencilDim(A):
-    min_in_dims = [min([point[dim] for point in A]) for dim in range(0, len(A[0]))]
-    max_in_dims = [max([point[dim] for point in A]) for dim in range(0, len(A[0]))]
+    min_in_dims = [min([point[dim] for point in A]) for dim in range(len(A[0]))]
+    max_in_dims = [max([point[dim] for point in A]) for dim in range(len(A[0]))]
     return [max_index-min_index+1 for max_index, min_index in zip(max_in_dims, min_in_dims)]
 
