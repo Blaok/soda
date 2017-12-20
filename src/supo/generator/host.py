@@ -122,7 +122,7 @@ def PrintHalideErrorReport(p):
 def PrintWrapped(p, stencil):
     max_dram_chan = 4
     buffers = [[stencil.input_name, stencil.input_type], [stencil.output_name, stencil.output_type]]+stencil.extra_params
-    p.PrintLine('static int blur_wrapped(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in buffers]))
+    p.PrintLine('static int %s_wrapped(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in buffers])))
     p.DoScope()
     for b in buffers:
         PrintUnloadBuffer(p, b[0], b[1])
@@ -439,7 +439,7 @@ def PrintWrapped(p, stencil):
     for i in range(max_dram_chan):
         p.PrintLine('case %d:' % i)
         p.DoIndent()
-        p.PrintLine('var_%s_buf_chan_%d[tiled_offset/dram_chan] = var_input[original_offset];' % (stencil.input_name, i))
+        p.PrintLine('var_%s_buf_chan_%d[tiled_offset/dram_chan] = var_%s[original_offset];' % (stencil.input_name, i, stencil.input_name))
         p.PrintLine('break;')
         p.UnIndent()
     for dim in range(stencil.dim*2+1):
@@ -466,12 +466,128 @@ def PrintWrapped(p, stencil):
     p.PrintLine('fprintf(*error_report, "INFO: %s\\n", %s);' % (', '.join(['%s_min_%d = %%d' % (stencil.input_name, x) for x in range(stencil.dim)]), ', '.join(['var_%s_min_%d' % (stencil.input_name, x) for x in range(stencil.dim)])))
     p.PrintLine('fprintf(*error_report, "INFO: %s\\n", %s);' % (', '.join(['%s_extent_%d = %%d' % (stencil.output_name, x) for x in range(stencil.dim)]), ', '.join(['%s_size_dim_%d' % (stencil.output_name, x) for x in range(stencil.dim)])))
     p.PrintLine('fprintf(*error_report, "INFO: %s\\n", %s);' % (', '.join(['%s_min_%d = %%d' % (stencil.output_name, x) for x in range(stencil.dim)]), ', '.join(['var_%s_min_%d' % (stencil.output_name, x) for x in range(stencil.dim)])))
-    p.PrintLine('')
+    p.PrintLine()
 
+    p.PrintLine('int kernel_arg = 0;')
+    p.PrintLine('int64_t tile_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+1)*BURST_WIDTH/PIXEL_WIDTH_I*dram_chan/UNROLL_FACTOR;' % (stencil.input_name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
+    p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_chan)+1)*tile_num_dim_0;' % (stencil.input_name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
+    p.PrintLine('fprintf(*error_report, "INFO: tile_data_num = %ld, coalesced_data_num = %ld\\n", tile_data_num, coalesced_data_num);')
+    p.PrintLine()
+
+    for i in range(max_dram_chan):
+        p.PrintLine('if(dram_chan>%d) err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_chan_%d_cl);' % (i, stencil.output_name, i))
+    for i in range(max_dram_chan):
+        p.PrintLine('if(dram_chan>%d) err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_chan_%d_cl);' % (i, stencil.input_name, i))
+    for variable in ['coalesced_data_num', 'tile_data_num']+['tile_num_dim_%d'%x for x in range(stencil.dim-1)]+['%s_size_dim_%d' % (stencil.input_name, stencil.dim-1)]:
+        p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(%s), &%s);' % ((variable,)*2))
+    p.PrintLine('if(err != CL_SUCCESS)')
+    p.DoScope()
+    p.PrintLine('fprintf(*error_report, "ERROR: Failed to set kernel arguments %d\\n", err);')
+    p.PrintLine('exit(EXIT_FAILURE);')
     p.UnScope()
     p.PrintLine()
 
+    p.PrintLine('timespec execute_begin, execute_end;')
+    p.PrintLine('cl_event execute_event;')
+    p.PrintLine('err = clEnqueueTask(commands, kernel, dram_chan, write_events, &execute_event);')
+    p.PrintLine('if(nullptr==getenv("XCL_EMULATION_MODE"))')
+    p.DoScope()
+    p.PrintLine('fprintf(*error_report, "INFO: FPGA warm up\\n");')
+    p.PrintLine('clWaitForEvents(1, &execute_event);')
+    p.PrintLine()
+    p.PrintLine('clock_gettime(CLOCK_MONOTONIC_RAW, &execute_begin);')
+    p.PrintLine('err = clEnqueueTask(commands, kernel, 0, nullptr, &execute_event);')
+    p.PrintLine('if(err)')
+    p.PrintLine('{')
+    p.PrintLine('    fprintf(*error_report, "ERROR: Failed to execute kernel %d\\n", err);')
+    p.PrintLine('    exit(EXIT_FAILURE);')
+    p.PrintLine('}')
+    p.PrintLine('clWaitForEvents(1, &execute_event);')
+    p.PrintLine('clock_gettime(CLOCK_MONOTONIC_RAW, &execute_end);')
+    p.PrintLine()
+    p.PrintLine('double elapsed_time = 0.;')
+    p.PrintLine('elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;')
+    p.PrintLine('printf("Kernel execution time: %lf us\\n", elapsed_time);')
+    p.PrintLine('printf("Kernel throughput:     %lf pixel/ns\\n", input_size_dim_0*input_size_dim_1/elapsed_time/1e3);')
     p.UnScope()
+    p.PrintLine('else')
+    p.DoScope()
+    p.PrintLine('clWaitForEvents(1, &execute_event);')
+    p.PrintLine('fprintf(*error_report, "INFO: Emulation mode\\n");')
+    p.UnScope()
+    p.PrintLine()
+
+    p.PrintLine('cl_event read_events[%d];' % max_dram_chan)
+    for i in range(max_dram_chan):
+        p.PrintLine('%s* var_%s_buf_chan_%d = dram_chan>%d ? (%s*)clEnqueueMapBuffer(commands, var_%s_chan_%d_cl, CL_FALSE, CL_MAP_READ, 0, var_%s_buf_size, 0, nullptr, read_events+%d, &err) : nullptr;' % (stencil.output_type, stencil.output_name, i, i, stencil.output_type, stencil.output_name, i, stencil.output_name, i))
+    p.PrintLine('clWaitForEvents(dram_chan, read_events);')
+    p.PrintLine()
+
+    for dim in range(stencil.dim-2, -1, -1):
+        p.PrintLine('for(int32_t tile_index_dim_%d = 0; tile_index_dim_%d < tile_num_dim_%d; ++tile_index_dim_%d)' % ((dim,)*4))
+        p.DoScope()
+        p.PrintLine('int32_t actual_tile_size_dim_%d = (tile_index_dim_%d==tile_num_dim_%d-1) ? %s_size_dim_%d-(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)*tile_index_dim_%d : TILE_SIZE_DIM_%d;' % ((dim,)*3+(stencil.input_name,)+(dim,)*5))
+
+    p.PrintLine('for(int32_t c = 0; c < CHANNEL_NUM_O; ++c)')
+    p.DoScope()
+    p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input_name, stencil.dim-1, stencil.dim-1, coords_in_tile[stencil.dim-1]))
+    p.DoScope()
+    for dim in range(stencil.dim-2, -1, -1):
+        p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[dim], coords_in_tile[dim], dim, dim, coords_in_tile[dim]))
+        p.DoScope()
+
+    p.PrintLine('// (x, y, z, w) is coordinates in tiled image')
+    p.PrintLine('// (p, q, r, s) is coordinates in original image')
+    p.PrintLine('// (i, j, k, l) is coordinates in a tile')
+    offset_in_tile = '+'.join(['%c%s' % (coords_in_tile[x], ''.join(['*TILE_SIZE_DIM_%d'%xx for xx in range(x)])) for x in range(stencil.dim)])
+    p.PrintLine('int32_t burst_index = (%s+STENCIL_DISTANCE)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);' % offset_in_tile)
+    p.PrintLine('int32_t burst_residue = (%s+STENCIL_DISTANCE)%%(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);' % offset_in_tile)
+    for dim in range(stencil.dim-1):
+        p.PrintLine('int32_t %c = tile_index_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)+%c;' % (coords_in_orig[dim], dim, dim, dim, coords_in_tile[dim]))
+    p.PrintLine('int32_t %c = %c;' % (coords_in_orig[stencil.dim-1], coords_in_tile[stencil.dim-1]))
+    p.PrintLine('int64_t tiled_offset = (%s)*tile_size_linearized_o+(burst_index*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan))*CHANNEL_NUM_O+c*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan)+burst_residue;' % '+'.join(['%stile_index_dim_%d' % (''.join(['tile_num_dim_%d*'%xx for xx in range(x)]), x) for x in range(stencil.dim-1)]))
+    p.PrintLine('int64_t original_offset = (%s)*CHANNEL_NUM_O+c;' % '+'.join(['%c*var_%s_stride_%d' % (coords_in_orig[x], stencil.output_name, x) for x in range(stencil.dim)]))
+    p.PrintLine('switch(tiled_offset%dram_chan)')
+    p.DoScope()
+    for i in range(max_dram_chan):
+        p.PrintLine('case %d:' % i)
+        p.DoIndent()
+        p.PrintLine('var_%s[original_offset] = var_%s_buf_chan_%d[tiled_offset/dram_chan];' % (stencil.output_name, stencil.output_name, i))
+        p.PrintLine('break;')
+        p.UnIndent()
+    for dim in range(stencil.dim*2+1):
+        p.UnScope()
+
+    for i in range(max_dram_chan):
+        p.PrintLine()
+        p.PrintLine('if(dram_chan>%d)' % i)
+        p.DoScope()
+        p.PrintLine('clEnqueueUnmapMemObject(commands, var_%s_chan_%d_cl, var_%s_buf_chan_%d, 0, nullptr, read_events+%d);' % ((stencil.output_name,i)*2+(i,)))
+        p.PrintLine('clReleaseMemObject(var_%s_chan_%d_cl);' % (stencil.input_name, i))
+        p.PrintLine('clReleaseMemObject(var_%s_chan_%d_cl);' % (stencil.output_name, i))
+        p.UnScope()
+    p.PrintLine('clWaitForEvents(dram_chan, read_events);')
+    p.PrintLine()
+
+    p.PrintLine('clReleaseProgram(program);')
+    p.PrintLine('clReleaseKernel(kernel);')
+    p.PrintLine('clReleaseCommandQueue(commands);')
+    p.PrintLine('clReleaseContext(context);')
+
+    p.UnScope()
+    p.PrintLine('return 0;')
+    p.UnScope()
+    p.PrintLine()
+
+def PrintEntrance(p, stencil):
+    buffers = [[stencil.input_name, stencil.input_type], [stencil.output_name, stencil.output_type]]+stencil.extra_params
+    p.PrintLine('int %s(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in buffers])))
+    p.DoScope()
+    for b in buffers:
+        PrintUnloadBuffer(p, b[0], b[1])
+    p.PrintLine('return %s_wrapped(%sxclbin);' % (stencil.app_name, ''.join([('var_%s_buffer, ') % x[0] for x in buffers])))
+    p.UnScope()
+    p.PrintLine()
 
 def PrintUnloadBuffer(p, buffer_name, buffer_type):
     p.PrintLine('%s *var_%s = (%s *)(var_%s_buffer->host);' % (buffer_type, buffer_name, buffer_type, buffer_name))
@@ -518,6 +634,7 @@ def PrintCode(stencil, host_file):
     PrintHalideErrorCodes(p)
     PrintHalideErrorReport(p)
     PrintWrapped(p, stencil)
+    PrintEntrance(p, stencil)
 
 def main():
     stencil = GetStencilFromJSON(sys.stdin)
