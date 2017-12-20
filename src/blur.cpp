@@ -595,7 +595,8 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
         timespec execute_begin, execute_end;
         cl_event execute_event;
         err = clEnqueueTask(commands, kernel, dram_chan, write_events, &execute_event);
-        if(nullptr==getenv("XCL_EMULATION_MODE")) {
+        if(nullptr==getenv("XCL_EMULATION_MODE"))
+        {
             fprintf(*error_report, "INFO: FPGA warm up\n");
             clWaitForEvents(1, &execute_event);
 
@@ -639,12 +640,12 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
                         // (x, y, z, w) is coordinates in tiled image
                         // (p, q, r, s) is coordinates in original image
                         // (i, j, k, l) is coordinates in a tile
-                        int32_t burst_index = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);
-                        int32_t burst_residue = (j*TILE_SIZE_DIM_0+i+STENCIL_DISTANCE)%(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);
+                        int32_t burst_index = (i+j*TILE_SIZE_DIM_0+STENCIL_DISTANCE)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);
+                        int32_t burst_residue = (i+j*TILE_SIZE_DIM_0+STENCIL_DISTANCE)%(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan);
                         int32_t p = tile_index_dim_0*(TILE_SIZE_DIM_0-STENCIL_DIM_0+1)+i;
                         int32_t q = j;
-                        int64_t tiled_offset = tile_index_dim_0*tile_size_linearized_o+(burst_index*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan))*CHANNEL_NUM_O+c*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan)+burst_residue;
-                        int64_t original_offset = (q*var_output_stride_1+p)*CHANNEL_NUM_O+c;
+                        int64_t tiled_offset = (tile_index_dim_0)*tile_size_linearized_o+(burst_index*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan))*CHANNEL_NUM_O+c*(BURST_WIDTH/PIXEL_WIDTH_O*dram_chan)+burst_residue;
+                        int64_t original_offset = (p*var_output_stride_0+q*var_output_stride_1)*CHANNEL_NUM_O+c;
                         switch(tiled_offset%dram_chan)
                         {
                             case 0:
@@ -702,7 +703,8 @@ static int blur_wrapped(buffer_t *var_input_buffer, buffer_t *var_output_buffer,
     return 0;
 }
 
-int blur(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS {
+int blur(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xclbin) HALIDE_FUNCTION_ATTRS
+{
     uint16_t *var_input = (uint16_t *)(var_input_buffer->host);
     (void)var_input;
     const bool var_input_host_and_dev_are_null = (var_input_buffer->host == nullptr) && (var_input_buffer->dev == 0);
@@ -763,12 +765,6 @@ int blur(buffer_t *var_input_buffer, buffer_t *var_output_buffer, const char* xc
     (void)var_output_stride_3;
     int32_t var_output_elem_size = var_output_buffer->elem_size;
     (void)var_output_elem_size;
-    int32_t assign_81 = blur_wrapped(var_input_buffer, var_output_buffer, xclbin);
-    bool assign_82 = assign_81 == 0;
-    if(!assign_82)
-    {
-        return assign_81;
-    }
-    return 0;
+    return blur_wrapped(var_input_buffer, var_output_buffer, xclbin);
 }
 
