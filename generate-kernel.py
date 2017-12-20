@@ -1,1 +1,0 @@
-src/supo/generator/kernel.py
