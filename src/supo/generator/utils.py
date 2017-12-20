@@ -1,11 +1,12 @@
 #!/usr/bin/python3.6
+from fractions import Fraction
+from functools import reduce
 import json
+import logging
 import math
 import operator
 import os
 import sys
-from fractions import Fraction
-from functools import reduce
 
 # constants
 coords_in_tile = 'ijkl'
@@ -35,6 +36,12 @@ class Stencil(object):
         self.tile_size = kwargs.pop('tile_size')
         self.k = kwargs.pop('k')
         self.dram_separate = kwargs.pop('dram_separate')
+        if self.dram_separate:
+            if self.dram_chan%2 != 0:
+                logging.getLogger(__name__).fatal('Number of DRAM channels has to be even when separated')
+                sys.exit(-1)
+            else:
+                self.dram_chan = int(self.dram_chan/2)
 
 class Printer(object):
     def __init__(self, out):
@@ -91,8 +98,6 @@ def GetStencilFromJSON(json_file):
     output_type = config['output_type']
     dram_chan = int(os.environ.get('DRAM_CHAN', config['dram_chan']))
     dram_separate = ('DRAM_SEPARATE' in os.environ) or ('dram_separate' in config and config['dram_separate'])
-    if dram_separate:
-        dram_chan = int(dram_chan/2)
     app_name = config['app_name']
     tile_size = config.get('St', [0]*config['dim'])
     A = config['A']
