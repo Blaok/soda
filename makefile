@@ -81,12 +81,14 @@ ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 bitstream: $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
-	$(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
 else # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 bitstream: $(BIT)/$(HW_XCLBIN)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
-	$(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
 endif # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 
 hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
