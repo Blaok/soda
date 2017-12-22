@@ -284,21 +284,23 @@ def main():
 
         if args.kernel_file is not None:
             supo.generator.kernel.PrintCode(stencil, args.kernel_file)
-        else:
-            with open(join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_chan, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
-                supo.generator.kernel.PrintCode(stencil, kernel_file)
 
         if args.host_file is not None:
             supo.generator.host.PrintCode(stencil, args.host_file)
-        else:
-            with open(join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
-                supo.generator.host.PrintCode(stencil, host_file)
 
         if args.header_file is not None:
             supo.generator.header.PrintCode(stencil, args.header_file)
-        else:
-            with open(join(args.output_dir if args.output_dir is not None else '', '%s.h' % supo_model.app_name), 'w') as header_file:
-                supo.generator.header.PrintCode(stencil, header_file)
+
+        if args.output_dir is not None or args.kernel_file is None and args.host_file is None and args.header_file is None:
+            if args.kernel_file is None:
+                with open(join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_chan, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
+                    supo.generator.kernel.PrintCode(stencil, kernel_file)
+            if args.host_file is None:
+                with open(join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
+                    supo.generator.host.PrintCode(stencil, host_file)
+            if args.header_file is None:
+                with open(join(args.output_dir if args.output_dir is not None else '', '%s.h' % supo_model.app_name), 'w') as header_file:
+                    supo.generator.header.PrintCode(stencil, header_file)
 
 if __name__ == '__main__':
     main()
