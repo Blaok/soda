@@ -248,6 +248,12 @@ def main():
         supo_model = supo_mm.model_from_str(args.supo_src.read())
     except TextXSyntaxError as e:
         logger.error(e)
+        if args.kernel_file is not None:
+            os.remove(args.kernel_file.name)
+        if args.host_file is not None:
+            os.remove(args.host_file.name)
+        if args.header_file is not None:
+            os.remove(args.header_file.name)
     else:
         stencil = supo.generator.kernel.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
