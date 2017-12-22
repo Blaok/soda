@@ -12,6 +12,7 @@ import sys
 coords_in_tile = 'ijkl'
 coords_in_orig = 'pqrs'
 type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
+max_dram_chan = 4
 
 class Stencil(object):
     def __init__(self, **kwargs):

@@ -1,13 +1,16 @@
 #!/usr/bin/python3.6
+from fractions import Fraction
+from functools import reduce
 import json
+import logging
 import math
 import operator
 import os
 import sys
-from fractions import Fraction
-from functools import reduce
 sys.path.append(os.path.dirname(__file__))
-from utils import coords_in_tile, coords_in_orig, type_width, Stencil, Printer, GetStencilFromJSON, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim
+from utils import coords_in_tile, coords_in_orig, type_width, max_dram_chan, Stencil, Printer, GetStencilFromJSON, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim
+
+logger = logging.getLogger(__name__)
 
 def PrintHeader(p):
     for header in ['assert', 'float', 'math', 'stdbool', 'stdint', 'stdio', 'stdlib', 'string', 'fcntl', 'time', 'unistd', 'sys/types', 'sys/stat', 'CL/opencl']:
@@ -120,7 +123,6 @@ def PrintHalideErrorReport(p):
     p.PrintLine()
 
 def PrintWrapped(p, stencil):
-    max_dram_chan = 4
     buffers = [[stencil.input_name, stencil.input_type], [stencil.output_name, stencil.output_type]]+stencil.extra_params
     p.PrintLine('static int %s_wrapped(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in buffers])))
     p.DoScope()
@@ -614,6 +616,7 @@ def PrintCheckElemSize(p, buffer_name, buffer_type):
     p.UnScope()
 
 def PrintCode(stencil, host_file):
+    logger.debug('Generate host source code as %s' % host_file.name)
     p = Printer(host_file)
     PrintHeader(p)
     p.PrintLine('#include"%s.h"' % stencil.app_name)
