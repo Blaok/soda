@@ -107,20 +107,17 @@ mktemp:
 	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
 ############################## generate source files ##############################
-$(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).json
-	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1))src/supo/generator/kernel.py\<$^\>$@
+$(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	@TMP=$$(mktemp --suffix='generate-kernel.py');if DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1))src/supo/generator/kernel.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};exit 1;fi
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-channel $(DRAM_CHAN) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --kernel-file $@ $^
 
-$(TMP)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).cpp: $(SRC)/$(APP).json
-	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) src/supo/generator/host.py\<$^\>$@
+$(TMP)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).cpp: $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	@TMP=$$(mktemp --suffix='generate-host.py');if DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) src/supo/generator/host.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};exit 1;fi
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-channel $(DRAM_CHAN) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --source-file $@ $^
 
-$(TMP)/$(APP).h: $(SRC)/$(APP).json
-	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) src/supo/generator/header.py\<$^\>$@
+$(TMP)/$(APP).h: $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	@TMP=$$(mktemp --suffix='generate-header.py');if DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) UNROLL_FACTOR=$(UNROLL_FACTOR) TILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),TILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) src/supo/generator/header.py<$^>$${TMP};then mv $${TMP} $@;else rm $${TMP};exit 1;fi
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-channel $(DRAM_CHAN) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --header-file $@ $^
 
 ############################## generate host binary ##############################
 $(BIN)/$(HOST_BIN): $(OBJ)/$(HOST_SRCS:.cpp=.o) $(OBJ)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o
