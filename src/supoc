@@ -210,7 +210,7 @@ def main():
                         dest='dram_chan',
                         help='override DRAM channel num')
     parser.add_argument('--dram-separate',
-                        type=bool,
+                        type=str,
                         metavar='(yes|no)',
                         dest='dram_separate',
                         help='override DRAM separation')
@@ -266,7 +266,7 @@ def main():
             extra_params = supo_model.extra_params,
             tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)],
             k = args.k if args.k is not None else supo_model.k,
-            dram_separate = args.dram_separate if args.dram_separate is not None else supo_model.dram_separate)
+            dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else supo_model.dram_separate)
 
         logger.info('kernel        : %s' % stencil.app_name)
         logger.info('burst width   : %d' % stencil.burst_width)
