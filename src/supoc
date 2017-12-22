@@ -285,16 +285,25 @@ def main():
         logger.info('computation   : %s' % stencil.compute_content)
 
         if args.kernel_file is not None:
-            with open(args.kernel_file, 'w') as kernel_file:
-                supo.generator.kernel.PrintCode(stencil, kernel_file)
+            if args.kernel_file=='-':
+                supo.generator.kernel.PrintCode(stencil, sys.stdout)
+            else:
+                with open(args.kernel_file, 'w') as kernel_file:
+                    supo.generator.kernel.PrintCode(stencil, kernel_file)
 
         if args.host_file is not None:
-            with open(args.host_file, 'w') as host_file:
-                supo.generator.host.PrintCode(stencil, host_file)
+            if args.host_file=='-':
+                supo.generator.host.PrintCode(stencil, sys.stdout)
+            else:
+                with open(args.host_file, 'w') as host_file:
+                    supo.generator.host.PrintCode(stencil, host_file)
 
         if args.header_file is not None:
-            with open(args.header_file, 'w') as header_file:
-                supo.generator.header.PrintCode(stencil, header_file)
+            if args.header_file=='-':
+                supo.generator.header.PrintCode(stencil, sys.stdout)
+            else:
+                with open(args.header_file, 'w') as header_file:
+                    supo.generator.header.PrintCode(stencil, header_file)
 
         if args.output_dir is not None or args.kernel_file is None and args.host_file is None and args.header_file is None:
             if args.kernel_file is None:
