@@ -214,7 +214,7 @@ def main():
                         metavar='(yes|no)',
                         dest='dram_separate',
                         help='override DRAM separation')
-    parser.add_argument(type=argparse.FileType('r'),
+    parser.add_argument(type=str,
                         dest='supo_src',
                         metavar='file',
                         help='supo source code')
@@ -224,17 +224,17 @@ def main():
                         metavar='dir',
                         help='directory to generate kernel, source, and header; default names used; default to the current working directory; may be overridden by --kernel-file, --source-file, or --header-file')
     parser.add_argument('--kernel-file',
-                        type=argparse.FileType('w'),
+                        type=str,
                         dest='kernel_file',
                         metavar='file',
                         help='Vivado HLS C++ kernel code; overrides --output-dir')
     parser.add_argument('--source-file',
-                        type=argparse.FileType('w'),
+                        type=str,
                         dest='host_file',
                         metavar='file',
                         help='host C++ source code; overrides --output-dir')
     parser.add_argument('--header-file',
-                        type=argparse.FileType('w'),
+                        type=str,
                         dest='header_file',
                         metavar='file',
                         help='host C++ header code; overrides --output-dir')
@@ -245,15 +245,10 @@ def main():
     supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output])
     logger.debug('Build metamodel')
     try:
-        supo_model = supo_mm.model_from_str(args.supo_src.read())
+        with open(args.supo_src, 'r') as supo_file:
+            supo_model = supo_mm.model_from_str(supo_file.read())
     except TextXSyntaxError as e:
         logger.error(e)
-        if args.kernel_file is not None:
-            os.remove(args.kernel_file.name)
-        if args.host_file is not None:
-            os.remove(args.host_file.name)
-        if args.header_file is not None:
-            os.remove(args.header_file.name)
     else:
         stencil = supo.generator.kernel.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
@@ -289,13 +284,16 @@ def main():
         logger.info('computation   : %s' % stencil.compute_content)
 
         if args.kernel_file is not None:
-            supo.generator.kernel.PrintCode(stencil, args.kernel_file)
+            with open(args.kernel_file, 'w') as kernel_file:
+                supo.generator.kernel.PrintCode(stencil, kernel_file)
 
         if args.host_file is not None:
-            supo.generator.host.PrintCode(stencil, args.host_file)
+            with open(args.host_file, 'w') as host_file:
+                supo.generator.host.PrintCode(stencil, host_file)
 
         if args.header_file is not None:
-            supo.generator.header.PrintCode(stencil, args.header_file)
+            with open(args.header_file, 'w') as header_file:
+                supo.generator.header.PrintCode(stencil, header_file)
 
         if args.output_dir is not None or args.kernel_file is None and args.host_file is None and args.header_file is None:
             if args.kernel_file is None:
