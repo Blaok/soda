@@ -270,8 +270,8 @@ def main():
 
         logger.info('kernel        : %s' % stencil.app_name)
         logger.info('burst width   : %d' % stencil.burst_width)
-        logger.info('dram channel  : %d' % (stencil.dram_chan*2) if stencil.dram_separate else stencil.dram_chan)
-        logger.info('dram separate : %s' % 'yes' if stencil.dram_separate else 'no')
+        logger.info('dram channel  : %d' % ((stencil.dram_chan*2) if stencil.dram_separate else stencil.dram_chan))
+        logger.info('dram separate : %s' % ('yes' if stencil.dram_separate else 'no'))
         logger.info('unroll factor : %d' % stencil.k)
         logger.info('tile size     : (%s,)' % ', '.join([str(x) for x in stencil.tile_size[:-1]]))
         logger.info('dimension     : %d' % stencil.dim)
