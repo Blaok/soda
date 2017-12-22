@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 from functools import reduce
-from os.path import join, dirname
+from os.path import join
 from textx import metamodel_from_str
 from textx.exceptions import TextXSyntaxError
 import argparse
