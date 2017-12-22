@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 from functools import reduce
 from os.path import join, dirname
-from textx import metamodel_from_file
+from textx import metamodel_from_str
 from textx.exceptions import TextXSyntaxError
 import logging
 import operator
@@ -10,6 +10,37 @@ import sys
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+supo_grammar = '''
+SupoProgram:
+(
+    ('burst' 'width' ':' burst_width=INT)
+    ('dram' 'channel' ':' dram_chan=INT)
+    ('dram' 'separate' ':' dram_separate=YesOrNo)
+    ('unroll' 'factor' ':' k=INT)
+    ('kernel' ':' app_name=ID)
+    input=Input
+    output=Output
+    Comment*
+)#;
+Comment: /\s*#.*$/;
+YesOrNo: 'yes'|'no';
+Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|'double';
+PlusOrMinus: '+'|'-';
+MulOrDiv: '*'|'/'|'%';
+Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
+Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
+Factor: (sign=PlusOrMinus)? operand=Operand;
+Operand: name=ID ('[' chan=INT ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
+Number: Float|Hex|Bin|Oct|Dec;
+Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
+Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
+Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
+Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
+Float : /((\d+\.|\d*\.\d+)([+-]?[Ee]\d+)?|\d+[+-]?[Ee]\d+)[FfLl]?/;
+Input: 'input' type=Type ':' name=ID ('[' chan=INT ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
+Output: 'output' type=Type ':' name=ID ('[' chan=INT ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
+'''
 
 class SupoProgram(object):
     def __init__(self, **kwargs):
@@ -158,7 +189,7 @@ class Output(object):
 
 def main():
     this_folder = dirname(__file__)
-    supo_mm = metamodel_from_file(join(this_folder, 'supo.tx'), classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output])
+    supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output])
     logger.info('Built metamodel.')
     try:
         supo_model = supo_mm.model_from_file(join(this_folder, 'test.supo'))
