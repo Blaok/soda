@@ -264,7 +264,7 @@ def main():
             dim = supo_model.dim,
             compute_content = supo_model.compute_content,
             extra_params = supo_model.extra_params,
-            tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)],
+            tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)]+[0],
             k = args.k if args.k is not None else supo_model.k,
             dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else supo_model.dram_separate)
 
@@ -273,7 +273,7 @@ def main():
         logger.info('dram channel  : %d' % (stencil.dram_chan*2) if stencil.dram_separate else stencil.dram_chan)
         logger.info('dram separate : %s' % 'yes' if stencil.dram_separate else 'no')
         logger.info('unroll factor : %d' % stencil.k)
-        logger.info('tile size     : %s' % str(stencil.tile_size))
+        logger.info('tile size     : (%s,)' % ', '.join([str(x) for x in stencil.tile_size[:-1]]))
         logger.info('dimension     : %d' % stencil.dim)
         logger.info('input name    : %s' % stencil.input_name)
         logger.info('input type    : %s' % stencil.input_type)
