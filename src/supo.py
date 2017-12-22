@@ -3,12 +3,14 @@ from functools import reduce
 from os.path import join, dirname
 from textx import metamodel_from_str
 from textx.exceptions import TextXSyntaxError
+import argparse
 import logging
 import operator
-import supo.generator.kernel
+import os
+import supo.generator.kernel, supo.generator.host, supo.generator.header
 import sys
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 supo_grammar = '''
@@ -55,7 +57,6 @@ class SupoProgram(object):
         self.output = kwargs.pop('output')
         # TODO: check dims
         self.A = self.output.GetA()
-        print(self.A)
         self.compute_content = self.output.GetCode().split('\n')
         self.extra_params = None
 
@@ -188,17 +189,69 @@ class Output(object):
         return self.expr.GetLoadIndices()
 
 def main():
-    this_folder = dirname(__file__)
+    parser = argparse.ArgumentParser(prog='supoc', description='Stencil with Unrolling and Pipelining Optimization (SUPO) compiler')
+    parser.add_argument('--burst-width',
+                        type=int,
+                        dest='burst_width',
+                        help='override burst width')
+    parser.add_argument('--unroll-factor',
+                        type=int,
+                        metavar='UNROLL_FACTOR',
+                        dest='k',
+                        help='override unroll factor')
+    parser.add_argument('--tile-size',
+                        type=int,
+                        nargs='+',
+                        metavar='TILE_SIZE',
+                        dest='tile_size',
+                        help='override tile size; 0 means no overriding on that dimension')
+    parser.add_argument('--dram-channel',
+                        type=int,
+                        dest='dram_chan',
+                        help='override DRAM channel num')
+    parser.add_argument('--dram-separate',
+                        type=bool,
+                        choices=['yes', 'no'],
+                        dest='dram_separate',
+                        help='override DRAM separation')
+    parser.add_argument(type=argparse.FileType('r'),
+                        dest='supo_src',
+                        metavar='file',
+                        help='supo source code')
+    parser.add_argument('--output-dir', '-o',
+                        type=str,
+                        dest='output_dir',
+                        metavar='dir',
+                        help='directory to generate kernel, source, and header; default names used; default to the current working directory; may be overridden by --kernel-file, --source-file, or --header-file')
+    parser.add_argument('--kernel-file',
+                        type=argparse.FileType('w'),
+                        dest='kernel_file',
+                        metavar='file',
+                        help='Vivado HLS C++ kernel code; overrides --output-dir')
+    parser.add_argument('--source-file',
+                        type=argparse.FileType('w'),
+                        dest='host_file',
+                        metavar='file',
+                        help='host C++ source code; overrides --output-dir')
+    parser.add_argument('--header-file',
+                        type=argparse.FileType('w'),
+                        dest='header_file',
+                        metavar='file',
+                        help='host C++ header code; overrides --output-dir')
+
+    args = parser.parse_args()
+    # TODO: check tile size
+
     supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output])
-    logger.info('Built metamodel.')
+    logger.debug('Build metamodel')
     try:
-        supo_model = supo_mm.model_from_file(join(this_folder, 'test.supo'))
+        supo_model = supo_mm.model_from_str(args.supo_src.read())
     except TextXSyntaxError as e:
         logger.error(e)
     else:
         stencil = supo.generator.kernel.Stencil(
-            burst_width = supo_model.burst_width,
-            dram_chan = supo_model.dram_chan,
+            burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
+            dram_chan = args.dram_chan if args.dram_chan is not None else supo_model.dram_chan,
             app_name = supo_model.app_name,
             input_name = supo_model.input.name,
             input_type = supo_model.input.type,
@@ -210,11 +263,42 @@ def main():
             dim = supo_model.dim,
             compute_content = supo_model.compute_content,
             extra_params = supo_model.extra_params,
-            tile_size = supo_model.tile_size,
-            k = supo_model.k,
-            dram_separate = supo_model.dram_separate)
-        with open('%s_kernel.cpp' % supo_model.app_name, 'w') as kernel_file:
-            supo.generator.kernel.PrintCode(stencil, kernel_file)
+            tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)],
+            k = args.k if args.k is not None else supo_model.k,
+            dram_separate = args.dram_separate if args.dram_separate is not None else supo_model.dram_separate)
+
+        logger.info('kernel        : %s' % stencil.app_name)
+        logger.info('burst width   : %d' % stencil.burst_width)
+        logger.info('dram channel  : %d' % (stencil.dram_chan*2) if stencil.dram_separate else stencil.dram_chan)
+        logger.info('dram separate : %s' % 'yes' if stencil.dram_separate else 'no')
+        logger.info('unroll factor : %d' % stencil.k)
+        logger.info('tile size     : %s' % str(stencil.tile_size))
+        logger.info('dimension     : %d' % stencil.dim)
+        logger.info('input name    : %s' % stencil.input_name)
+        logger.info('input type    : %s' % stencil.input_type)
+        logger.info('input channel : %d' % stencil.input_chan)
+        logger.info('output name   : %s' % stencil.output_name)
+        logger.info('output type   : %s' % stencil.output_type)
+        logger.info('output channel: %d' % stencil.output_chan)
+        logger.info('computation   : %s' % stencil.compute_content)
+
+        if args.kernel_file is not None:
+            supo.generator.kernel.PrintCode(stencil, args.kernel_file)
+        else:
+            with open(join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_chan, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
+                supo.generator.kernel.PrintCode(stencil, kernel_file)
+
+        if args.host_file is not None:
+            supo.generator.host.PrintCode(stencil, args.host_file)
+        else:
+            with open(join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
+                supo.generator.host.PrintCode(stencil, host_file)
+
+        if args.header_file is not None:
+            supo.generator.header.PrintCode(stencil, args.header_file)
+        else:
+            with open(join(args.output_dir if args.output_dir is not None else '', '%s.h' % supo_model.app_name), 'w') as header_file:
+                supo.generator.header.PrintCode(stencil, header_file)
 
 if __name__ == '__main__':
     main()

@@ -1,13 +1,16 @@
 #!/usr/bin/python3.6
+from fractions import Fraction
+from functools import reduce
 import json
+import logging
 import math
 import operator
 import os
 import sys
-from fractions import Fraction
-from functools import reduce
 sys.path.append(os.path.dirname(__file__))
 from utils import coords_in_tile, coords_in_orig, type_width, Stencil, Printer, GetStencilFromJSON, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim
+
+logger = logging.getLogger(__name__)
 
 def GetChains(tile_size, A, k):
     A_dag = set()
@@ -549,6 +552,7 @@ def GetAdderTree(variables, count):
     return (variables[0], count)
 
 def PrintCode(stencil, output_file):
+    logger.debug('Generate kernel code as %s' % output_file.name)
     printer = Printer(output_file)
     burst_width = stencil.burst_width
     dram_chan = stencil.dram_chan
