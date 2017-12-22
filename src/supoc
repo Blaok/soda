@@ -183,7 +183,7 @@ class Output(object):
         return ('output %s: %s(%s) = %s' % (self.type, self.name, ', '.join([str(x) for x in self.idx]), self.expr))
 
     def GetCode(self):
-        return 'output_type result = '+self.expr.GetCode()
+        return 'output_type result = %s;' % self.expr.GetCode()
 
     def GetA(self):
         return self.expr.GetLoadIndices()
