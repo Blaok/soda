@@ -41,8 +41,12 @@ Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Float : /((\d+\.|\d*\.\d+)([+-]?[Ee]\d+)?|\d+[+-]?[Ee]\d+)[FfLl]?/;
 Input: 'input' type=Type ':' name=ID ('[' chan=INT ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
-Output: 'output' type=Type ':' name=ID ('[' chan=INT ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
+Output: 'output' type=Type ':' (output_expr=OutputExpr)+;
+OutputExpr: name=ID ('[' chan=INT ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
 '''
+
+class SemanticError(Exception):
+    pass
 
 class SupoProgram(object):
     def __init__(self, **kwargs):
@@ -57,7 +61,7 @@ class SupoProgram(object):
         self.output = kwargs.pop('output')
         # TODO: check dims
         self.A = self.output.GetA()
-        self.compute_content = self.output.GetCode().split('\n')
+        self.compute_content = reduce(operator.add, [x.split('\n') for x in self.output.GetCode()])
         self.extra_params = None
 
     def __str__(self):
@@ -87,7 +91,9 @@ class Expression(object):
                     in zip(self.operand, self.operator)]), self.operand[-1].GetCode())
 
     def GetLoadIndices(self):
-        return reduce(operator.add, [op.GetLoadIndices() for op in self.operand])
+        if not hasattr(self, 'load_indices'):
+            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices()[x] for op in self.operand if x in op.GetLoadIndices()]) for x in set(reduce(operator.add, [list(op.GetLoadIndices().keys()) for op in self.operand]))}
+        return self.load_indices
 
 class Term(object):
     def __init__(self, **kwargs):
@@ -107,7 +113,9 @@ class Term(object):
                     in zip(self.operand, self.operator)]), self.operand[-1].GetCode())
 
     def GetLoadIndices(self):
-        return reduce(operator.add, [op.GetLoadIndices() for op in self.operand])
+        if not hasattr(self, 'load_indices'):
+            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices()[x] for op in self.operand if x in op.GetLoadIndices()]) for x in set(reduce(operator.add, [list(op.GetLoadIndices().keys()) for op in self.operand]))}
+        return self.load_indices
 
 class Factor(object):
     def __init__(self, **kwargs):
@@ -127,7 +135,7 @@ class Operand(object):
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
         self.chan = kwargs.pop('chan')
-        if not self.chan:
+        if self.chan is None:
             self.chan = 1
         self.idx = kwargs.pop('idx')
         self.num = kwargs.pop('num')
@@ -135,7 +143,7 @@ class Operand(object):
 
     def __str__(self):
         if self.name:
-            return '%s(%s)' % (self.name, ', '.join([str(x) for x in self.idx]))
+            return '%s[%d](%s)' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]))
         if self.num:
             return str(self.num)
         if self.expr:
@@ -143,7 +151,7 @@ class Operand(object):
 
     def GetCode(self):
         if self.name:
-            return 'load_%s_at_%s' % (self.name, '_'.join([str(x).replace('-','m') for x in self.idx]))
+            return 'load_%s_%d_at_%s' % (self.name, self.chan, '_'.join([str(x).replace('-','m') for x in self.idx]))
         if self.num:
             return str(self.num)
         if self.expr:
@@ -153,37 +161,72 @@ class Operand(object):
         if self.expr:
             return self.expr.GetLoadIndices()
         if self.num:
-            return []
+            return {}
         if self.name:
-            return [self.idx]
+            return {self.chan: [self.idx]}
 
 class Input(object):
     def __init__(self, **kwargs):
         self.type = kwargs.pop('type')
         self.name = kwargs.pop('name')
         self.chan = kwargs.pop('chan')
-        if not self.chan:
+        if self.chan is None:
             self.chan = 1
         self.tile_size = kwargs.pop('tile_size')+[0]
 
     def __str__(self):
-        return ('input %s: %s(%s)' % (self.type, self.name, ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
+        return ('input %s: %s[%d](%s)' % (self.type, self.chan, self.name, ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
 
 class Output(object):
     def __init__(self, **kwargs):
         self.type = kwargs.pop('type')
+        self.output_expr = kwargs.pop('output_expr')
+        for e in self.output_expr:
+            if hasattr(self, 'name'):
+                if self.name != e.name:
+                    err_msg = 'output had name %s but now renamed to %s' % (self.name, e.name)
+                    logger.error(err_msg)
+                    raise SemanticError(err_msg)
+            else:
+                self.name = e.name
+                logger.debug('output named as %s' % e.name)
+            if hasattr(self, 'chan'):
+                if e.chan in self.chan:
+                    logger.warn('output channel %d redefined' % e.chan)
+                self.chan |= {e.chan}
+            else:
+                self.chan = {e.chan}
+        if self.chan != set(range(len(self.chan))):
+            err_msg = ('output channel poorly-defined: %s' % str(self.chan))
+            logger.error(err_msg)
+            raise SemanticError(err_msg)
+        self.chan = len(self.chan)
+
+    def __str__(self):
+        return ('output %s: %s' % (self.type, self.output_expr))
+
+    def GetCode(self):
+        return [x.GetCode() for x in self.output_expr]
+
+    def GetA(self):
+        if not hasattr(self, 'A'):
+            self.A = {x: reduce(operator.add, [op.GetA()[x] for op in self.output_expr if x in op.GetA()]) for x in set(reduce(operator.add, [list(op.GetA().keys()) for op in self.output_expr]))}
+        return self.A
+
+class OutputExpr(object):
+    def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
         self.chan = kwargs.pop('chan')
-        if not self.chan:
+        if self.chan is None:
             self.chan = 1
         self.idx = kwargs.pop('idx')
         self.expr = kwargs.pop('expr')
 
     def __str__(self):
-        return ('output %s: %s(%s) = %s' % (self.type, self.name, ', '.join([str(x) for x in self.idx]), self.expr))
+        return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]), self.expr))
 
     def GetCode(self):
-        return 'output_type result = %s;' % self.expr.GetCode()
+        return 'output_type result_%d = %s;' % (self.chan, self.expr.GetCode())
 
     def GetA(self):
         return self.expr.GetLoadIndices()
@@ -242,7 +285,7 @@ def main():
     args = parser.parse_args()
     # TODO: check tile size
 
-    supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output])
+    supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output, OutputExpr])
     logger.debug('Build metamodel')
     try:
         with open(args.supo_src, 'r') as supo_file:
