@@ -33,17 +33,29 @@ MulOrDiv: '*'|'/'|'%';
 Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
 Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
 Factor: (sign=PlusOrMinus)? operand=Operand;
-Operand: name=ID ('[' chan=INT ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
-Number: Float|Hex|Bin|Oct|Dec;
+Operand: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
+Number: Float|Integer;
+Integer: Hex|Bin|Oct|Dec;
 Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Float : /((\d+\.|\d*\.\d+)([+-]?[Ee]\d+)?|\d+[+-]?[Ee]\d+)[FfLl]?/;
-Input: 'input' type=Type ':' name=ID ('[' chan=INT ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
+Input: 'input' type=Type ':' name=ID ('[' chan=Integer ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
 Output: 'output' type=Type ':' (output_expr=OutputExpr)+;
-OutputExpr: name=ID ('[' chan=INT ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
+OutputExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
 '''
+
+def StringToInteger(s, none_val):
+    if s is None:
+        return none_val
+    if s[0:2] == '0x' or s[0:2] == '0X':
+        return int(s, 16)
+    if s[0:2] == '0b' or s[0:2] == '0B':
+        return int(s, 2)
+    if s[0] == '0':
+        return int(s, 8)
+    return int(s)
 
 class SemanticError(Exception):
     pass
@@ -60,7 +72,7 @@ class SupoProgram(object):
         self.dim = len(self.tile_size)
         self.output = kwargs.pop('output')
         # TODO: check dims
-        self.A = self.output.GetA()
+        self.A = list(set(reduce(operator.add, [[tuple(xx) for xx in x] for x in self.output.GetA().values()])))
         self.compute_content = reduce(operator.add, [x.split('\n') for x in self.output.GetCode()])
         self.extra_params = None
 
@@ -134,9 +146,7 @@ class Factor(object):
 class Operand(object):
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
-        self.chan = kwargs.pop('chan')
-        if self.chan is None:
-            self.chan = 1
+        self.chan = StringToInteger(kwargs.pop('chan'), 0)
         self.idx = kwargs.pop('idx')
         self.num = kwargs.pop('num')
         self.expr = kwargs.pop('expr')
@@ -169,9 +179,7 @@ class Input(object):
     def __init__(self, **kwargs):
         self.type = kwargs.pop('type')
         self.name = kwargs.pop('name')
-        self.chan = kwargs.pop('chan')
-        if self.chan is None:
-            self.chan = 1
+        self.chan = StringToInteger(kwargs.pop('chan'), 1)
         self.tile_size = kwargs.pop('tile_size')+[0]
 
     def __str__(self):
@@ -190,6 +198,7 @@ class Output(object):
             else:
                 self.name = e.name
                 logger.debug('output named as %s' % e.name)
+            logger.debug('chan: %s' % str(e.chan))
             if hasattr(self, 'chan'):
                 if e.chan in self.chan:
                     logger.warn('output channel %d redefined' % e.chan)
@@ -216,9 +225,7 @@ class Output(object):
 class OutputExpr(object):
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
-        self.chan = kwargs.pop('chan')
-        if self.chan is None:
-            self.chan = 1
+        self.chan = StringToInteger(kwargs.pop('chan'), 0)
         self.idx = kwargs.pop('idx')
         self.expr = kwargs.pop('expr')
 

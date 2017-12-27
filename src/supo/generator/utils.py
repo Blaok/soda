@@ -29,8 +29,8 @@ class Stencil(object):
         self.output_name = GetCType(kwargs.pop('output_name'))
         self.output_type = GetCType(kwargs.pop('output_type'))
         self.output_chan = kwargs.pop('output_chan')
-        raw_A = kwargs.pop('A')
-        self.A = {c: [tuple(x) for x in raw_A[c]] for c in raw_A}
+        self.A = kwargs.pop('A')
+        #self.A = {c: [tuple(x) for x in raw_A[c]] for c in raw_A}
         self.dim = kwargs.pop('dim')
         self.extra_params = kwargs.pop('extra_params')
         if not self.extra_params:
@@ -167,13 +167,10 @@ def Serialize(vec, tile_size):
         result += vec[i]*reduce(operator.mul, tile_size[0:i])
     return result
 
-def GetStencilDistanceS(A, tile_size):
+def GetStencilDistance(A, tile_size):
     A_serialized = [Serialize(x, tile_size) for x in A]
     return max(A_serialized) - min(A_serialized)
 
-def GetStencilDistance(A, tile_size):
-    return {c: GetStencilDistanceS(A[c], tile_size) for c in A.keys()}
-
 def GetStencilDim(A):
-    return {c: [max_index-min_index+1 for max_index, min_index in zip([max([point[dim] for point in A[c]]) for dim in range(len(next(iter(A[c]))))], [min([point[dim] for point in A[c]]) for dim in range(len(next(iter(A[c]))))])] for c in A.keys()}
+    return [max_index-min_index+1 for max_index, min_index in zip([max([point[dim] for point in A]) for dim in range(len(next(iter(A))))], [min([point[dim] for point in A]) for dim in range(len(next(iter(A))))])]
 
