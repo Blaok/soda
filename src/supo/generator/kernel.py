@@ -525,8 +525,8 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
         for i in range(dram_chan):
             printer.PrintLine('load(input_stream_%d_%d, var_input_%d_%d, coalesced_data_num);' % ((c, i)*2))
     output_stream = ', '.join([', '.join(['output_stream_%d_%d' % (c, x) for x in range(dram_chan)]) for c in range(output_chan)])
-    input_stream = ', '.join([', '.join(['input_stream_%d_%d' % (c, x) for x in range(dram_chan)]) for c in range(output_chan)])
-    tile_num_dim = ', '.join([', '.join(['tile_num_dim_%d' % x for x in range(len(tile_size)-1)]) for c in range(output_chan)])
+    input_stream = ', '.join([', '.join(['input_stream_%d_%d' % (c, x) for x in range(dram_chan)]) for c in range(input_chan)])
+    tile_num_dim = ', '.join(['tile_num_dim_%d' % x for x in range(len(tile_size)-1)])
     printer.PrintLine('compute(%s, %s, coalesced_data_num, tile_data_num, %s, input_size_dim_%d);' % (output_stream, input_stream, tile_num_dim, len(tile_size)-1))
     for c in range(output_chan):
         for i in range(dram_chan):

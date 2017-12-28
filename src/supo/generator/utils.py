@@ -9,6 +9,7 @@ import os
 import sys
 
 # constants
+coords_tiled = 'xyzw'
 coords_in_tile = 'ijkl'
 coords_in_orig = 'pqrs'
 type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
@@ -30,7 +31,6 @@ class Stencil(object):
         self.output_type = GetCType(kwargs.pop('output_type'))
         self.output_chan = kwargs.pop('output_chan')
         self.A = kwargs.pop('A')
-        #self.A = {c: [tuple(x) for x in raw_A[c]] for c in raw_A}
         self.dim = kwargs.pop('dim')
         self.extra_params = kwargs.pop('extra_params')
         if not self.extra_params:
