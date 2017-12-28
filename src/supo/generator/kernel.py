@@ -436,13 +436,13 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
     chan = 0
     for i in range(dram_chan):
         for c in range(output_chan):
-            printer.PrintLine('#pragma HLS interface m_axi port=var_output_%d_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (c, i, chan), 0)
+            printer.PrintLine('#pragma HLS interface m_axi port=var_output_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, chan), 0)
         chan += 1
     if not dram_separate:
         chan = 0
     for i in range(dram_chan):
         for c in range(input_chan):
-            printer.PrintLine('#pragma HLS interface m_axi port=var_input_%d_%d offset=slave depth=65536 bundle=gmem%d latency=120' % (c, i, chan), 0)
+            printer.PrintLine('#pragma HLS interface m_axi port=var_input_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, chan), 0)
         chan += 1
     if extra_params:
         for param_name, param in extra_params.items():
