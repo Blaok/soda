@@ -9,10 +9,13 @@ import os
 import sys
 
 # constants
+coords_tiled = 'xyzw'
 coords_in_tile = 'ijkl'
 coords_in_orig = 'pqrs'
 type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
 max_dram_chan = 4
+
+logger = logging.getLogger(__name__)
 
 class Stencil(object):
     def __init__(self, **kwargs):
@@ -169,7 +172,5 @@ def GetStencilDistance(A, tile_size):
     return max(A_serialized) - min(A_serialized)
 
 def GetStencilDim(A):
-    min_in_dims = [min([point[dim] for point in A]) for dim in range(len(A[0]))]
-    max_in_dims = [max([point[dim] for point in A]) for dim in range(len(A[0]))]
-    return [max_index-min_index+1 for max_index, min_index in zip(max_in_dims, min_in_dims)]
+    return [max_index-min_index+1 for max_index, min_index in zip([max([point[dim] for point in A]) for dim in range(len(next(iter(A))))], [min([point[dim] for point in A]) for dim in range(len(next(iter(A))))])]
 
