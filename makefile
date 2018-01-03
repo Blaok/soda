@@ -146,6 +146,7 @@ $(BIT)/$(CSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_CSIM_OPT) $(CLCXX_OPT) -o $@ $<
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
+	src/fix-xclbin2-size $@
 
 $(BIT)/$(COSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	@mkdir -p $(BIT)
@@ -153,6 +154,7 @@ $(BIT)/$(COSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS) $(BIN)/emconfig.json
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
+	src/fix-xclbin2-size $@
 
 $(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 	@mkdir -p $(BIT)
@@ -161,9 +163,11 @@ $(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 	@cp $(TMP)/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/{*_timing_summary,kernel_util}_routed.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
+	src/fix-xclbin2-size $@
 
 $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin): check-aws-bucket $(BIT)/$(HW_XCLBIN)
 	@TMP=$$(mktemp -d);ln -rs ${BIT}/$(HW_XCLBIN) $${TMP};pushd $${TMP} >/dev/null;create-sdaccel-afi -xclbin=$(HW_XCLBIN) -o=$(HW_XCLBIN:.xclbin=) -s3_bucket=$(AWS_BUCKET) -s3_dcp_key=$(AWS_AFI_DIR) -s3_logs_key=$(AWS_AFI_LOG);popd >/dev/null;mv $${TMP}/$(HW_XCLBIN:.xclbin=.awsxclbin) $(BIT);mv $${TMP}/*afi_id.txt $(BIT)/$(HW_XCLBIN:.xclbin=.afi);rm -rf $${TMP}
+	src/fix-xclbin2-size $@
 
 $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(TMP)/$(KERNEL_SRCS)
 	@mkdir -p $(OBJ)
