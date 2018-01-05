@@ -721,7 +721,7 @@ def PrintTest(p, stencil):
             p.UnScope()
         p.PrintLine()
 
-    p.PrintLine('%s(&%s, &%s, %sxclbin);' % (stencil.app_name, stencil.input_name, stencil.output_name, reduce(operator.add, ['&%s, ' % param.name for param in stencil.extra_params])))
+    p.PrintLine('%s(&%s, &%s, %sxclbin);' % (stencil.app_name, stencil.input_name, stencil.output_name, ''.join(['&%s, ' % param.name for param in stencil.extra_params])))
     p.PrintLine()
 
     p.PrintLine('int error_count = 0;')
