@@ -10,7 +10,7 @@ import os
 import supo.generator.kernel, supo.generator.host, supo.generator.header
 import sys
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 supo_grammar = '''
@@ -240,6 +240,14 @@ class OutputExpr(object):
 
 def main():
     parser = argparse.ArgumentParser(prog='supoc', description='Stencil with Unrolling and Pipelining Optimization (SUPO) compiler')
+    parser.add_argument('--verbose', '-v',
+                        action='count',
+                        dest='verbose',
+                        help='increase verbosity')
+    parser.add_argument('--quiet', '-q',
+                        action='count',
+                        dest='quiet',
+                        help='decrease verbosity')
     parser.add_argument('--burst-width',
                         type=int,
                         dest='burst_width',
@@ -290,10 +298,19 @@ def main():
                         help='host C++ header code; overrides --output-dir')
 
     args = parser.parse_args()
+    verbose = 0 if args.verbose is None else args.verbose
+    quiet = 0 if args.quiet is None else args.quiet
+    logging_level = (quiet-verbose)*10+logger.getEffectiveLevel()
+    if logging_level > logging.CRITICAL:
+        logging_level = logging.CRITICAL
+    if logging_level < logging.DEBUG:
+        logging_level = logging.DEBUG
+    logger.setLevel(logging_level)
+    logger.info('set log level to '+logging.getLevelName(logging_level))
     # TODO: check tile size
 
     supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output, OutputExpr])
-    logger.debug('Build metamodel')
+    logger.info('build metamodel')
     try:
         with open(args.supo_src, 'r') as supo_file:
             supo_model = supo_mm.model_from_str(supo_file.read())
@@ -318,21 +335,23 @@ def main():
             k = args.k if args.k is not None else supo_model.k,
             dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else supo_model.dram_separate)
 
-        logger.info('kernel        : %s' % stencil.app_name)
-        logger.info('burst width   : %d' % stencil.burst_width)
-        logger.info('dram channel  : %d' % ((stencil.dram_chan*2) if stencil.dram_separate else stencil.dram_chan))
-        logger.info('dram separate : %s' % ('yes' if stencil.dram_separate else 'no'))
-        logger.info('unroll factor : %d' % stencil.k)
-        logger.info('tile size     : (%s,)' % ', '.join([str(x) for x in stencil.tile_size[:-1]]))
-        logger.info('dimension     : %d' % stencil.dim)
-        logger.info('input name    : %s' % stencil.input_name)
-        logger.info('input type    : %s' % stencil.input_type)
-        logger.info('input channel : %d' % stencil.input_chan)
-        logger.info('output name   : %s' % stencil.output_name)
-        logger.info('output type   : %s' % stencil.output_type)
-        logger.info('output channel: %d' % stencil.output_chan)
-        logger.info('A             : %s' % stencil.A)
-        logger.info('computation   : %s' % stencil.compute_content)
+        logger.debug('kernel        : %s' % stencil.app_name)
+        logger.debug('burst width   : %d' % stencil.burst_width)
+        logger.debug('dram channel  : %d' % ((stencil.dram_chan*2) if stencil.dram_separate else stencil.dram_chan))
+        logger.debug('dram separate : %s' % ('yes' if stencil.dram_separate else 'no'))
+        logger.debug('unroll factor : %d' % stencil.k)
+        logger.debug('tile size     : (%s,)' % ', '.join([str(x) for x in stencil.tile_size[:-1]]))
+        logger.debug('dimension     : %d' % stencil.dim)
+        logger.debug('input name    : %s' % stencil.input_name)
+        logger.debug('input type    : %s' % stencil.input_type)
+        logger.debug('input channel : %d' % stencil.input_chan)
+        logger.debug('output name   : %s' % stencil.output_name)
+        logger.debug('output type   : %s' % stencil.output_type)
+        logger.debug('output channel: %d' % stencil.output_chan)
+        logger.debug('A             : %s' % stencil.A)
+        for p in stencil.extra_params:
+            logger.debug('extra params  : %s' % str(p))
+        logger.debug('computation   : %s' % stencil.compute_content)
 
         if args.kernel_file is not None:
             if args.kernel_file=='-':

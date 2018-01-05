@@ -10,7 +10,7 @@ import sys
 sys.path.append(os.path.dirname(__file__))
 from utils import coords_in_tile, coords_in_orig, coords_tiled, type_width, max_dram_chan, Stencil, Printer, GetStencilFromJSON, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('__main__').getChild(__name__)
 
 def PrintHeader(p):
     for header in ['assert', 'float', 'math', 'stdbool', 'stdint', 'stdio', 'stdlib', 'string', 'fcntl', 'time', 'unistd', 'sys/types', 'sys/stat', 'CL/opencl']:
@@ -717,7 +717,7 @@ def PrintTest(p, stencil):
     p.UnScope()
 
 def PrintCode(stencil, host_file):
-    logger.debug('Generate host source code as %s' % host_file.name)
+    logger.info('Generate host source code as %s' % host_file.name)
     p = Printer(host_file)
     PrintHeader(p)
     p.PrintLine('#include"%s.h"' % stencil.app_name)
