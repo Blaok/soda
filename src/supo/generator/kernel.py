@@ -119,12 +119,12 @@ def PrintCompute(printer, tile_size, A, k, compute_content, input_partition, out
         for i in range(dram_chan):
             printer.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >& from_%d_%d,' % (c, i))
     if extra_params:
-        for param_name, param in extra_params.items():
-            if 'dup' in param:
-                dup = ('[%d]' % param['dup'])
+        for param in extra_params:
+            if param.dup:
+                dup = ('[%d]' % param.dup)
             else:
                 dup = ''
-            printer.PrintLine('%s %s%s[UNROLL_FACTOR][%d],' % (param['type'], param_name, dup, param['length']))
+            printer.PrintLine('%s %s%s[UNROLL_FACTOR][%s],' % (param.type, param.name, dup, ']['.join([str(x) for x in param.size])))
     printer.PrintLine('int64_t coalesced_data_num,')
     printer.PrintLine('int64_t tile_data_num,')
     for i in range(len(tile_size)-1):
@@ -422,8 +422,8 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
         for i in range(dram_chan):
             printer.PrintLine('ap_uint<BURST_WIDTH>* var_input_%d_%d,' % (c, i))
     if extra_params:
-        for param_name, param in extra_params.items():
-            printer.PrintLine('%s* var_%s,' % (param['type'], param_name))
+        for param in extra_params:
+            printer.PrintLine('%s* var_%s,' % (param.type, param.name))
     printer.PrintLine('int64_t coalesced_data_num,')
     printer.PrintLine('int64_t tile_data_num,')
     for i in range(len(tile_size)-1):
@@ -445,8 +445,8 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
             printer.PrintLine('#pragma HLS interface m_axi port=var_input_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, chan), 0)
         chan += 1
     if extra_params:
-        for param_name, param in extra_params.items():
-            printer.PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem0 latency=120' % (param_name, param['length']), 0)
+        for param in extra_params:
+            printer.PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem0 latency=120' % (param.name, reduce(operator.mul, param.size)), 0)
     printer.PrintLine()
     for c in range(output_chan):
         for i in range(dram_chan):
@@ -455,8 +455,8 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
         for i in range(dram_chan):
             printer.PrintLine('#pragma HLS interface s_axilite port=var_input_%d_%d bundle=control' % (c, i), 0)
     if extra_params:
-        for param_name in extra_params.keys():
-            printer.PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param_name, 0)
+        for param in extra_params:
+            printer.PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param.name, 0)
     printer.PrintLine('#pragma HLS interface s_axilite port=coalesced_data_num bundle=control', 0)
     printer.PrintLine('#pragma HLS interface s_axilite port=tile_data_num bundle=control', 0)
     for i in range(len(tile_size)-1):
@@ -480,45 +480,61 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
     printer.PrintLine()
 
     if extra_params:
-        for param_name, param in extra_params.items():
-            if 'dup' in param:
-                dup = ('[%d]' % param['dup'])
+        for param in extra_params:
+            if param.dup:
+                dup = ('[%d]' % param.dup)
             else:
                 dup = ''
-            printer.PrintLine('%s %s%s[UNROLL_FACTOR][%d];' % (param['type'], param_name, dup, param['length']))
+            printer.PrintLine('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join([str(x) for x in param.size])))
         printer.PrintLine()
 
-        for param_name, param in extra_params.items():
-            if 'dup' in param:
-                partition_dim = 3
-                printer.PrintLine('#pragma HLS array_partition variable=%s complete dim=1' % param_name, 0)
-            else:
-                partition_dim = 2
-            printer.PrintLine('#pragma HLS array_partition variable=%s complete dim=%d' % (param_name, partition_dim-1), 0)
-            if 'partition' in param:
-                printer.PrintLine('#pragma HLS array_partition variable=%s %s dim=%d' % (param_name, param['partition'], partition_dim), 0)
+        for param in extra_params:
+            printer.PrintLine('#pragma HLS array_partition variable=%s complete dim=1' % param.name, 0)
+            dim_offset = 1
+            if param.dup:
+                printer.PrintLine('#pragma HLS array_partition variable=%s complete dim=2' % param.name, 0)
+                dim_offset = 2
+            for partitioning in param.partitioning:
+                printer.PrintLine('#pragma HLS array_partition variable=%s %s dim=%d%s' % (
+                    param.name,
+                    partitioning.partition_type,
+                    dim_offset+1 if partitioning.dim is None else partitioning.dim+dim_offset,
+                    '' if partitioning.factor is None else ' factor=%d' % partitioning.factor,
+                ), 0)
         printer.PrintLine()
 
-        printer.PrintLine('extra_params_unrolled:', 0)
-        printer.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll',0)
-        for param_name, param in extra_params.items():
-            printer.PrintLine('%s_init:' % param_name, 0)
-            printer.PrintLine('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param_name, param_name, param['length'], param_name))
+        for param in extra_params:
+            if len(param.size) > 1:
+                for dim, size in enumerate(param.size):
+                    printer.PrintLine('uint32_t %s_index_dim_%d = 0;' % (param.name, dim))
+            printer.PrintLine('%s_init:' % param.name, 0)
+            printer.PrintLine('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, reduce(operator.mul, param.size), param.name))
             printer.DoScope()
             printer.PrintLine('#pragma HLS pipeline II=1', 0)
-            if 'dup' in param:
-                for i in range(param['dup']):
-                    printer.PrintLine('%s[%d][unroll_index][%s_index] = var_%s[%s_index];' % ((param_name, i)+(param_name,)*3))
+            printer.PrintLine('%s& %s_tmp = var_%s[%s_index];' % (param.type, param.name, param.name, param.name))
+            printer.PrintLine('%s_unrolled:' % param.name, 0)
+            printer.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+            printer.DoScope()
+            printer.PrintLine('#pragma HLS unroll',0)
+            if param.dup is None:
+                printer.PrintLine('%s[unroll_index]%s = %s_tmp;' % ((param.name, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name)))
             else:
-                printer.PrintLine('%s[unroll_index][%s_index] = var_%s[%s_index];' % ((param_name,)*4))
+                for i in range(param.dup):
+                    printer.PrintLine('%s[%d][unroll_index]%s = %s_tmp;' % (param.name, i, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name))
             printer.UnScope()
-        printer.UnScope()
+            if len(param.size) > 1:
+                for dim in range(len(param.size)):
+                    printer.PrintLine('++%s_index_dim_%d;' % (param.name, dim))
+                    if dim<len(param.size)-1:
+                        printer.PrintLine('if(%s_index_dim_%d==%d)' % (param.name, dim, param.size[len(param.size)-1-dim]))
+                        printer.DoScope()
+                        printer.PrintLine('%s_index_dim_%d = 0;' % (param.name, dim))
+            for size in param.size[:-1]:
+                printer.UnScope()
+            printer.UnScope()
         printer.PrintLine()
 
-    extra_params_str = ''.join([var+', ' for var in extra_params.keys()]) if extra_params else ''
-    coords_str = ''.join([coords_in_tile[i]+'_base, ' for i in range(len(tile_size))]) + ''.join([coords_in_orig[i]+'_base, ' for i in range(len(tile_size)-1)])
+    extra_params_str = ''.join([param.name+', ' for param in extra_params])
 
     printer.PrintLine('#pragma HLS dataflow', 0)
     for c in range(input_chan):
@@ -527,7 +543,7 @@ def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dra
     output_stream = ', '.join([', '.join(['output_stream_%d_%d' % (c, x) for x in range(dram_chan)]) for c in range(output_chan)])
     input_stream = ', '.join([', '.join(['input_stream_%d_%d' % (c, x) for x in range(dram_chan)]) for c in range(input_chan)])
     tile_num_dim = ', '.join(['tile_num_dim_%d' % x for x in range(len(tile_size)-1)])
-    printer.PrintLine('compute(%s, %s, coalesced_data_num, tile_data_num, %s, input_size_dim_%d);' % (output_stream, input_stream, tile_num_dim, len(tile_size)-1))
+    printer.PrintLine('compute(%s, %s, %scoalesced_data_num, tile_data_num, %s, input_size_dim_%d);' % (output_stream, input_stream, extra_params_str, tile_num_dim, len(tile_size)-1))
     for c in range(output_chan):
         for i in range(dram_chan):
             printer.PrintLine('store(var_output_%d_%d, output_stream_%d_%d, coalesced_data_num);' % ((c, i)*2))

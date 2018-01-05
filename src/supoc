@@ -23,6 +23,7 @@ SupoProgram:
     ('kernel' ':' app_name=ID)
     input=Input
     output=Output
+    (extra_params=ExtraParam)*
     Comment*
 )#;
 Comment: /\s*#.*$/;
@@ -34,8 +35,11 @@ Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
 Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
 Factor: (sign=PlusOrMinus)? operand=Operand;
 Operand: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
+ExtraParam: 'param' type=Type (',' attrs=ExtraParamAttr)*  ':' name=ID ('[' size=INT ']')+;
+ExtraParamAttr: 'dup' dup=Number | partitioning=Partitioning;
+Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
 Number: Float|Integer;
-Integer: Hex|Bin|Oct|Dec;
+Integer: ('+'|'-')?(Hex|Bin|Oct|Dec);
 Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
@@ -46,7 +50,7 @@ Output: 'output' type=Type ':' (output_expr=OutputExpr)+;
 OutputExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
 '''
 
-def StringToInteger(s, none_val):
+def StringToInteger(s, none_val=None):
     if s is None:
         return none_val
     if s[0:2] == '0x' or s[0:2] == '0X':
@@ -58,6 +62,9 @@ def StringToInteger(s, none_val):
     return int(s)
 
 class SemanticError(Exception):
+    pass
+
+class SemanticWarn(Exception):
     pass
 
 class SupoProgram(object):
@@ -72,9 +79,9 @@ class SupoProgram(object):
         self.dim = len(self.tile_size)
         self.output = kwargs.pop('output')
         # TODO: check dims
-        self.A = list(set(reduce(operator.add, [[tuple(xx) for xx in x] for x in self.output.GetA().values()])))
-        self.compute_content = reduce(operator.add, [x.split('\n') for x in self.output.GetCode()])
-        self.extra_params = None
+        self.A = list(set(reduce(operator.add, [[tuple(xx) for xx in x] for x in self.output.GetA((self.input.name,)).values()])))
+        self.extra_params = kwargs.pop('extra_params')
+        self.compute_content = reduce(operator.add, [x.split('\n') for x in self.output.GetCode(self.input.name, self.extra_params)])
 
     def __str__(self):
         return \
@@ -96,15 +103,15 @@ class Expression(object):
                 str(operand)+' '+str(operator)+' ' for operand, operator
                     in zip(self.operand, self.operator)]), str(self.operand[-1]))
 
-    def GetCode(self):
+    def GetCode(self, input_name, extra_params):
         return '%s%s' % \
             (''.join([
-                operand.GetCode()+' '+operator+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode())
+                operand.GetCode(input_name, extra_params)+' '+operator+' ' for operand, operator
+                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode(input_name, extra_params))
 
-    def GetLoadIndices(self):
+    def GetLoadIndices(self, input_name):
         if not hasattr(self, 'load_indices'):
-            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices()[x] for op in self.operand if x in op.GetLoadIndices()]) for x in set(reduce(operator.add, [list(op.GetLoadIndices().keys()) for op in self.operand]))}
+            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices(input_name)[x] for op in self.operand if x in op.GetLoadIndices(input_name)]) for x in set(reduce(operator.add, [list(op.GetLoadIndices(input_name).keys()) for op in self.operand]))}
         return self.load_indices
 
 class Term(object):
@@ -118,15 +125,15 @@ class Term(object):
                 str(operand)+' '+str(operator)+' ' for operand, operator
                     in zip(self.operand, self.operator)]), str(self.operand[-1]))
 
-    def GetCode(self):
+    def GetCode(self, input_name, extra_params):
         return '%s%s' % \
             (''.join([
-                operand.GetCode()+' '+operator+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode())
+                operand.GetCode(input_name, extra_params)+' '+operator+' ' for operand, operator
+                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode(input_name, extra_params))
 
-    def GetLoadIndices(self):
+    def GetLoadIndices(self, input_name):
         if not hasattr(self, 'load_indices'):
-            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices()[x] for op in self.operand if x in op.GetLoadIndices()]) for x in set(reduce(operator.add, [list(op.GetLoadIndices().keys()) for op in self.operand]))}
+            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices(input_name)[x] for op in self.operand if x in op.GetLoadIndices(input_name)]) for x in set(reduce(operator.add, [list(op.GetLoadIndices(input_name).keys()) for op in self.operand]))}
         return self.load_indices
 
 class Factor(object):
@@ -137,11 +144,11 @@ class Factor(object):
     def __str__(self):
         return ('-%s' if self.sign=='-' else '%s') % str(self.operand)
 
-    def GetCode(self):
-        return ('-%s' if self.sign=='-' else '%s') % self.operand.GetCode()
+    def GetCode(self, input_name, extra_params):
+        return ('-%s' if self.sign=='-' else '%s') % self.operand.GetCode(input_name, extra_params)
 
-    def GetLoadIndices(self):
-        return self.operand.GetLoadIndices()
+    def GetLoadIndices(self, input_name):
+        return self.operand.GetLoadIndices(input_name)
 
 class Operand(object):
     def __init__(self, **kwargs):
@@ -159,21 +166,35 @@ class Operand(object):
         if self.expr:
             return '(%s)' % str(self.expr)
 
-    def GetCode(self):
+    def GetCode(self, input_name, extra_params):
         if self.name:
-            return 'load_%s_%d_at_%s' % (self.name, self.chan, '_'.join([str(x).replace('-','m') for x in self.idx]))
+            if self.name == input_name:
+                return 'load_%s_%d_at_%s' % (self.name, self.chan, '_'.join([str(x).replace('-','m') for x in self.idx]))
+            else:
+                for param in extra_params:
+                    if self.name == param.name:
+                        if param.dup is None:
+                            return '%s[unroll_index]%s' % (self.name, ''.join(['[%d]'%x for x in self.idx]))
+                        else:
+                            return '%s[%d][unroll_index]%s' % (self.name, self.chan, ''.join(['[%d]'%x for x in self.idx]))
+                err_msg = '%s is not a param' % self.name
+                logger.error(err_msg)
+                raise SemanticError(err_msg)
         if self.num:
             return str(self.num)
         if self.expr:
-            return '(%s)' % self.expr.GetCode()
+            return '(%s)' % self.expr.GetCode(input_name, extra_params)
 
-    def GetLoadIndices(self):
+    def GetLoadIndices(self, input_name):
         if self.expr:
-            return self.expr.GetLoadIndices()
+            return self.expr.GetLoadIndices(input_name)
         if self.num:
             return {}
         if self.name:
-            return {self.chan: [self.idx]}
+            if self.name in input_name:
+                return {self.chan: [self.idx]}
+            else:
+                return {}
 
 class Input(object):
     def __init__(self, **kwargs):
@@ -184,6 +205,39 @@ class Input(object):
 
     def __str__(self):
         return ('input %s: %s[%d](%s)' % (self.type, self.chan, self.name, ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
+
+class ExtraParam(object):
+    def __init__(self, **kwargs):
+        self.type = kwargs.pop('type')
+        self.name = kwargs.pop('name')
+        self.size = kwargs.pop('size')
+        attrs = kwargs.pop('attrs')
+        self.dup = None
+        self.partitioning = []
+        for attr in attrs:
+            if attr.dup is not None:
+                if self.dup is not None:
+                    warn_msg = 'parameter duplication factor redefined as %d, previously defined as %d'
+                    logger.warn(warn_msg)
+                    raise SemanticWarn(warn_msg)
+                self.dup = StringToInteger(attr.dup)
+            if attr.partitioning is not None:
+                attr.partitioning.dim = StringToInteger(attr.partitioning.dim)
+                attr.partitioning.factor = StringToInteger(attr.partitioning.factor)
+                self.partitioning.append(attr.partitioning)
+
+    def __str__(self):
+        return ('param %s: %s[%s]%s%s' % (
+            self.type,
+            self.name,
+            ']['.join([str(x) for x in self.size]),
+            '' if self.dup is None else (', dup x%d' % self.dup),
+            ''.join([', %s partition%s%s' % (
+                x.partition_type,
+                '' if x.dim is None else ' in dim %d' % x.dim,
+                '' if x.factor is None else' with factor=%d' % x.factor
+            ) for x in self.partitioning]) if self.partitioning else ''
+        ))
 
 class Output(object):
     def __init__(self, **kwargs):
@@ -214,12 +268,12 @@ class Output(object):
     def __str__(self):
         return ('output %s: %s' % (self.type, self.output_expr))
 
-    def GetCode(self):
-        return [x.GetCode() for x in self.output_expr]
+    def GetCode(self, input_name, extra_params):
+        return [x.GetCode(input_name, extra_params) for x in self.output_expr]
 
-    def GetA(self):
+    def GetA(self, input_name):
         if not hasattr(self, 'A'):
-            self.A = {x: reduce(operator.add, [op.GetA()[x] for op in self.output_expr if x in op.GetA()]) for x in set(reduce(operator.add, [list(op.GetA().keys()) for op in self.output_expr]))}
+            self.A = {x: reduce(operator.add, [op.GetA(input_name)[x] for op in self.output_expr if x in op.GetA(input_name)]) for x in set(reduce(operator.add, [list(op.GetA(input_name).keys()) for op in self.output_expr]))}
         return self.A
 
 class OutputExpr(object):
@@ -232,11 +286,11 @@ class OutputExpr(object):
     def __str__(self):
         return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]), self.expr))
 
-    def GetCode(self):
-        return 'output_type result_%d = %s;' % (self.chan, self.expr.GetCode())
+    def GetCode(self, input_name, extra_params):
+        return 'output_type result_%d = %s;' % (self.chan, self.expr.GetCode(input_name, extra_params))
 
-    def GetA(self):
-        return self.expr.GetLoadIndices()
+    def GetA(self, input_name):
+        return self.expr.GetLoadIndices(input_name)
 
 def main():
     parser = argparse.ArgumentParser(prog='supoc', description='Stencil with Unrolling and Pipelining Optimization (SUPO) compiler')
@@ -309,7 +363,7 @@ def main():
     logger.info('set log level to '+logging.getLevelName(logging_level))
     # TODO: check tile size
 
-    supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, Input, Output, OutputExpr])
+    supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, ExtraParam, Input, Output, OutputExpr])
     logger.info('build metamodel')
     try:
         with open(args.supo_src, 'r') as supo_file:
