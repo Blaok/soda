@@ -35,6 +35,8 @@ class Stencil(object):
         self.extra_params = kwargs.pop('extra_params')
         if not self.extra_params:
             self.extra_params = []
+        for param in self.extra_params:
+            param.type = GetCType(param.type)
         self.compute_content = kwargs.pop('compute_content')
         # parameters can be explored
         self.tile_size = kwargs.pop('tile_size')
