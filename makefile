@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls exe bitstream check-afi-status check-aws-bucket mktemp
+.PHONY: csim cosim hw hls exe bitstream check-afi-status mktemp
 
 APP ?= blur
 SDA_VER := 2017.1
@@ -100,11 +100,6 @@ exe: $(BIN)/$(HOST_BIN)
 check-afi-status:
 	@echo -n 'AFI state: ';aws ec2 describe-fpga-images --fpga-image-ids $$(jq -r '.FpgaImageId' $(BIT)/$(HW_XCLBIN:.xclbin=.afi))|jq '.FpgaImages[0].State.Code' -r
 
-check-aws-bucket:
-ifndef AWS_BUCKET
-	$(error AWS_BUCKET must be set to an available AWS S3 bucket)
-endif # AWS_BUCKET
-
 mktemp:
 	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
 
@@ -166,7 +161,10 @@ $(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 	src/fix-xclbin2-size $@
 
-$(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin): check-aws-bucket $(BIT)/$(HW_XCLBIN)
+$(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin): $(BIT)/$(HW_XCLBIN)
+ifndef AWS_BUCKET
+	$(error AWS_BUCKET must be set to an available AWS S3 bucket)
+endif # AWS_BUCKET
 	@TMP=$$(mktemp -d);ln -rs ${BIT}/$(HW_XCLBIN) $${TMP};pushd $${TMP} >/dev/null;create-sdaccel-afi -xclbin=$(HW_XCLBIN) -o=$(HW_XCLBIN:.xclbin=) -s3_bucket=$(AWS_BUCKET) -s3_dcp_key=$(AWS_AFI_DIR) -s3_logs_key=$(AWS_AFI_LOG);popd >/dev/null;mv $${TMP}/$(HW_XCLBIN:.xclbin=.awsxclbin) $(BIT);mv $${TMP}/*afi_id.txt $(BIT)/$(HW_XCLBIN:.xclbin=.afi);rm -rf $${TMP}
 	src/fix-xclbin2-size $@
 
