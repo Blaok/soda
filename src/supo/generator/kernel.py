@@ -109,6 +109,7 @@ def PrintCompute(printer, tile_size, A, k, compute_content, input_partition, out
     points = GetPoints(tile_size, A, k)
     stencil_distance = GetStencilDistance(A, tile_size)
     stencil_dim = GetStencilDim(A)
+    print_aux = False
 
     printer.PrintLine('void compute(')
     printer.DoIndent()
@@ -137,14 +138,15 @@ def PrintCompute(printer, tile_size, A, k, compute_content, input_partition, out
         printer.PrintLine('int32_t tile_index_dim_%d = 0;' % i)
     printer.PrintLine()
 
-    printer.PrintLine('int32_t i_base[UNROLL_FACTOR] = {%s};' % (', '.join([str(x-stencil_distance) for x in range(k)])))
-    for i in range(1, len(tile_size)):
-        printer.PrintLine('int32_t %c_base[UNROLL_FACTOR] = {0};' % (coords_in_tile[i]))
-    for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t %c_base = 0;' % (coords_in_orig[i]))
-    for i in range(len(tile_size)):
-        printer.PrintLine('#pragma HLS array_partition variable=%s_base complete' % (coords_in_tile[i]), 0)
-    printer.PrintLine()
+    if print_aux:
+        printer.PrintLine('int32_t i_base[UNROLL_FACTOR] = {%s};' % (', '.join([str(x-stencil_distance) for x in range(k)])))
+        for i in range(1, len(tile_size)):
+            printer.PrintLine('int32_t %c_base[UNROLL_FACTOR] = {0};' % (coords_in_tile[i]))
+        for i in range(len(tile_size)-1):
+            printer.PrintLine('int32_t %c_base = 0;' % (coords_in_orig[i]))
+        for i in range(len(tile_size)):
+            printer.PrintLine('#pragma HLS array_partition variable=%s_base complete' % (coords_in_tile[i]), 0)
+        printer.PrintLine()
 
     # array declaration
     for c in range(input_chan):
@@ -284,12 +286,15 @@ def PrintCompute(printer, tile_size, A, k, compute_content, input_partition, out
     printer.PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
     printer.DoScope()
     printer.PrintLine('#pragma HLS unroll', 0)
-    for i in range(len(tile_size)):
-        printer.PrintLine('int32_t& %c = %c_base[unroll_index];' % ((coords_in_tile[i],)*2))
-    for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t %c = %c_base+%c;' % ((coords_in_orig[i],)*2 + (coords_in_tile[i],)))
-    printer.PrintLine('int32_t %c = %c;' % (coords_in_orig[len(tile_size)-1], coords_in_tile[len(tile_size)-1]))
-    printer.PrintLine()
+
+    if print_aux:
+        for i in range(len(tile_size)):
+            printer.PrintLine('int32_t& %c = %c_base[unroll_index];' % ((coords_in_tile[i],)*2))
+        for i in range(len(tile_size)-1):
+            printer.PrintLine('int32_t %c = %c_base+%c;' % ((coords_in_orig[i],)*2 + (coords_in_tile[i],)))
+        printer.PrintLine('int32_t %c = %c;' % (coords_in_orig[len(tile_size)-1], coords_in_tile[len(tile_size)-1]))
+        printer.PrintLine()
+
     for c in range(input_chan):
         for idx, item in enumerate(A):
             printer.PrintLine('input_type& load_%s_%d_at_%s = input_%d_points[unroll_index][%d];' % (input_name, c, '_'.join([str(x).replace('-', 'm') for x in item]), c, idx))
@@ -313,27 +318,29 @@ def PrintCompute(printer, tile_size, A, k, compute_content, input_partition, out
                 printer.PrintLine('output_%d_buffer[unroll_index+UNROLL_FACTOR*%d] = result_%d;' % (c, i, c))
             printer.UnScope()
         printer.UnScope()
-    printer.PrintLine()
 
-    printer.PrintLine('%s += UNROLL_FACTOR;' % (coords_in_tile[0]))
-    if len(tile_size)>1:
-        printer.PrintLine('if(%s>=TILE_SIZE_DIM_0)' % (coords_in_tile[0]))
-        printer.DoScope()
-        printer.PrintLine('%s -= TILE_SIZE_DIM_0;' % (coords_in_tile[0]))
-        printer.PrintLine('++%s;' % (coords_in_tile[1]))
-        if len(tile_size)>2:
-            printer.PrintLine('if(%s>=TILE_SIZE_DIM_1)' % (coords_in_tile[1]))
+    if print_aux:
+        printer.PrintLine()
+        printer.PrintLine('%s += UNROLL_FACTOR;' % (coords_in_tile[0]))
+        if len(tile_size)>1:
+            printer.PrintLine('if(%s>=TILE_SIZE_DIM_0)' % (coords_in_tile[0]))
             printer.DoScope()
-            printer.PrintLine('%s -= TILE_SIZE_DIM_1;' % (coords_in_tile[1]))
-            printer.PrintLine('++%s;' % (coords_in_tile[2]))
-            if len(tile_size)>3:
-                printer.PrintLine('if(%s>=TILE_SIZE_DIM_2)' % (coords_in_tile[2]))
+            printer.PrintLine('%s -= TILE_SIZE_DIM_0;' % (coords_in_tile[0]))
+            printer.PrintLine('++%s;' % (coords_in_tile[1]))
+            if len(tile_size)>2:
+                printer.PrintLine('if(%s>=TILE_SIZE_DIM_1)' % (coords_in_tile[1]))
                 printer.DoScope()
-                printer.PrintLine('%s -= TILE_SIZE_DIM_2;' % (coords_in_tile[2]))
-                printer.PrintLine('++%s;' % (coords_in_tile[3]))
+                printer.PrintLine('%s -= TILE_SIZE_DIM_1;' % (coords_in_tile[1]))
+                printer.PrintLine('++%s;' % (coords_in_tile[2]))
+                if len(tile_size)>3:
+                    printer.PrintLine('if(%s>=TILE_SIZE_DIM_2)' % (coords_in_tile[2]))
+                    printer.DoScope()
+                    printer.PrintLine('%s -= TILE_SIZE_DIM_2;' % (coords_in_tile[2]))
+                    printer.PrintLine('++%s;' % (coords_in_tile[3]))
+                    printer.UnScope()
                 printer.UnScope()
             printer.UnScope()
-        printer.UnScope()
+
     printer.UnIndent()
     printer.PrintLine('} // for unroll_index')
     printer.PrintLine()
@@ -390,20 +397,22 @@ def PrintCompute(printer, tile_size, A, k, compute_content, input_partition, out
         printer.UnScope()
     printer.PrintLine()
 
-    printer.PrintLine('++p_base_counter;' )
-    if len(tile_size)>1:
-        printer.PrintLine('if(p_base_counter == tile_data_num)')
-        printer.DoScope()
-        printer.PrintLine('p_base_counter = 0;')
-        printer.PrintLine('reset_bases:', 0)
-        printer.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll', 0)
-        printer.PrintLine('i_base[unroll_index] = unroll_index-%d; // STENCIL_DISTANCE' % stencil_distance)
-        printer.PrintLine('j_base[unroll_index] = 0;')
-        printer.UnScope()
-        printer.PrintLine('p_base += TILE_SIZE_DIM_0-%d+1; // TILE_SIZE_DIM_0-STENCIL_DIM_0+1' % (stencil_dim[0]))
-        printer.UnScope()
+    if print_aux:
+        printer.PrintLine('++p_base_counter;' )
+        if len(tile_size)>1:
+            printer.PrintLine('if(p_base_counter == tile_data_num)')
+            printer.DoScope()
+            printer.PrintLine('p_base_counter = 0;')
+            printer.PrintLine('reset_bases:', 0)
+            printer.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+            printer.DoScope()
+            printer.PrintLine('#pragma HLS unroll', 0)
+            printer.PrintLine('i_base[unroll_index] = unroll_index-%d; // STENCIL_DISTANCE' % stencil_distance)
+            printer.PrintLine('j_base[unroll_index] = 0;')
+            printer.UnScope()
+            printer.PrintLine('p_base += TILE_SIZE_DIM_0-%d+1; // TILE_SIZE_DIM_0-STENCIL_DIM_0+1' % (stencil_dim[0]))
+            printer.UnScope()
+
     printer.UnScope()
     printer.UnScope()
 
