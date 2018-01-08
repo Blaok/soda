@@ -13,7 +13,7 @@ coords_tiled = 'xyzw'
 coords_in_tile = 'ijkl'
 coords_in_orig = 'pqrs'
 type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
-max_dram_chan = 4
+max_dram_bank = 4
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -21,7 +21,7 @@ class Stencil(object):
     def __init__(self, **kwargs):
         # platform determined
         self.burst_width = kwargs.pop('burst_width')
-        self.dram_chan = kwargs.pop('dram_chan')
+        self.dram_bank = kwargs.pop('dram_bank')
         # application determined
         self.app_name = kwargs.pop('app_name')
         self.input_name = GetCType(kwargs.pop('input_name'))
@@ -43,11 +43,11 @@ class Stencil(object):
         self.k = kwargs.pop('k')
         self.dram_separate = kwargs.pop('dram_separate')
         if self.dram_separate:
-            if self.dram_chan%2 != 0:
-                logging.getLogger(__name__).fatal('Number of DRAM channels has to be even when separated')
+            if self.dram_bank%2 != 0:
+                logging.getLogger(__name__).fatal('Number of DRAM banks has to be even when separated')
                 sys.exit(-1)
             else:
-                self.dram_chan = int(self.dram_chan/2)
+                self.dram_bank = int(self.dram_bank/2)
 
 class Printer(object):
     def __init__(self, out):
@@ -102,7 +102,7 @@ def GetStencilFromJSON(json_file):
     config = json.loads(json_file.read())
     input_type = config['input_type']
     output_type = config['output_type']
-    dram_chan = int(os.environ.get('DRAM_CHAN', config['dram_chan']))
+    dram_bank = int(os.environ.get('DRAM_BANK', config['dram_bank']))
     dram_separate = ('DRAM_SEPARATE' in os.environ) or ('dram_separate' in config and config['dram_separate'])
     app_name = config['app_name']
     tile_size = config.get('St', [0]*config['dim'])
@@ -145,7 +145,7 @@ def GetStencilFromJSON(json_file):
         dim = config['dim'],
         extra_params = extra_params,
         compute_content = compute_content,
-        dram_chan = dram_chan,
+        dram_bank = dram_bank,
         tile_size = tile_size,
         k = k,
         dram_separate = dram_separate)

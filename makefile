@@ -7,13 +7,13 @@ TILE_SIZE_DIM_0 ?= 8000
 UNROLL_FACTOR ?= 64
 HOST_ARGS ?= 8000 800
 HOST_SRCS ?= $(APP)_run.cpp
-DRAM_CHAN ?= 1
+DRAM_BANK ?= 1
 
-CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
-COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
-HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
+CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
+COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
+HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
 
-KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_CHAN)ddr$(if $(DRAM_SEPARATE),-separated).cpp
+KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).cpp
 KERNEL_NAME ?= $(APP)_kernel
 HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))
 
@@ -72,25 +72,25 @@ CLCXX_HW_OPT = -t hw
 
 ############################## phony targets ##############################
 csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN)
-	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@ulimit -s unlimited;DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@ulimit -s unlimited;DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
-	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
 
 ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 bitstream: $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
-	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
 else # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 bitstream: $(BIT)/$(HW_XCLBIN)
 
 hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
-	@echo DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@DRAM_CHAN=$(DRAM_CHAN) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
+	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
 endif # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 
 hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
@@ -106,15 +106,15 @@ mktemp:
 ############################## generate source files ##############################
 $(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-channel $(DRAM_CHAN) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --kernel-file $@ $^
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --kernel-file $@ $^
 
 $(TMP)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).cpp: $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-channel $(DRAM_CHAN) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --source-file $@ $^
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --source-file $@ $^
 
 $(TMP)/$(APP).h: $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-channel $(DRAM_CHAN) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --header-file $@ $^
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --header-file $@ $^
 
 ############################## generate host binary ##############################
 $(BIN)/$(HOST_BIN): $(OBJ)/$(HOST_SRCS:.cpp=.o) $(OBJ)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o

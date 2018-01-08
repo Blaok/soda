@@ -17,7 +17,7 @@ supo_grammar = '''
 SupoProgram:
 (
     ('burst' 'width' ':' burst_width=INT)
-    ('dram' 'channel' ':' dram_chan=INT)
+    ('dram' 'bank' ':' dram_bank=INT)
     ('dram' 'separate' ':' dram_separate=YesOrNo)
     ('unroll' 'factor' ':' k=INT)
     ('kernel' ':' app_name=ID)
@@ -71,7 +71,7 @@ class SupoProgram(object):
     def __init__(self, **kwargs):
         self.app_name = kwargs.pop('app_name')
         self.burst_width = kwargs.pop('burst_width')
-        self.dram_chan = kwargs.pop('dram_chan')
+        self.dram_bank = kwargs.pop('dram_bank')
         self.dram_separate = kwargs.pop('dram_separate') == 'yes'
         self.k = kwargs.pop('k')
         self.input = kwargs.pop('input')
@@ -86,7 +86,7 @@ class SupoProgram(object):
     def __str__(self):
         return \
             ('burst width: %d\n' % self.burst_width) + \
-            ('dram channel: %d\n' % self.dram_chan) + \
+            ('dram bank: %d\n' % self.dram_bank) + \
             ('dram separate: %s\n' % ('yes' if self.dram_separate else 'no')) + \
             ('%s\n' % self.input) + \
             ('%s\n' % self.output) + \
@@ -317,10 +317,10 @@ def main():
                         metavar='TILE_SIZE',
                         dest='tile_size',
                         help='override tile size; 0 means no overriding on that dimension')
-    parser.add_argument('--dram-channel',
+    parser.add_argument('--dram-bank',
                         type=int,
-                        dest='dram_chan',
-                        help='override DRAM channel num')
+                        dest='dram_bank',
+                        help='override DRAM bank num')
     parser.add_argument('--dram-separate',
                         type=str,
                         metavar='(yes|no)',
@@ -373,7 +373,7 @@ def main():
     else:
         stencil = supo.generator.kernel.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
-            dram_chan = args.dram_chan if args.dram_chan is not None else supo_model.dram_chan,
+            dram_bank = args.dram_bank if args.dram_bank is not None else supo_model.dram_bank,
             app_name = supo_model.app_name,
             input_name = supo_model.input.name,
             input_type = supo_model.input.type,
@@ -391,7 +391,7 @@ def main():
 
         logger.debug('kernel        : %s' % stencil.app_name)
         logger.debug('burst width   : %d' % stencil.burst_width)
-        logger.debug('dram channel  : %d' % ((stencil.dram_chan*2) if stencil.dram_separate else stencil.dram_chan))
+        logger.debug('dram bank  : %d' % ((stencil.dram_bank*2) if stencil.dram_separate else stencil.dram_bank))
         logger.debug('dram separate : %s' % ('yes' if stencil.dram_separate else 'no'))
         logger.debug('unroll factor : %d' % stencil.k)
         logger.debug('tile size     : (%s,)' % ', '.join([str(x) for x in stencil.tile_size[:-1]]))
@@ -430,7 +430,7 @@ def main():
 
         if args.output_dir is not None or args.kernel_file is None and args.host_file is None and args.header_file is None:
             if args.kernel_file is None:
-                with open(join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_chan, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
+                with open(join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_bank, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
                     supo.generator.kernel.PrintCode(stencil, kernel_file)
             if args.host_file is None:
                 with open(join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
