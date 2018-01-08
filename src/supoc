@@ -178,7 +178,6 @@ class Operand(object):
                         else:
                             return '%s[%d][unroll_index]%s' % (self.name, self.chan, ''.join(['[%d]'%x for x in self.idx]))
                 err_msg = '%s is not a param' % self.name
-                logger.error(err_msg)
                 raise SemanticError(err_msg)
         if self.num:
             return str(self.num)
@@ -217,8 +216,7 @@ class ExtraParam(object):
         for attr in attrs:
             if attr.dup is not None:
                 if self.dup is not None:
-                    warn_msg = 'parameter duplication factor redefined as %d, previously defined as %d'
-                    logger.warn(warn_msg)
+                    warn_msg = 'parameter duplication factor redefined as %d, previously defined as %d' % (StringToInteger(attr.dup), self.dup)
                     raise SemanticWarn(warn_msg)
                 self.dup = StringToInteger(attr.dup)
             if attr.partitioning is not None:
@@ -247,7 +245,6 @@ class Output(object):
             if hasattr(self, 'name'):
                 if self.name != e.name:
                     err_msg = 'output had name %s but now renamed to %s' % (self.name, e.name)
-                    logger.error(err_msg)
                     raise SemanticError(err_msg)
             else:
                 self.name = e.name
@@ -261,7 +258,6 @@ class Output(object):
                 self.chan = {e.chan}
         if self.chan != set(range(len(self.chan))):
             err_msg = ('output channel poorly-defined: %s' % str(self.chan))
-            logger.error(err_msg)
             raise SemanticError(err_msg)
         self.chan = len(self.chan)
 
@@ -370,6 +366,12 @@ def main():
             supo_model = supo_mm.model_from_str(supo_file.read())
     except TextXSyntaxError as e:
         logger.error(e)
+        sys.exit(1)
+    except SemanticError as e:
+        logger.error(e)
+        sys.exit(1)
+    except SemanticWarn as w:
+        logger.warn(w)
     else:
         stencil = supo.generator.kernel.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
