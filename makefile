@@ -71,13 +71,13 @@ CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
 
 ############################## phony targets ##############################
-csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN)
-	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@ulimit -s unlimited;DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
+csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN) $(BIN)/emconfig.json
+	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN) $(HOST_ARGS)
+	@ulimit -s unlimited;DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN) $(HOST_ARGS)
 
-cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN)
-	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $^ $(HOST_ARGS)
+cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN) $(BIN)/emconfig.json
+	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN) $(HOST_ARGS)
+	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN) $(HOST_ARGS)
 
 ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 bitstream: $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
@@ -137,14 +137,14 @@ $(OBJ)/%.o: $(TMP)/%.cpp
 -include $(OBJ)/$(HOST_SRCS:.cpp=.d)
 
 ############################## generate bitstreams ##############################
-$(BIT)/$(CSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS) $(BIN)/emconfig.json
+$(BIT)/$(CSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS)
 	@mkdir -p $(BIT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_CSIM_OPT) $(CLCXX_OPT) -o $@ $<
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 	src/fix-xclbin2-size $@
 
-$(BIT)/$(COSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS) $(BIN)/emconfig.json
+$(BIT)/$(COSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS)
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
