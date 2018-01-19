@@ -190,9 +190,9 @@ def PrintWrapped(p, stencil):
 
     p.PrintLine('// align each linearized tile to multiples of BURST_WIDTH')
     p.PrintLine('int64_t tile_pixel_num = %s*%s_size_dim_%d;' % ('*'.join(['TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)]), stencil.input.name, stencil.dim-1))
-    p.PrintLine('int64_t tile_burst_num = (tile_pixel_num-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank*CHANNEL_NUM_I)+1;')
-    p.PrintLine('int64_t tile_size_linearized_i = tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank*CHANNEL_NUM_I);')
-    p.PrintLine('int64_t tile_size_linearized_o = tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank*CHANNEL_NUM_O);')
+    p.PrintLine('int64_t tile_burst_num = (tile_pixel_num-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1;')
+    p.PrintLine('int64_t tile_size_linearized_i = tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank);')
+    p.PrintLine('int64_t tile_size_linearized_o = tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);')
     p.PrintLine()
 
     p.PrintLine('// prepare for opencl')
@@ -810,8 +810,6 @@ def PrintCode(stencil, host_file):
     for i, dim in enumerate(GetStencilDim(overall_stencil_window)):
         PrintDefine(p, 'STENCIL_DIM_%d' % i, dim)
     PrintDefine(p, 'STENCIL_DISTANCE', GetStencilDistance(overall_stencil_window, stencil.tile_size))
-    PrintDefine(p, 'CHANNEL_NUM_I', stencil.input.chan)
-    PrintDefine(p, 'CHANNEL_NUM_O', stencil.output.chan)
     p.PrintLine()
 
     PrintLoadXCLBIN2(p)
