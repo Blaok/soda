@@ -9,7 +9,7 @@ import operator
 import os
 import sys
 
-from supo.generator.utils import coords_in_tile, coords_in_orig, Stencil, Printer, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
+from supo.generator.utils import coords_in_tile, coords_in_orig, Stencil, Printer, PrintDefine, PrintGuard, SerializeIterative, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
 from supo.grammar import ExtraParam
 
 logger = logging.getLogger('__main__').getChild(__name__)
@@ -18,7 +18,7 @@ def GetChains(tile_size, b, unroll_factor):
     logger.debug('get reuse chains of buffer %s' % b.name)
     A_dag = set.union(*[(lambda offsets: set.union(*[{max(offsets)+i-x+s.delay[b.name] for x in offsets} for i in range(unroll_factor)]))(SerializeIterative(s.window[b.name], tile_size)) for s in b.children])
     logger.debug('A† of buffer %s: %s' % (b.name, A_dag))
-    chains = sum([tuple([tuple(sorted([x for x in A_dag if x%unroll_factor == i]))]) for i in range(unroll_factor)], tuple())
+    chains = sum([tuple([tuple(sorted([x for x in A_dag if x%unroll_factor == i]))]) for i in range(unroll_factor)], ())
     for idx, chain in enumerate(chains):
         logger.debug('reuse chain %d of buffer %s: %s' % (idx, b.name, chain))
     return chains
@@ -27,7 +27,7 @@ def GetPoints(tile_size, b, unroll_factor):
     all_points = {} # {name:{offset:{unroll_index:point_index}}}
     for s in b.children:
         all_points[s.output.name] = {}
-        offsets = [Serialize(x, tile_size) for x in s.window[b.name]]
+        offsets = SerializeIterative(s.window[b.name], tile_size)
         max_offset = max(offsets)
         for unroll_index in range(unroll_factor):
             for idx, offset in enumerate(offsets):
@@ -35,7 +35,7 @@ def GetPoints(tile_size, b, unroll_factor):
     for s in b.children:
         for offset, points in all_points[s.output.name].items():
             for unroll_index, point in points.items():
-                logger.debug('%s <- %s @ offset=%d <=> (%s) @ unroll_index=%d' % (s.output.name, b.name, offset, ', '.join([str(x) for x in s.window[b.name][point]]), unroll_index))
+                logger.debug('%s <- %s @ offset=%d <=> (%s) @ unroll_index=%d' % (s.output.name, b.name, offset, ', '.join(map(str, s.window[b.name][point])), unroll_index))
     return all_points
 
 def GetBuffer(tile_size, b, unroll_factor):
@@ -152,7 +152,7 @@ def PrintCompute(p, stencil):
                 dup_str = ('[%d]' % param.dup)
             else:
                 dup_str = ''
-            p.PrintLine('%s param_%s%s[UNROLL_FACTOR][%s],' % (param.type, param.name, dup_str, ']['.join([str(x) for x in param.size])))
+            p.PrintLine('%s param_%s%s[UNROLL_FACTOR][%s],' % (param.type, param.name, dup_str, ']['.join(map(str, param.size))))
     p.PrintLine('int64_t coalesced_data_num,')
     p.PrintLine('int64_t tile_data_num,')
     for i in range(len(tile_size)-1):
@@ -225,7 +225,7 @@ def PrintCompute(p, stencil):
             for c in range(b.chan):
                 p.PrintLine('%s points_from_%s_to_%s_chan_%d[UNROLL_FACTOR][%d];' % (b.type, b.name, s.output.name, c, len(s.window[b.name])))
             for idx, point in enumerate(s.window[b.name]):
-                p.PrintLine('//%s points_from_%s_to_%s_chan_x[UNROLL_FACTOR][%d] <=> %s[x](%s)' % (' '*(len(b.type)-2), b.name, s.output.name, idx, b.name, ', '.join([str(x) for x in point])))
+                p.PrintLine('//%s points_from_%s_to_%s_chan_x[UNROLL_FACTOR][%d] <=> %s[x](%s)' % (' '*(len(b.type)-2), b.name, s.output.name, idx, b.name, ', '.join(map(str, point))))
             for c in range(b.chan):
                 p.PrintLine('#pragma HLS array_partition variable=points_from_%s_to_%s_chan_%d complete dim=0' % (b.name, s.output.name, c), 0)
         p.PrintLine()
@@ -361,9 +361,7 @@ def PrintCompute(p, stencil):
                 # connect points from previous buffer/FIFO/FF
                 for bb in s.inputs.values():
                     buf = reuse_buffers[bb.name]
-                    points_from_b = all_points[bb.name]
-                    logger.debug('points from %s: %s' % (bb.name, points_from_b))
-                    points = points_from_b[s.output.name]
+                    points = all_points[bb.name][s.output.name]
                     logger.debug('%s <- %s points: %s' % (s.output.name, bb.name, points))
                     logger.debug('%s <- %s buf: %s' % (s.output.name, bb.name, buf))
                     for idx, offset in enumerate(buf['inputs']):

@@ -9,7 +9,7 @@ import operator
 import os
 import sys
 
-from supo.generator.utils import coords_in_tile, coords_in_orig, coords_tiled, type_width, max_dram_bank, Stencil, Printer, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
+from supo.generator.utils import coords_in_tile, coords_in_orig, coords_tiled, type_width, max_dram_bank, Stencil, Printer, PrintDefine, PrintGuard, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
 
 logger = logging.getLogger('__main__').getChild(__name__)
 

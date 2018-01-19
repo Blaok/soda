@@ -92,7 +92,7 @@ class Stencil(object):
             parent_buffers = self.GetParentBuffersFor(intermediate)
             window = self.GetWindowFor(intermediate)
             this_stage = Stage(window,
-                offset={n: [Serialize(x, self.tile_size) for x in w] for n, w in window.items()},
+                offset={n: SerializeIterative(w, self.tile_size) for n, w in window.items()},
                 delay={},
                 expr=self.GetExprFor(intermediate),
                 inputs=parent_buffers,
@@ -105,7 +105,7 @@ class Stencil(object):
         parent_buffers = self.GetParentBuffersFor(output_node)
         window = self.GetWindowFor(output_node)
         output_stage = Stage(window,
-            offset={n: [Serialize(x, self.tile_size) for x in w] for n, w in window.items()},
+            offset={n: SerializeIterative(w, self.tile_size) for n, w in window.items()},
             delay={},
             expr=self.GetExprFor(output_node),
             inputs=parent_buffers,
@@ -148,8 +148,8 @@ class Stencil(object):
                             processing_queue.append(bb.name)
 
         logger.debug('buffers: '+str(list(self.buffers.keys())))
-        LoadPrinter = lambda node: '%s%s' % (node.name, node.idx) if node.name in self.extra_params else '%s[%d](%s)' % (node.name, node.chan, ', '.join([str(x) for x in node.idx]))
-        StorePrinter = lambda node: '%s[%d](%s)' % (node.name, node.chan, ', '.join([str(x) for x in node.idx]))
+        LoadPrinter = lambda node: '%s(%s)' % (node.name, ', '.join(map(str, node.idx))) if node.name in self.extra_params else '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
+        StorePrinter = lambda node: '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         for s in self.stages.values():
             logger.debug('stage: %s <- [%s]' % (s.output.name, ', '.join(['%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values()])))
         for s in self.stages.values():
@@ -157,7 +157,7 @@ class Stencil(object):
                 logger.debug('stage.expr: %s' % e.GetCode(LoadPrinter, StorePrinter))
         for s in self.stages.values():
             for n, w in s.offset.items():
-                logger.debug('stage.offset: %s <- %s@[%s]' % (s.output.name, n, ', '.join([str(x) for x in w])))
+                logger.debug('stage.offset: %s <- %s@[%s]' % (s.output.name, n, ', '.join(map(str, w))))
         for s in self.stages.values():
             for n, d in s.delay.items():
                 logger.debug('stage.delay: %s <- %s delayed %d' % (s.output.name, n, d))
@@ -179,7 +179,7 @@ class Stencil(object):
     def GetWindowFor(self, node):
         loads = node.GetLoads() # [Load, ...]
         load_names = {l.name for l in loads if l.name not in self.extra_params}
-        return {name: sorted({l.idx for l in loads if l.name == name}, key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
+        return {name: sorted({l.idx for l in loads if l.name == name}|{(0,)*self.dim}, key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
 
     # return [OutputExpr, ...]
     def GetExprFor(self, node):
@@ -249,15 +249,13 @@ def PrintDefine(printer, var, val):
     printer.PrintLine('#endif//%s' % var)
 
 def Serialize(vec, tile_size):
-    # convert vec to scalar coordinates
-    result = vec[0]
-    for i in range(1, len(tile_size)):
-        result += vec[i]*reduce(operator.mul, tile_size[0:i])
-    return result
+    return sum((vec[i]*reduce(operator.mul, tile_size[:i]) for i in range(1, len(tile_size))), next(iter(vec)))
 
-def GetStencilDistance(A, tile_size):
-    A_serialized = [Serialize(x, tile_size) for x in A]
-    return max(A_serialized) - min(A_serialized)
+def SerializeIterative(iterative, tile_size):
+    return [Serialize(x, tile_size) for x in iterative]
+
+def GetStencilDistance(stencil_window, tile_size):
+    return (lambda x:max(x)-min(x))(SerializeIterative(stencil_window, tile_size))
 
 def GetStencilDim(A):
     return [max_index-min_index+1 for max_index, min_index in zip([max([point[dim] for point in A]) for dim in range(len(next(iter(A))))], [min([point[dim] for point in A]) for dim in range(len(next(iter(A))))])]
