@@ -16,7 +16,7 @@ logger = logging.getLogger('__main__').getChild(__name__)
 
 def GetChains(tile_size, b, unroll_factor):
     logger.debug('get reuse chains of buffer %s' % b.name)
-    A_dag = set.union(*[set.union(*[{x+i+s.delay[b.name] for x in [Serialize(x, tile_size) for x in s.window[b.name]]} for i in range(unroll_factor)]) for s in b.children])
+    A_dag = set.union(*[(lambda offsets: set.union(*[{max(offsets)+i-x+s.delay[b.name] for x in offsets} for i in range(unroll_factor)]))(SerializeIterative(s.window[b.name], tile_size)) for s in b.children])
     logger.debug('A† of buffer %s: %s' % (b.name, A_dag))
     chains = sum([tuple([tuple(sorted([x for x in A_dag if x%unroll_factor == i]))]) for i in range(unroll_factor)], tuple())
     for idx, chain in enumerate(chains):
