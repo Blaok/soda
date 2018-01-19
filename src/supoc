@@ -1,294 +1,21 @@
 #!/usr/bin/python3.6
-from functools import reduce
-from os.path import join
 from textx import metamodel_from_str
 from textx.exceptions import TextXSyntaxError
 import argparse
 import logging
 import operator
 import os
-import supo.generator.kernel, supo.generator.host, supo.generator.header
 import sys
+
+from supo.grammar import *
+import supo.generator.kernel, supo.generator.host, supo.generator.header, supo.generator.utils
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
-supo_grammar = '''
-SupoProgram:
-(
-    ('burst' 'width' ':' burst_width=INT)
-    ('dram' 'bank' ':' dram_bank=INT)
-    ('dram' 'separate' ':' dram_separate=YesOrNo)
-    ('unroll' 'factor' ':' k=INT)
-    ('kernel' ':' app_name=ID)
-    input=Input
-    output=Output
-    (extra_params=ExtraParam)*
-    Comment*
-)#;
-Comment: /\s*#.*$/;
-YesOrNo: 'yes'|'no';
-Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|'double';
-PlusOrMinus: '+'|'-';
-MulOrDiv: '*'|'/'|'%';
-Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
-Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
-Factor: (sign=PlusOrMinus)? operand=Operand;
-Operand: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
-ExtraParam: 'param' type=Type (',' attrs=ExtraParamAttr)*  ':' name=ID ('[' size=INT ']')+;
-ExtraParamAttr: 'dup' dup=Number | partitioning=Partitioning;
-Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
-Number: Float|Integer;
-Integer: ('+'|'-')?(Hex|Bin|Oct|Dec);
-Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
-Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
-Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
-Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
-Float : /((\d+\.|\d*\.\d+)([+-]?[Ee]\d+)?|\d+[+-]?[Ee]\d+)[FfLl]?/;
-Input: 'input' type=Type ':' name=ID ('[' chan=Integer ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
-Output: 'output' type=Type ':' (output_expr=OutputExpr)+;
-OutputExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
-'''
-
-def StringToInteger(s, none_val=None):
-    if s is None:
-        return none_val
-    if s[0:2] == '0x' or s[0:2] == '0X':
-        return int(s, 16)
-    if s[0:2] == '0b' or s[0:2] == '0B':
-        return int(s, 2)
-    if s[0] == '0':
-        return int(s, 8)
-    return int(s)
-
-class SemanticError(Exception):
-    pass
-
-class SemanticWarn(Exception):
-    pass
-
-class SupoProgram(object):
-    def __init__(self, **kwargs):
-        self.app_name = kwargs.pop('app_name')
-        self.burst_width = kwargs.pop('burst_width')
-        self.dram_bank = kwargs.pop('dram_bank')
-        self.dram_separate = kwargs.pop('dram_separate') == 'yes'
-        self.k = kwargs.pop('k')
-        self.input = kwargs.pop('input')
-        self.tile_size = self.input.tile_size
-        self.dim = len(self.tile_size)
-        self.output = kwargs.pop('output')
-        # TODO: check dims
-        self.A = list(set(reduce(operator.add, [[tuple(xx) for xx in x] for x in self.output.GetA((self.input.name,)).values()])))
-        self.extra_params = kwargs.pop('extra_params')
-        self.compute_content = reduce(operator.add, [x.split('\n') for x in self.output.GetCode(self.input.name, self.extra_params)])
-
-    def __str__(self):
-        return \
-            ('burst width: %d\n' % self.burst_width) + \
-            ('dram bank: %d\n' % self.dram_bank) + \
-            ('dram separate: %s\n' % ('yes' if self.dram_separate else 'no')) + \
-            ('%s\n' % self.input) + \
-            ('%s\n' % self.output) + \
-            ''
-
-class Expression(object):
-    def __init__(self, **kwargs):
-        self.operand = kwargs.pop('operand')
-        self.operator = kwargs.pop('operator')
-
-    def __str__(self):
-        return '%s%s' % \
-            (''.join([
-                str(operand)+' '+str(operator)+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), str(self.operand[-1]))
-
-    def GetCode(self, input_name, extra_params):
-        return '%s%s' % \
-            (''.join([
-                operand.GetCode(input_name, extra_params)+' '+operator+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode(input_name, extra_params))
-
-    def GetLoadIndices(self, input_name):
-        if not hasattr(self, 'load_indices'):
-            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices(input_name)[x] for op in self.operand if x in op.GetLoadIndices(input_name)]) for x in set(reduce(operator.add, [list(op.GetLoadIndices(input_name).keys()) for op in self.operand]))}
-        return self.load_indices
-
-class Term(object):
-    def __init__(self, **kwargs):
-        self.operand = kwargs.pop('operand')
-        self.operator = kwargs.pop('operator')
-
-    def __str__(self):
-        return '%s%s' % \
-            (''.join([
-                str(operand)+' '+str(operator)+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), str(self.operand[-1]))
-
-    def GetCode(self, input_name, extra_params):
-        return '%s%s' % \
-            (''.join([
-                operand.GetCode(input_name, extra_params)+' '+operator+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode(input_name, extra_params))
-
-    def GetLoadIndices(self, input_name):
-        if not hasattr(self, 'load_indices'):
-            self.load_indices = {x: reduce(operator.add, [op.GetLoadIndices(input_name)[x] for op in self.operand if x in op.GetLoadIndices(input_name)]) for x in set(reduce(operator.add, [list(op.GetLoadIndices(input_name).keys()) for op in self.operand]))}
-        return self.load_indices
-
-class Factor(object):
-    def __init__(self, **kwargs):
-        self.operand = kwargs.pop('operand')
-        self.sign = kwargs.pop('sign')
-
-    def __str__(self):
-        return ('-%s' if self.sign=='-' else '%s') % str(self.operand)
-
-    def GetCode(self, input_name, extra_params):
-        return ('-%s' if self.sign=='-' else '%s') % self.operand.GetCode(input_name, extra_params)
-
-    def GetLoadIndices(self, input_name):
-        return self.operand.GetLoadIndices(input_name)
-
-class Operand(object):
-    def __init__(self, **kwargs):
-        self.name = kwargs.pop('name')
-        self.chan = StringToInteger(kwargs.pop('chan'), 0)
-        self.idx = kwargs.pop('idx')
-        self.num = kwargs.pop('num')
-        self.expr = kwargs.pop('expr')
-
-    def __str__(self):
-        if self.name:
-            return '%s[%d](%s)' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]))
-        if self.num:
-            return str(self.num)
-        if self.expr:
-            return '(%s)' % str(self.expr)
-
-    def GetCode(self, input_name, extra_params):
-        if self.name:
-            if self.name == input_name:
-                return 'load_%s_%d_at_%s' % (self.name, self.chan, '_'.join([str(x).replace('-','m') for x in self.idx]))
-            else:
-                for param in extra_params:
-                    if self.name == param.name:
-                        if param.dup is None:
-                            return '%s[unroll_index]%s' % (self.name, ''.join(['[%d]'%x for x in self.idx]))
-                        else:
-                            return '%s[%d][unroll_index]%s' % (self.name, self.chan, ''.join(['[%d]'%x for x in self.idx]))
-                err_msg = '%s is not a param' % self.name
-                raise SemanticError(err_msg)
-        if self.num:
-            return str(self.num)
-        if self.expr:
-            return '(%s)' % self.expr.GetCode(input_name, extra_params)
-
-    def GetLoadIndices(self, input_name):
-        if self.expr:
-            return self.expr.GetLoadIndices(input_name)
-        if self.num:
-            return {}
-        if self.name:
-            if self.name in input_name:
-                return {self.chan: [self.idx]}
-            else:
-                return {}
-
-class Input(object):
-    def __init__(self, **kwargs):
-        self.type = kwargs.pop('type')
-        self.name = kwargs.pop('name')
-        self.chan = StringToInteger(kwargs.pop('chan'), 1)
-        self.tile_size = kwargs.pop('tile_size')+[0]
-
-    def __str__(self):
-        return ('input %s: %s[%d](%s)' % (self.type, self.chan, self.name, ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
-
-class ExtraParam(object):
-    def __init__(self, **kwargs):
-        self.type = kwargs.pop('type')
-        self.name = kwargs.pop('name')
-        self.size = kwargs.pop('size')
-        attrs = kwargs.pop('attrs')
-        self.dup = None
-        self.partitioning = []
-        for attr in attrs:
-            if attr.dup is not None:
-                if self.dup is not None:
-                    warn_msg = 'parameter duplication factor redefined as %d, previously defined as %d' % (StringToInteger(attr.dup), self.dup)
-                    raise SemanticWarn(warn_msg)
-                self.dup = StringToInteger(attr.dup)
-            if attr.partitioning is not None:
-                attr.partitioning.dim = StringToInteger(attr.partitioning.dim)
-                attr.partitioning.factor = StringToInteger(attr.partitioning.factor)
-                self.partitioning.append(attr.partitioning)
-
-    def __str__(self):
-        return ('param %s: %s[%s]%s%s' % (
-            self.type,
-            self.name,
-            ']['.join([str(x) for x in self.size]),
-            '' if self.dup is None else (', dup x%d' % self.dup),
-            ''.join([', %s partition%s%s' % (
-                x.partition_type,
-                '' if x.dim is None else ' in dim %d' % x.dim,
-                '' if x.factor is None else' with factor=%d' % x.factor
-            ) for x in self.partitioning]) if self.partitioning else ''
-        ))
-
-class Output(object):
-    def __init__(self, **kwargs):
-        self.type = kwargs.pop('type')
-        self.output_expr = kwargs.pop('output_expr')
-        for e in self.output_expr:
-            if hasattr(self, 'name'):
-                if self.name != e.name:
-                    err_msg = 'output had name %s but now renamed to %s' % (self.name, e.name)
-                    raise SemanticError(err_msg)
-            else:
-                self.name = e.name
-                logger.debug('output named as %s' % e.name)
-            logger.debug('chan: %s' % str(e.chan))
-            if hasattr(self, 'chan'):
-                if e.chan in self.chan:
-                    logger.warn('output channel %d redefined' % e.chan)
-                self.chan |= {e.chan}
-            else:
-                self.chan = {e.chan}
-        if self.chan != set(range(len(self.chan))):
-            err_msg = ('output channel poorly-defined: %s' % str(self.chan))
-            raise SemanticError(err_msg)
-        self.chan = len(self.chan)
-
-    def __str__(self):
-        return ('output %s: %s' % (self.type, self.output_expr))
-
-    def GetCode(self, input_name, extra_params):
-        return [x.GetCode(input_name, extra_params) for x in self.output_expr]
-
-    def GetA(self, input_name):
-        if not hasattr(self, 'A'):
-            self.A = {x: reduce(operator.add, [op.GetA(input_name)[x] for op in self.output_expr if x in op.GetA(input_name)]) for x in set(reduce(operator.add, [list(op.GetA(input_name).keys()) for op in self.output_expr]))}
-        return self.A
-
-class OutputExpr(object):
-    def __init__(self, **kwargs):
-        self.name = kwargs.pop('name')
-        self.chan = StringToInteger(kwargs.pop('chan'), 0)
-        self.idx = kwargs.pop('idx')
-        self.expr = kwargs.pop('expr')
-
-    def __str__(self):
-        return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]), self.expr))
-
-    def GetCode(self, input_name, extra_params):
-        return 'output_type result_%d = %s;' % (self.chan, self.expr.GetCode(input_name, extra_params))
-
-    def GetA(self, input_name):
-        return self.expr.GetLoadIndices(input_name)
-
 def main():
+    if (sys.version_info.major, sys.version_info.minor) < (3, 6):
+        raise Exception('Python 3.6+ is needed for correct result')
     parser = argparse.ArgumentParser(prog='supoc', description='Stencil with Unrolling and Pipelining Optimization (SUPO) compiler')
     parser.add_argument('--verbose', '-v',
                         action='count',
@@ -305,7 +32,7 @@ def main():
     parser.add_argument('--unroll-factor',
                         type=int,
                         metavar='UNROLL_FACTOR',
-                        dest='k',
+                        dest='unroll_factor',
                         help='override unroll factor')
     parser.add_argument('--tile-size',
                         type=int,
@@ -359,11 +86,17 @@ def main():
     logger.info('set log level to '+logging.getLevelName(logging_level))
     # TODO: check tile size
 
-    supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, ExtraParam, Input, Output, OutputExpr])
+    supo_mm = metamodel_from_str(supo_grammar, classes=[SupoProgram, Expression, Term, Factor, Operand, ExtraParam, Input, Output, OutputExpr, Intermediate])
     logger.info('build metamodel')
     try:
-        with open(args.supo_src, 'r') as supo_file:
-            supo_model = supo_mm.model_from_str(supo_file.read())
+        if args.supo_src=='-':
+            supo_file_name = sys.stdin.name
+            supo_model = supo_mm.model_from_str(sys.stdin.read())
+        else:
+            with open(args.supo_src, 'r') as supo_file:
+                supo_model = supo_mm.model_from_str(supo_file.read())
+                supo_file_name = supo_file.name
+        logger.info('%s parsed as supo file' % supo_file_name)
     except TextXSyntaxError as e:
         logger.error(e)
         sys.exit(1)
@@ -373,41 +106,34 @@ def main():
     except SemanticWarn as w:
         logger.warn(w)
     else:
-        stencil = supo.generator.kernel.Stencil(
+        stencil = supo.generator.utils.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
             dram_bank = args.dram_bank if args.dram_bank is not None else supo_model.dram_bank,
             app_name = supo_model.app_name,
-            input_name = supo_model.input.name,
-            input_type = supo_model.input.type,
-            input_chan = supo_model.input.chan,
-            output_name = supo_model.output.name,
-            output_type = supo_model.output.type,
-            output_chan = supo_model.output.chan,
-            A = supo_model.A,
+            input = supo_model.input,
+            output = supo_model.output,
+            intermediates = supo_model.intermediates,
             dim = supo_model.dim,
-            compute_content = supo_model.compute_content,
             extra_params = supo_model.extra_params,
             tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)]+[0],
-            k = args.k if args.k is not None else supo_model.k,
+            unroll_factor = args.unroll_factor if args.unroll_factor is not None else supo_model.unroll_factor,
             dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else supo_model.dram_separate)
 
         logger.debug('kernel        : %s' % stencil.app_name)
         logger.debug('burst width   : %d' % stencil.burst_width)
         logger.debug('dram bank  : %d' % ((stencil.dram_bank*2) if stencil.dram_separate else stencil.dram_bank))
         logger.debug('dram separate : %s' % ('yes' if stencil.dram_separate else 'no'))
-        logger.debug('unroll factor : %d' % stencil.k)
+        logger.debug('unroll factor : %d' % stencil.unroll_factor)
         logger.debug('tile size     : (%s,)' % ', '.join([str(x) for x in stencil.tile_size[:-1]]))
         logger.debug('dimension     : %d' % stencil.dim)
-        logger.debug('input name    : %s' % stencil.input_name)
-        logger.debug('input type    : %s' % stencil.input_type)
-        logger.debug('input channel : %d' % stencil.input_chan)
-        logger.debug('output name   : %s' % stencil.output_name)
-        logger.debug('output type   : %s' % stencil.output_type)
-        logger.debug('output channel: %d' % stencil.output_chan)
-        logger.debug('A             : %s' % stencil.A)
+        logger.debug('input name    : %s' % stencil.input.name)
+        logger.debug('input type    : %s' % stencil.input.type)
+        logger.debug('input channel : %d' % stencil.input.chan)
+        logger.debug('output name   : %s' % stencil.output.name)
+        logger.debug('output type   : %s' % stencil.output.type)
+        logger.debug('output channel: %d' % stencil.output.chan)
         for p in stencil.extra_params:
             logger.debug('extra params  : %s' % str(p))
-        logger.debug('computation   : %s' % stencil.compute_content)
 
         if args.kernel_file is not None:
             if args.kernel_file=='-':
@@ -432,13 +158,13 @@ def main():
 
         if args.output_dir is not None or args.kernel_file is None and args.host_file is None and args.header_file is None:
             if args.kernel_file is None:
-                with open(join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_bank, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
+                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_bank, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
                     supo.generator.kernel.PrintCode(stencil, kernel_file)
             if args.host_file is None:
-                with open(join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
+                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
                     supo.generator.host.PrintCode(stencil, host_file)
             if args.header_file is None:
-                with open(join(args.output_dir if args.output_dir is not None else '', '%s.h' % supo_model.app_name), 'w') as header_file:
+                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.h' % supo_model.app_name), 'w') as header_file:
                     supo.generator.header.PrintCode(stencil, header_file)
 
 if __name__ == '__main__':
