@@ -27,11 +27,11 @@ def GetPoints(tile_size, b, unroll_factor):
     all_points = {} # {name:{offset:{unroll_index:point_index}}}
     for s in b.children:
         all_points[s.output.name] = {}
-        offsets = [Serialize(x, tile_size)+s.delay[b.name] for x in s.window[b.name]]
+        offsets = [Serialize(x, tile_size) for x in s.window[b.name]]
         max_offset = max(offsets)
         for unroll_index in range(unroll_factor):
             for idx, offset in enumerate(offsets):
-                all_points[s.output.name].setdefault(max_offset-offset+unroll_index, {})[unroll_factor-1-unroll_index] = idx
+                all_points[s.output.name].setdefault(max_offset-offset+s.delay[b.name]+unroll_index, {})[unroll_factor-1-unroll_index] = idx
     for s in b.children:
         for offset, points in all_points[s.output.name].items():
             for unroll_index, point in points.items():
