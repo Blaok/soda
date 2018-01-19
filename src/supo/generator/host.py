@@ -681,7 +681,7 @@ def PrintTest(p, stencil):
         if b.chan>1:
             p.PrintLine('%s.extent[%d] = %d;' % (b.name, stencil.dim, b.chan))
         p.PrintLine('%s.stride[0] = 1;' % b.name)
-        for d in range(1, stencil.dim + 1 if b.chan>1 else 0):
+        for d in range(1, stencil.dim + (1 if b.chan>1 else 0)):
             p.PrintLine('%s.stride[%d] = %s;' % (b.name, d, '*'.join(['dims[%d]' % x for x in range(d)])))
         p.PrintLine('%s.elem_size = sizeof(%s);' % (b.name, b.type))
         p.PrintLine('%s.host = (uint8_t*)%s_img;' % (b.name, b.name))
