@@ -425,7 +425,7 @@ def PrintWrapped(p, stencil):
     for i in range(max_dram_bank):
         for c in range(stencil.input.chan):
             p.PrintLine('%s* var_%s_%d_buf_bank_%d = dram_bank>%d ? (%s*)clEnqueueMapBuffer(commands, var_%s_%d_bank_%d_cl, CL_FALSE, CL_MAP_WRITE, 0, var_%s_buf_size, 0, nullptr, write_events+%d, &err) : nullptr;' % (stencil.input.type, stencil.input.name, c, i, i, stencil.input.type, stencil.input.name, c, i, stencil.input.name, i*stencil.input.chan+c+len(stencil.extra_params)))
-    p.PrintLine('clWaitForEvents(dram_bank*%d+%d, write_events);' % (len(stencil.extra_params), stencil.input.chan))
+    p.PrintLine('clWaitForEvents(dram_bank*%d+%d, write_events);' % (stencil.input.chan, len(stencil.extra_params)))
     p.PrintLine()
 
     p.PrintLine('// tiling')
