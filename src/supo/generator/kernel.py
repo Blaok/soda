@@ -1,4 +1,5 @@
 #!/usr/bin/python3.6
+from collections import deque
 from fractions import Fraction
 from functools import reduce
 import json
@@ -7,62 +8,65 @@ import math
 import operator
 import os
 import sys
-sys.path.append(os.path.dirname(__file__))
-from utils import coords_in_tile, coords_in_orig, type_width, Stencil, Printer, GetStencilFromJSON, PrintDefine, PrintGuard, Serialize, GetStencilDistance, GetStencilDim
+
+from supo.generator.utils import coords_in_tile, coords_in_orig, Stencil, Printer, PrintDefine, PrintGuard, SerializeIterative, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
+from supo.grammar import ExtraParam
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
-def GetChains(tile_size, A, k):
-    A_dag = set()
-    for i in range(k):
-        A_dag = A_dag.union([x+i for x in [Serialize(x, tile_size) for x in A]])
-    A_dag = list(A_dag)
-    A_dag.sort()
-    A_dag = [x for x in A_dag]
-    chains = []
-    for i in range(k):
-        chains += [[x for x in A_dag if x%k == i]]
+def GetChains(tile_size, b, unroll_factor):
+    logger.debug('get reuse chains of buffer %s' % b.name)
+    A_dag = set.union(*[(lambda offsets: set.union(*[{max(offsets)+i-x+s.delay[b.name] for x in offsets} for i in range(unroll_factor)]))(SerializeIterative(s.window[b.name], tile_size)) for s in b.children])
+    logger.debug('A† of buffer %s: %s' % (b.name, A_dag))
+    chains = sum([tuple([tuple(sorted([x for x in A_dag if x%unroll_factor == i]))]) for i in range(unroll_factor)], ())
+    for idx, chain in enumerate(chains):
+        logger.debug('reuse chain %d of buffer %s: %s' % (idx, b.name, chain))
     return chains
 
-def GetPoints(tile_size, A, k):
-    all_points = {} # {offset:{unroll_index:point_index}}
-    for i in range(k):
-        points = [Serialize(x, tile_size) for x in A]
-        for idx, j in enumerate(points):
-            all_points[j+i] = all_points.get(j+i, {})
-            all_points[j+i][i] = idx
+def GetPoints(tile_size, b, unroll_factor):
+    all_points = {} # {name:{offset:{unroll_index:point_index}}}
+    for s in b.children:
+        all_points[s.output.name] = {}
+        offsets = SerializeIterative(s.window[b.name], tile_size)
+        max_offset = max(offsets)
+        for unroll_index in range(unroll_factor):
+            for idx, offset in enumerate(offsets):
+                all_points[s.output.name].setdefault(max_offset-offset+s.delay[b.name]+unroll_index, {})[unroll_factor-1-unroll_index] = idx
+    for s in b.children:
+        for offset, points in all_points[s.output.name].items():
+            for unroll_index, point in points.items():
+                logger.debug('%s <- %s @ offset=%d <=> (%s) @ unroll_index=%d' % (s.output.name, b.name, offset, ', '.join(map(str, s.window[b.name][point])), unroll_index))
     return all_points
 
-def GetBuffer(tile_size, A, k):
+def GetBuffer(tile_size, b, unroll_factor):
     FFs = []    # [outputs]
     FIFOs = {}  # {length:[outputs]}
     inputs = []
-    for chain in GetChains(tile_size, A, k):
-        inputs += [chain[-1]]
+    for chain in GetChains(tile_size, b, unroll_factor):
+        inputs.append(chain[0])
         for j in range(len(chain)-1):
             interval_length = chain[j+1]-chain[j]
-            if interval_length == k:
-                FFs += [chain[j]]
+            if interval_length == unroll_factor:
+                FFs.append(chain[j+1])
             else:
-                FIFOs[interval_length] = FIFOs.get(interval_length, []) + [chain[j]]
-    FFs.sort()
-    inputs.sort()
-    for FIFO in FIFOs.values():
-        FIFO.sort()
-    return {'FFs':FFs, 'FIFOs':FIFOs, 'k':k, 'inputs':inputs}
+                FIFOs.setdefault(interval_length, []).append(chain[j+1])
+    reuse_buffer = {'FFs':tuple(sorted(FFs)), 'FIFOs':{k:tuple(sorted(v)) for k, v in FIFOs.items()}, 'inputs':tuple(reversed(sorted(inputs)))}
+    logger.debug('   FFs in reuse chains of buffer %s: %s' % (b.name, reuse_buffer['FFs']))
+    logger.debug(' FIFOs in reuse chains of buffer %s: %s' % (b.name, reuse_buffer['FIFOs']))
+    logger.debug('inputs in reuse chains of buffer %s: %s' % (b.name, reuse_buffer['inputs']))
+    return reuse_buffer
 
-def GetConsumeMap(buf):
-    k = buf['k']
-    mapping = {'k':buf['k']}    # maps an offset to what consumes it
+def GetConsumeMap(buf, unroll_factor):
+    mapping = {}    # maps an offset to what consumes it
     for idx, item in enumerate(buf['FFs']):
-        mapping[item+k] = {'FFs':{'index':idx, 'produce':item}}
+        mapping[item-unroll_factor] = {'FFs':{'index':idx, 'produce':item}}
     for fifo_length in buf['FIFOs'].keys():
         for idx, item in enumerate(buf['FIFOs'][fifo_length]):
-            mapping[item+fifo_length] = {'FIFOs':{'length':fifo_length, 'index':idx, 'produce':item}}
+            mapping[item-fifo_length] = {'FIFOs':{'length':fifo_length, 'index':idx, 'produce':item}}
     return mapping
 
 def GetProduceMap(buf):
-    mapping = {'k':buf['k']}    # maps an offset to what produces it
+    mapping = {}    # maps an offset to what produces it
     for idx, item in enumerate(buf['inputs']):
         mapping[item] = {'inputs':{'index':idx, 'produce':item}}
     for idx, item in enumerate(buf['FFs']):
@@ -72,609 +76,663 @@ def GetProduceMap(buf):
             mapping[item] = {'FIFOs':{'length':fifo_length, 'index':idx, 'produce':item}}
     return mapping
 
-def PrintUpdate(printer, producer_map, consumer_map, src, c):
+def PrintUpdate(p, unroll_factor, producer_map, consumer_map, src, chan, variable_name):
     if 'FIFOs' in src:
         dst = consumer_map.get(src['FIFOs']['produce'])
         if not dst:
             return
-        fifo_length = src['FIFOs']['length']/producer_map['k']
+        fifo_length = src['FIFOs']['length']/unroll_factor
         fifo_index = src['FIFOs']['index']
-        src_str = 'FIFO_%d_%d_%d' % (c, fifo_length, fifo_index)
+        src_str = ['FIFO_%d_%s_chan_%d_fifo_%d' % (fifo_length, variable_name, c, fifo_index) for c in range(chan)]
     elif 'FFs' in src:
         dst = consumer_map.get(src['FFs']['produce'])
         if not dst:
             return
-        src_str = 'FF_%d[%d]' % (c, src['FFs']['index'])
+        src_str = ['FF_%s_chan_%d[%d]' % (variable_name, c, src['FFs']['index']) for c in range(chan)]
     else:
         dst = consumer_map.get(src['inputs']['produce'])
         if not dst:
             return
-        src_str = 'input_%d_buffer[%d]' % (c, src['inputs']['index'])
+        src_str = ['buffer_%s_chan_%d[%d]' % (variable_name, c, src['inputs']['index']) for c in range(chan)]
 
-    PrintUpdate(printer, producer_map, consumer_map, dst, c)
+    PrintUpdate(p, unroll_factor, producer_map, consumer_map, dst, chan, variable_name)
 
     if 'FIFOs' in dst:
-        fifo_length = dst['FIFOs']['length']/consumer_map['k']
+        fifo_length = dst['FIFOs']['length']/unroll_factor
         fifo_index = dst['FIFOs']['index']
-        dst_str = 'FIFO_%d_%d[%d][FIFO_%d_ptr]' % (c, fifo_length, fifo_index, fifo_length)
+        dst_str = ['FIFO_%d_%s_chan_%d[%d][FIFO_%d_%s_ptr]' % (fifo_length, variable_name, c, fifo_index, fifo_length, variable_name) for c in range(chan)]
     elif 'FFs' in dst:
-        dst_str = 'FF_%d[%d]' % (c, dst['FFs']['index'])
+        dst_str = ['FF_%s_chan_%d[%d]' % (variable_name, c, dst['FFs']['index']) for c in range(chan)]
     else:
         return
 
-    printer.PrintLine('%s = %s;' % (dst_str, src_str))
+    for c in range(chan):
+        p.PrintLine('%s = %s;' % (dst_str[c], src_str[c]))
 
-def PrintCompute(printer, tile_size, A, k, compute_content, input_partition, output_partition, extra_params, input_name, burst_width, pixel_width_i, pixel_width_o, dram_chan, input_chan, output_chan):
-    buf = GetBuffer(tile_size, A, k)
-    points = GetPoints(tile_size, A, k)
-    stencil_distance = GetStencilDistance(A, tile_size)
-    stencil_dim = GetStencilDim(A)
+def PrintCompute(p, stencil):
+    app_name = stencil.app_name
+    buffers = stencil.buffers
+    burst_width = stencil.burst_width
+    dim = stencil.dim
+    dram_bank = stencil.dram_bank
+    dram_separate = stencil.dram_separate
+    extra_params = stencil.extra_params
+    input_chan = stencil.input.chan
+    input_name = stencil.input.name
+    input_type = stencil.input.type
+    output_chan = stencil.output.chan
+    output_name = stencil.output.name
+    output_type = stencil.output.type
+    pixel_width_i = stencil.pixel_width_i
+    pixel_width_o = stencil.pixel_width_o
+    stages = stencil.stages
+    tile_size = stencil.tile_size
+    unroll_factor = stencil.unroll_factor
 
-    printer.PrintLine('void compute(')
-    printer.DoIndent()
+    produce_consume_ratio_i = int((burst_width*dram_bank)/(pixel_width_i*unroll_factor))
+    consume_produce_ratio_i = int((pixel_width_i*unroll_factor)/(burst_width*dram_bank))
+    produce_consume_ratio_o = int((burst_width*dram_bank)/(pixel_width_o*unroll_factor))
+    consume_produce_ratio_o = int((pixel_width_o*unroll_factor)/(burst_width*dram_bank))
+
+    print_aux = False
+
+    logger.debug('generate compute function')
+
+    p.PrintLine('void compute(')
+    p.DoIndent()
     for c in range(output_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >& to_%d_%d,' % (c, i))
+        for i in range(dram_bank):
+            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >& to_chan_%d_bank_%d,' % (c, i))
     for c in range(input_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >& from_%d_%d,' % (c, i))
+        for i in range(dram_bank):
+            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >& from_chan_%d_bank_%d,' % (c, i))
     if extra_params:
-        for param in extra_params:
+        for param in extra_params.values():
             if param.dup:
-                dup = ('[%d]' % param.dup)
+                dup_str = ('[%d]' % param.dup)
             else:
-                dup = ''
-            printer.PrintLine('%s %s%s[UNROLL_FACTOR][%s],' % (param.type, param.name, dup, ']['.join([str(x) for x in param.size])))
-    printer.PrintLine('int64_t coalesced_data_num,')
-    printer.PrintLine('int64_t tile_data_num,')
+                dup_str = ''
+            p.PrintLine('%s param_%s%s[UNROLL_FACTOR][%s],' % (param.type, param.name, dup_str, ']['.join(map(str, param.size))))
+    p.PrintLine('int64_t coalesced_data_num,')
+    p.PrintLine('int64_t tile_data_num,')
     for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t tile_num_dim_%d,' % i)
-    printer.PrintLine('int32_t input_size_dim_%d)' % (len(tile_size)-1))
-    printer.UnIndent()
-    printer.DoScope()
+        p.PrintLine('int32_t tile_num_dim_%d,' % i)
+    p.PrintLine('int32_t input_size_dim_%d)' % (len(tile_size)-1))
+    p.UnIndent()
+    p.DoScope()
 
     for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t tile_index_dim_%d = 0;' % i)
-    printer.PrintLine()
+        p.PrintLine('int32_t tile_index_dim_%d = 0;' % i)
+    p.PrintLine()
 
-    printer.PrintLine('int32_t i_base[UNROLL_FACTOR] = {%s};' % (', '.join([str(x-stencil_distance) for x in range(k)])))
-    for i in range(1, len(tile_size)):
-        printer.PrintLine('int32_t %c_base[UNROLL_FACTOR] = {0};' % (coords_in_tile[i]))
-    for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t %c_base = 0;' % (coords_in_orig[i]))
-    for i in range(len(tile_size)):
-        printer.PrintLine('#pragma HLS array_partition variable=%s_base complete' % (coords_in_tile[i]), 0)
-    printer.PrintLine()
+    # generate reuse buffers and map offsets to points
+    logger.info('generate reuse buffers')
+    reuse_buffers = {}
+    all_points = {}
+    for b in stencil.GetProducerBuffers():
+        reuse_buffers[b.name] = GetBuffer(tile_size, b, unroll_factor)
+        all_points[b.name] = GetPoints(tile_size, b, unroll_factor)
+    overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
 
-    # array declaration
-    for c in range(input_chan):
-        if len(buf['FFs'])>0:
-            printer.PrintLine('input_type FF_%d[%d];' % (c, len(buf['FFs'])))
+    for b in stencil.GetProducerBuffers():
+        buf = reuse_buffers[b.name]
+        points_from_b = all_points[b.name]
 
-    for c in range(input_chan):
-        for fifo_length, fifo_list in buf['FIFOs'].items():
-            printer.PrintLine('input_type FIFO_%d_%d[%d][%d];' % (c, fifo_length/k, len(fifo_list), fifo_length/k))
+        if print_aux:
+            msg = 'aux parameters for %s' % b.name
+            logger.debug('generate '+msg)
+            p.PrintLine('// '+msg)
+            stencil_distance = stencil.output.offset.get() - b.offset.get()
+            p.PrintLine('int32_t i_base_%s[UNROLL_FACTOR] = {%s};' % (b.name, ', '.join([str(x-stencil_distance) for x in range(unroll_factor)])))
+            for i in range(1, len(tile_size)):
+                p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_tile[i], b.name))
+            for i in range(len(tile_size)-1):
+                p.PrintLine('int32_t %c_base_%s = 0;' % (coords_in_orig[i], b.name))
+                p.PrintLine('int32_t %c_base_%s_counter = 0;' % (coords_in_orig[i], b.name))
+            for i in range(len(tile_size)):
+                p.PrintLine('#pragma HLS array_partition variable=%s_base_%s complete' % (coords_in_tile[i], b.name), 0)
+            p.PrintLine()
 
-    for c in range(input_chan):
-        if len(buf['FFs'])>0:
-            printer.PrintLine('#pragma HLS array_partition variable=FF_%d complete' % c, 0)
+        # reuse chains
+        msg = 'reuse chains for %s' % b.name
+        logger.debug('generate '+msg)
+        p.PrintLine('// '+msg)
+        for c in range(b.chan):
+            if len(buf['FFs'])>0:
+                p.PrintLine('%s FF_%s_chan_%d[%d];' % (b.type, b.name, c, len(buf['FFs'])))
 
-    for c in range(input_chan):
+        for c in range(b.chan):
+            for fifo_length, fifo_list in buf['FIFOs'].items():
+                p.PrintLine('%s FIFO_%d_%s_chan_%d[%d][%d];' % (b.type, fifo_length/unroll_factor, b.name, c, len(fifo_list), fifo_length/unroll_factor))
+
+        for c in range(b.chan):
+            if len(buf['FFs'])>0:
+                p.PrintLine('#pragma HLS array_partition variable=FF_%s_chan_%d complete' % (b.name, c), 0)
+
+        for c in range(b.chan):
+            for fifo_length in buf['FIFOs'].keys():
+                p.PrintLine('#pragma HLS array_partition variable=FIFO_%d_%s_chan_%d complete dim=1' % (fifo_length/unroll_factor, b.name, c), 0)
+        p.PrintLine()
+
         for fifo_length in buf['FIFOs'].keys():
-            printer.PrintLine('#pragma HLS array_partition variable=FIFO_%d_%d complete dim=1' % (c, fifo_length/k), 0)
-    printer.PrintLine()
+            p.PrintLine('uint%d_t FIFO_%d_%s_ptr = 0;' % (2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor))), fifo_length/unroll_factor, b.name))
+        p.PrintLine()
 
-    for fifo_length in buf['FIFOs'].keys():
-        printer.PrintLine('int%d_t FIFO_%d_ptr = 0;' % (2**math.ceil(math.log2(math.log2(fifo_length/k))), fifo_length/k))
-    printer.PrintLine()
+        msg = 'points aliases for %s' % b.name
+        logger.debug('generate '+msg)
+        p.PrintLine('// '+msg)
+        for s in b.children:
+            for c in range(b.chan):
+                p.PrintLine('%s points_from_%s_to_%s_chan_%d[UNROLL_FACTOR][%d];' % (b.type, b.name, s.output.name, c, len(s.window[b.name])))
+            for idx, point in enumerate(s.window[b.name]):
+                p.PrintLine('//%s points_from_%s_to_%s_chan_x[UNROLL_FACTOR][%d] <=> %s[x](%s)' % (' '*(len(b.type)-2), b.name, s.output.name, idx, b.name, ', '.join(map(str, point))))
+            for c in range(b.chan):
+                p.PrintLine('#pragma HLS array_partition variable=points_from_%s_to_%s_chan_%d complete dim=0' % (b.name, s.output.name, c), 0)
+        p.PrintLine()
 
+    msg = 'input buffer'
+    logger.debug('generate '+msg)
+    p.PrintLine('// '+msg)
     for c in range(input_chan):
-        printer.PrintLine('input_type input_%d_points[UNROLL_FACTOR][%d];' % (c, len(A)))
-        for idx, item in enumerate(A):
-            printer.PrintLine('//         input_%d_points[UNROLL_FACTOR][%d] <=> (%s)' % (c, idx, str(item)[1:-1]))
-        if burst_width*dram_chan/pixel_width_i/k <= 1:
-            printer.PrintLine('input_type input_%d_buffer[UNROLL_FACTOR];' % c)
+        if produce_consume_ratio_i <= 1:
+            p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR];' % (input_type, input_name, c))
         else:
-            printer.PrintLine('input_type input_%d_buffer[UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR)];' % (c, dram_chan))
+            p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR*%d];' % (input_type, input_name, c, produce_consume_ratio_i))
+    for c in range(input_chan):
+        p.PrintLine('#pragma HLS array_partition variable=buffer_%s_chan_%d complete dim=0' % (input_name, c), 0)
+    p.PrintLine()
 
+    msg = 'intermediate buffer for '+b.name
+    logger.debug('generate '+msg)
+    p.PrintLine('// '+msg)
+    for b in buffers.values():
+        if b.name in (input_name, output_name):
+            continue
+        for c in range(b.chan):
+            p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR];' % (b.type, b.name, c))
+        for c in range(b.chan):
+            p.PrintLine('#pragma HLS array_partition variable=buffer_%s_chan_%d complete dim=0' % (b.name, c), 0)
+        p.PrintLine()
+
+    msg = 'output buffer'
+    logger.debug('generate '+msg)
+    p.PrintLine('// '+msg)
     for c in range(output_chan):
-        if burst_width*dram_chan/pixel_width_o/k <= 1:
-            printer.PrintLine('output_type output_%d_buffer[UNROLL_FACTOR];' % c)
+        if produce_consume_ratio_o <= 1:
+            p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR];' % (output_type, output_name, c))
         else:
-            printer.PrintLine('output_type output_%d_buffer[UNROLL_FACTOR*(BURST_WIDTH*%d/PIXEL_WIDTH_O/UNROLL_FACTOR)];' % (c, dram_chan))
-    for c in range(input_chan):
-        printer.PrintLine('#pragma HLS array_partition variable=input_%d_points complete dim=0' % c, 0)
-    for c in range(input_chan):
-        printer.PrintLine('#pragma HLS array_partition variable=input_%d_buffer complete dim=0' % c, 0)
+            p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR*%d];' % (output_type, output_name, c, produce_consume_ratio_o))
     for c in range(output_chan):
-        printer.PrintLine('#pragma HLS array_partition variable=output_%d_buffer complete dim=0' % c, 0)
-    printer.PrintLine()
+        p.PrintLine('#pragma HLS array_partition variable=buffer_%s_chan_%d complete dim=0' % (output_name, c), 0)
+    p.PrintLine()
 
-    for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t %c_base_counter = 0;' % (coords_in_orig[i]))
-    printer.PrintLine()
+    p.PrintLine('// produce output')
+    p.PrintLine('compute_epoch:', 0)
+    p.PrintLine('for(int32_t epoch = 0; epoch < coalesced_data_num%c%d; ++epoch)' % (('*', produce_consume_ratio_i) if produce_consume_ratio_i>=1 else ('/', consume_produce_ratio_i)))
+    p.DoScope()
 
-    printer.PrintLine('// produce output')
-    printer.PrintLine('compute_epoch:', 0)
-    printer.PrintLine('for(int32_t epoch = 0; epoch < coalesced_data_num*BURST_WIDTH*%d/PIXEL_WIDTH_I/UNROLL_FACTOR; ++epoch)' % dram_chan)
-    printer.DoScope()
-    for c in range(input_chan):
-        if len(buf['FFs'])>0:
-            printer.PrintLine('#pragma HLS dependence variable=FF_%d inter false' % c, 0)
-    for c in range(input_chan):
-        for fifo_length in buf['FIFOs'].keys():
-            printer.PrintLine('#pragma HLS dependence variable=FIFO_%d_%d inter false' % (c, fifo_length/k), 0)
-    printer.PrintLine('#pragma HLS pipeline II=1', 0)
+    for b in stencil.GetProducerBuffers():
+        buf = reuse_buffers[b.name]
+        for c in range(b.chan):
+            if len(buf['FFs'])>0:
+                p.PrintLine('#pragma HLS dependence variable=FF_%s_chan_%d inter false' % (b.name, c), 0)
 
-    if burst_width*dram_chan/pixel_width_i/k <= 1:
-        ratio_i = int(pixel_width_i*k/dram_chan/burst_width)
-        printer.DoScope()
+        for c in range(b.chan):
+            for fifo_length in buf['FIFOs'].keys():
+                p.PrintLine('#pragma HLS dependence variable=FIFO_%d_%s_chan_%d inter false' % (fifo_length/unroll_factor, b.name, c), 0)
+    p.PrintLine('#pragma HLS pipeline II=1', 0)
+
+    if produce_consume_ratio_i <= 1:
+        p.DoScope()
         for c in range(input_chan):
-            printer.PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join([('tmp_%d_%d' % (c, x)) for x in range(dram_chan*ratio_i)])))
+            p.PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join([('tmp_chan_%d_bank_%d' % (c, x)) for x in range(dram_bank*consume_produce_ratio_i)])))
         for c in range(input_chan):
-            for i in range(ratio_i):
-                for j in range(dram_chan):
-                    printer.PrintLine('from_%d_%d>>tmp_%d_%d;' % (c, j, c, i*dram_chan+j))
-        printer.PrintLine('load_coalesced:', 0)
-        printer.PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll', 0)
+            for i in range(consume_produce_ratio_i):
+                for j in range(dram_bank):
+                    p.PrintLine('from_chan_%d_bank_%d>>tmp_chan_%d_bank_%d;' % (c, j, c, i*dram_bank+j))
+        p.PrintLine('load_coalesced:', 0)
+        p.PrintLine('for(int j = 0; j < BURST_WIDTH/%d; ++j)' % pixel_width_i)
+        p.DoScope()
+        p.PrintLine('#pragma HLS unroll', 0)
         for c in range(input_chan):
-            for i in range(ratio_i):
-                for j in range(dram_chan):
-                    printer.PrintLine('input_%d_buffer[BURST_WIDTH/PIXEL_WIDTH_I*%d*%d+j*%d+%d] = tmp_%d_%d((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % (c, dram_chan, i, dram_chan, j, c, i*dram_chan+j))
-        printer.UnScope()
-        printer.UnScope()
+            for i in range(consume_produce_ratio_i):
+                for j in range(dram_bank):
+                    p.PrintLine('buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d] = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (input_name, c, pixel_width_i, dram_bank, i, dram_bank, j, c, i*dram_bank+j, pixel_width_i, pixel_width_i))
+        p.UnScope()
+        p.UnScope()
     else:
-        printer.PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_i/k-1))
-        printer.DoScope()
-        printer.PrintLine('case 0:')
-        printer.DoScope()
+        p.PrintLine('switch(epoch&%d)' % (produce_consume_ratio_i-1))
+        p.DoScope()
+        p.PrintLine('case 0:')
+        p.DoScope()
         for c in range(input_chan):
-            for i in range(dram_chan):
-                printer.PrintLine('ap_uint<BURST_WIDTH> tmp_%d_%d;' % (c, i))
+            for i in range(dram_bank):
+                p.PrintLine('ap_uint<BURST_WIDTH> tmp_chan_%d_bank_%d;' % (c, i))
         for c in range(input_chan):
-            for i in range(dram_chan):
-                printer.PrintLine('from_%d_%d>>tmp_%d_%d;' % (c, i, c, i))
-        printer.PrintLine('load_coalesced:', 0)
-        printer.PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_I; ++j)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll', 0)
+            for i in range(dram_bank):
+                p.PrintLine('from_chan_%d_bank_%d>>tmp_chan_%d_bank_%d;' % (c, i, c, i))
+        p.PrintLine('load_coalesced:', 0)
+        p.PrintLine('for(int j = 0; j < BURST_WIDTH/%d; ++j)' % pixel_width_i)
+        p.DoScope()
+        p.PrintLine('#pragma HLS unroll', 0)
         for c in range(input_chan):
-            for i in range(dram_chan):
-                printer.PrintLine('input_%d_buffer[j*%d+%d] = tmp_%d_%d((j+1)*PIXEL_WIDTH_I-1, j*PIXEL_WIDTH_I);' % (c, dram_chan, i, c, i))
-        printer.UnScope()
-        printer.PrintLine('break;')
-        printer.UnScope()
-        printer.PrintLine('default:')
-        printer.DoScope()
-        printer.PrintLine('load_shift:', 0)
-        printer.PrintLine('for(int j = 0; j < UNROLL_FACTOR; ++j)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll', 0)
+            for i in range(dram_bank):
+                p.PrintLine('buffer_%s_chan_%d[j*%d+%d] = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (input_name, c, dram_bank, i, c, i, pixel_width_i, pixel_width_i))
+        p.UnScope()
+        p.PrintLine('break;')
+        p.UnScope()
+        p.PrintLine('default:')
+        p.DoScope()
+        p.PrintLine('load_shift:', 0)
+        p.PrintLine('for(int j = 0; j < UNROLL_FACTOR; ++j)')
+        p.DoScope()
+        p.PrintLine('#pragma HLS unroll', 0)
         for c in range(input_chan):
-            for i in range(int(burst_width/pixel_width_i*dram_chan/k-1)):
-                printer.PrintLine('input_%d_buffer[j+UNROLL_FACTOR*%d] = input_%d_buffer[j+UNROLL_FACTOR*%d];' % (c, i, c, i+1))
-        printer.UnScope()
-        printer.UnScope()
-        printer.UnScope()
-    printer.PrintLine()
+            for i in range(produce_consume_ratio_i-1):
+                p.PrintLine('buffer_%s_chan_%d[j+UNROLL_FACTOR*%d] = buffer_%s_chan_%d[j+UNROLL_FACTOR*%d];' % (input_name, c, i, input_name, c, i+1))
+        p.UnScope()
+        p.UnScope()
+        p.UnScope()
+    p.PrintLine()
 
-    for c in range(input_chan):
-        for fifo_length in buf['FIFOs'].keys():
-            for idx, item in enumerate(buf['FIFOs'][fifo_length]):
-                printer.PrintLine('input_type& FIFO_%d_%d_%d = FIFO_%d_%d[%d][FIFO_%d_ptr];'% (c, fifo_length/k, idx, c, fifo_length/k, idx, fifo_length/k))
-    printer.PrintLine()
+    # aliases for FIFO outputs
+    for b in stencil.GetProducerBuffers():
+        buf = reuse_buffers[b.name]
+        for c in range(b.chan):
+            for fifo_length in buf['FIFOs'].keys():
+                for idx, item in enumerate(buf['FIFOs'][fifo_length]):
+                    p.PrintLine('%s& FIFO_%d_%s_chan_%d_fifo_%d = FIFO_%d_%s_chan_%d[%d][FIFO_%d_%s_ptr];' % (b.type, fifo_length/unroll_factor, b.name, c, idx, fifo_length/unroll_factor, b.name, c, idx, fifo_length/unroll_factor, b.name))
+    p.PrintLine()
 
-    for c in range(input_chan):
-        for idx, item in enumerate(buf['inputs']):
-            for unroll_index in points[item].keys():
-                printer.PrintLine("input_%d_points[%d][%d] = input_%d_buffer[%d]; // (%s)" % (c, unroll_index, points[item][unroll_index], c, idx, str(A[points[item][unroll_index]])[1:-1]))
-        for idx, item in enumerate(buf['FFs']):
-            for unroll_index in points[item].keys():
-                printer.PrintLine("input_%d_points[%d][%d] = FF_%d[%d]; // (%s)" % (c, unroll_index, points[item][unroll_index], c, idx, str(A[points[item][unroll_index]])[1:-1]))
-        for fifo_length in buf['FIFOs'].keys():
-            for idx, item in enumerate(buf['FIFOs'][fifo_length]):
-                for unroll_index in points[item].keys():
-                    printer.PrintLine("input_%d_points[%d][%d] = FIFO_%d_%d_%d; // (%s)" % (c, unroll_index, points[item][unroll_index], c, fifo_length/k, idx, str(A[points[item][unroll_index]])[1:-1]))
+    # computational kernel must be scheduled in order
+    logger.info('generate computational kernel')
+    processing_queue = deque([stencil.input.name])
+    processed_buffers = {stencil.input.name}
+    while len(processing_queue)>0:
+        b = stencil.buffers[processing_queue.popleft()]
+        logger.debug('inspecting buffer %s\'s children' % b.name)
+        for s in b.children:
+            if {x.name for x in s.inputs.values()} <= processed_buffers and s.output.name not in processed_buffers:
+                # good, all inputs are processed, can emit code to produce current buffer
+                logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.output.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
 
-    printer.PrintLine()
+                # start emitting code for stage %s
+                logger.debug('emit code for stage %s' % s.output.name)
+                # connect points from previous buffer/FIFO/FF
+                for bb in s.inputs.values():
+                    buf = reuse_buffers[bb.name]
+                    points = all_points[bb.name][s.output.name]
+                    logger.debug('%s <- %s points: %s' % (s.output.name, bb.name, points))
+                    logger.debug('%s <- %s buf: %s' % (s.output.name, bb.name, buf))
+                    for idx, offset in enumerate(buf['inputs']):
+                        for unroll_index, point in points.get(offset, {}).items():
+                            for c in range(bb.chan):
+                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = buffer_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.output.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
+                    for idx, offset in enumerate(buf['FFs']):
+                        for unroll_index, point in points.get(offset, {}).items():
+                            for c in range(bb.chan):
+                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FF_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.output.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
+                    for fifo_length in buf['FIFOs'].keys():
+                        for idx, offset in enumerate(buf['FIFOs'][fifo_length]):
+                            for unroll_index, point in points.get(offset, {}).items():
+                                for c in range(bb.chan):
+                                    p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FIFO_%d_%s_chan_%d_fifo_%d; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.output.name, c, unroll_index, point, fifo_length/unroll_factor, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
 
-    printer.PrintLine('compute_unrolled:', 0)
-    printer.PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-    printer.DoScope()
-    printer.PrintLine('#pragma HLS unroll', 0)
-    for i in range(len(tile_size)):
-        printer.PrintLine('int32_t& %c = %c_base[unroll_index];' % ((coords_in_tile[i],)*2))
-    for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t %c = %c_base+%c;' % ((coords_in_orig[i],)*2 + (coords_in_tile[i],)))
-    printer.PrintLine('int32_t %c = %c;' % (coords_in_orig[len(tile_size)-1], coords_in_tile[len(tile_size)-1]))
-    printer.PrintLine()
-    for c in range(input_chan):
-        for idx, item in enumerate(A):
-            printer.PrintLine('input_type& load_%s_%d_at_%s = input_%d_points[unroll_index][%d];' % (input_name, c, '_'.join([str(x).replace('-', 'm') for x in item]), c, idx))
-    printer.PrintLine()
+                p.PrintLine()
 
-    for line in compute_content:
-        if len(line) > 0:
-            printer.PrintLine(line.replace('\n','').replace('\r',''))
-    printer.PrintLine()
+                p.PrintLine('compute_%s_unrolled:' % s.output.name, 0)
+                p.PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+                p.DoScope('unroll_index')
+                p.PrintLine('#pragma HLS unroll', 0)
 
-    if burst_width*dram_chan/pixel_width_o/k <= 1:
-        for c in range(output_chan):
-            printer.PrintLine('output_%d_buffer[unroll_index] = result_%d;' % (c, c))
-    else:
-        printer.PrintLine('switch(epoch&%d)' % (burst_width*dram_chan/pixel_width_o/k-1))
-        printer.DoScope()
-        for i in range(int(burst_width*dram_chan/pixel_width_o/k)):
-            printer.PrintLine('case %d:' % i)
-            printer.DoScope()
-            for c in range(output_chan):
-                printer.PrintLine('output_%d_buffer[unroll_index+UNROLL_FACTOR*%d] = result_%d;' % (c, i, c))
-            printer.UnScope()
-        printer.UnScope()
-    printer.PrintLine()
+                if print_aux:
+                    for i in range(len(tile_size)):
+                        p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.output.name)*2))
+                    for i in range(len(tile_size)-1):
+                        p.PrintLine('int32_t %c_%s = %c_base_%s+%c_%s;' % ((coords_in_orig[i], s.output.name)*2 + (coords_in_tile[i], s.output.name)))
+                    p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.output.name, coords_in_tile[len(tile_size)-1], s.output.name))
+                    p.PrintLine()
 
-    printer.PrintLine('%s += UNROLL_FACTOR;' % (coords_in_tile[0]))
-    if len(tile_size)>1:
-        printer.PrintLine('if(%s>=TILE_SIZE_DIM_0)' % (coords_in_tile[0]))
-        printer.DoScope()
-        printer.PrintLine('%s -= TILE_SIZE_DIM_0;' % (coords_in_tile[0]))
-        printer.PrintLine('++%s;' % (coords_in_tile[1]))
-        if len(tile_size)>2:
-            printer.PrintLine('if(%s>=TILE_SIZE_DIM_1)' % (coords_in_tile[1]))
-            printer.DoScope()
-            printer.PrintLine('%s -= TILE_SIZE_DIM_1;' % (coords_in_tile[1]))
-            printer.PrintLine('++%s;' % (coords_in_tile[2]))
-            if len(tile_size)>3:
-                printer.PrintLine('if(%s>=TILE_SIZE_DIM_2)' % (coords_in_tile[2]))
-                printer.DoScope()
-                printer.PrintLine('%s -= TILE_SIZE_DIM_2;' % (coords_in_tile[2]))
-                printer.PrintLine('++%s;' % (coords_in_tile[3]))
-                printer.UnScope()
-            printer.UnScope()
-        printer.UnScope()
-    printer.UnIndent()
-    printer.PrintLine('} // for unroll_index')
-    printer.PrintLine()
+                for bb in s.inputs.values():
+                    for c in range(bb.chan):
+                        for idx, point in enumerate(s.window[bb.name]):
+                            p.PrintLine('%s& load_%s_for_%s_chan_%d_at_%s = points_from_%s_to_%s_chan_%d[unroll_index][%d];' % (bb.type, bb.name, s.output.name, c, '_'.join([str(x).replace('-', 'm') for x in point]), bb.name, s.output.name, c, idx))
+                p.PrintLine()
 
-    for c in range(input_chan):
-        first = True
-        for idx, item in enumerate(buf['inputs']):
-            if first:
-                first = False
+                LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in extra_params else 'load_%s_for_%s_chan_%d_at_%s' % (node.name, s.output.name, node.chan, '_'.join([str(x).replace('-', 'm') for x in node.idx]))
+                StorePrinter = lambda node: '%s result_chan_%d' % (output_type, node.chan) if node.name == output_name else 'buffer_%s_chan_%d[unroll_index]' % (node.name, node.chan)
+
+                for e in s.expr:
+                    p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+
+                if len(s.output.children)==0:
+                    p.PrintLine()
+                    if produce_consume_ratio_o <= 1:
+                        for c in range(output_chan):
+                            p.PrintLine('buffer_%s_chan_%d[unroll_index] = result_chan_%d;' % (output_name, c, c))
+                    else:
+                        p.PrintLine('switch(epoch&%d)' % (produce_consume_ratio_o-1))
+                        p.DoScope()
+                        for i in range(produce_consume_ratio_o):
+                            p.PrintLine('case %d:' % i)
+                            p.DoScope()
+                            for c in range(output_chan):
+                                p.PrintLine('buffer_%s_chan_%d[unroll_index+UNROLL_FACTOR*%d] = result_chan_%d;' % (output_name, c, i, c))
+                            p.UnScope()
+                        p.UnScope()
+
+                if print_aux:
+                    p.PrintLine()
+                    p.PrintLine('%c_%s += UNROLL_FACTOR;' % (coords_in_tile[0], s.output.name))
+                    if len(tile_size)>1:
+                        p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_0)' % (coords_in_tile[0], s.output.name))
+                        p.DoScope()
+                        p.PrintLine('%c_%s -= TILE_SIZE_DIM_0;' % (coords_in_tile[0], s.output.name))
+                        p.PrintLine('++%c_%s;' % (coords_in_tile[1], s.output.name))
+                        if len(tile_size)>2:
+                            p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_1)' % (coords_in_tile[1], s.output.name))
+                            p.DoScope()
+                            p.PrintLine('%c_%s -= TILE_SIZE_DIM_1;' % (coords_in_tile[1], s.output.name))
+                            p.PrintLine('++%c_%s;' % (coords_in_tile[2], s.output.name))
+                            if len(tile_size)>3:
+                                p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_2)' % (coords_in_tile[2], s.output.name))
+                                p.DoScope()
+                                p.PrintLine('%c_%s -= TILE_SIZE_DIM_2;' % (coords_in_tile[2], s.output.name))
+                                p.PrintLine('++%c_%s;' % (coords_in_tile[3], s.output.name))
+                                p.UnScope()
+                            p.UnScope()
+                        p.UnScope()
+
+                p.UnScope()
+                p.PrintLine()
+                # finish emitting code
+
+                processing_queue.append(s.output.name)
+                processed_buffers.add(s.output.name)
             else:
-                printer.PrintLine()
-            PrintUpdate(printer, GetProduceMap(buf), GetConsumeMap(buf), {'inputs':{'index':idx, 'produce':item}}, c)
-        printer.PrintLine()
+                for bb in s.inputs.values():
+                    if bb.name not in processed_buffers:
+                        logger.debug('buffer %s requires buffer %s as an input' % (s.output.name, bb.name))
+                        logger.debug('but buffer %s isn\'t produced yet' % bb.name)
+                        logger.debug('add %s to scheduling queue' % bb.name)
+                        processing_queue.append(bb.name)
 
-    for fifo_length in buf['FIFOs'].keys():
-        printer.PrintLine('FIFO_%d_ptr = FIFO_%d_ptr==(%d-1) ? 0 : FIFO_%d_ptr+1;' % (fifo_length/k, fifo_length/k, fifo_length/k, fifo_length/k))
-    printer.PrintLine()
+    for b in stencil.GetProducerBuffers():
+        buf = reuse_buffers[b.name]
+        for idx, item in enumerate(buf['inputs']):
+            msg = 'move reuse chain %d for buffer %s' % (idx, b.name)
+            logger.debug(msg)
+            p.PrintLine('// '+msg)
+            PrintUpdate(p, unroll_factor, GetProduceMap(buf), GetConsumeMap(buf, unroll_factor), {'inputs':{'index':idx, 'produce':item}}, b.chan, b.name)
+            p.PrintLine()
 
-    if burst_width*dram_chan/pixel_width_o/k <= 1:
-        ratio_o = int(pixel_width_o*k/dram_chan/burst_width)
-        printer.DoScope()
+        if len(buf['FIFOs'])>0:
+            msg = 'move FIFO ptrs for buffer %s' % b.name
+            logger.debug(msg)
+            p.PrintLine('// '+msg)
+            for fifo_length in buf['FIFOs'].keys():
+                p.PrintLine('FIFO_%d_%s_ptr = FIFO_%d_%s_ptr==uint%d_t(%d-1) ? 0 : FIFO_%d_%s_ptr+1;' % (fifo_length/unroll_factor, b.name, fifo_length/unroll_factor, b.name, 2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor))) ,fifo_length/unroll_factor, fifo_length/unroll_factor, b.name))
+            p.PrintLine()
+
+    if produce_consume_ratio_o <= 1:
+        p.DoScope()
         for c in range(output_chan):
-            printer.PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join([('tmp_%d_%d' % (c, x)) for x in range(dram_chan*ratio_o)])))
-        printer.PrintLine('store_coalesced:', 0)
-        printer.PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll', 0)
+            p.PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join([('tmp_chan_%d_bank_%d' % (c, x)) for x in range(dram_bank*consume_produce_ratio_o)])))
+        p.PrintLine('store_coalesced:', 0)
+        p.PrintLine('for(int j = 0; j < BURST_WIDTH/%d; ++j)' % pixel_width_o)
+        p.DoScope()
+        p.PrintLine('#pragma HLS unroll', 0)
         for c in range(output_chan):
-            for i in range(ratio_i):
-                for j in range(dram_chan):
-                    printer.PrintLine('tmp_%d_%d((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = output_%d_buffer[BURST_WIDTH/PIXEL_WIDTH_O*%d*%d+j*%d+%d];' % (c, i*dram_chan+j, c, dram_chan, i, dram_chan, j))
-        printer.UnScope()
+            for i in range(consume_produce_ratio_o):
+                for j in range(dram_bank):
+                    p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d];' % (c, i*dram_bank+j, pixel_width_o, pixel_width_o, output_name, c, pixel_width_o, dram_bank, i, dram_bank, j))
+        p.UnScope()
         for c in range(output_chan):
-            for i in range(ratio_o):
-                for j in range(dram_chan):
-                    printer.PrintLine('to_%d_%d<<tmp_%d_%d;' % (c, j, c, i*dram_chan+j))
-        printer.UnScope()
+            for i in range(consume_produce_ratio_o):
+                for j in range(dram_bank):
+                    p.PrintLine('to_chan_%d_bank_%d<<tmp_chan_%d_bank_%d;' % (c, j, c, i*dram_bank+j))
+        p.UnScope()
     else:
-        printer.PrintLine('if((epoch&%d)==%d)' % ((burst_width*dram_chan/pixel_width_i/k-1), burst_width*dram_chan/pixel_width_i/k-1))
-        printer.DoScope()
+        p.PrintLine('if((epoch&%d)==%d)' % ((produce_consume_ratio_o-1), produce_consume_ratio_o-1))
+        p.DoScope()
         for c in range(output_chan):
-            printer.PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join(['tmp_%d_%d' % (c, x) for x in range(dram_chan)])))
-        printer.PrintLine('store_coalesced:', 0)
-        printer.PrintLine('for(int j = 0; j < BURST_WIDTH/PIXEL_WIDTH_O; ++j)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll', 0)
+            p.PrintLine('ap_uint<BURST_WIDTH> %s;' % (', '.join(['tmp_chan_%d_bank_%d' % (c, x) for x in range(dram_bank)])))
+        p.PrintLine('store_coalesced:', 0)
+        p.PrintLine('for(int j = 0; j < BURST_WIDTH/%d; ++j)' % pixel_width_o)
+        p.DoScope()
+        p.PrintLine('#pragma HLS unroll', 0)
         for c in range(output_chan):
-            for i in range(dram_chan):
-                printer.PrintLine('tmp_%d_%d((j+1)*PIXEL_WIDTH_O-1, j*PIXEL_WIDTH_O) = output_%d_buffer[j*%d+%d];' % (c, i, c, dram_chan, i))
-        printer.UnScope()
+            for i in range(dram_bank):
+                p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = buffer_%s_chan_%d[j*%d+%d];' % (c, i, pixel_width_o, pixel_width_o, output_name, c, dram_bank, i))
+        p.UnScope()
         for c in range(output_chan):
-            for i in range(dram_chan):
-                printer.PrintLine('to_%d_%d<<tmp_%d_%d;' % (c, i, c, i))
-        printer.UnScope()
-    printer.PrintLine()
+            for i in range(dram_bank):
+                p.PrintLine('to_chan_%d_bank_%d<<tmp_chan_%d_bank_%d;' % (c, i, c, i))
+        p.UnScope()
 
-    printer.PrintLine('++p_base_counter;' )
-    if len(tile_size)>1:
-        printer.PrintLine('if(p_base_counter == tile_data_num)')
-        printer.DoScope()
-        printer.PrintLine('p_base_counter = 0;')
-        printer.PrintLine('reset_bases:', 0)
-        printer.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-        printer.DoScope()
-        printer.PrintLine('#pragma HLS unroll', 0)
-        printer.PrintLine('i_base[unroll_index] = unroll_index-%d; // STENCIL_DISTANCE' % stencil_distance)
-        printer.PrintLine('j_base[unroll_index] = 0;')
-        printer.UnScope()
-        printer.PrintLine('p_base += TILE_SIZE_DIM_0-%d+1; // TILE_SIZE_DIM_0-STENCIL_DIM_0+1' % (stencil_dim[0]))
-        printer.UnScope()
-    printer.UnScope()
-    printer.UnScope()
+    if print_aux:
+        p.PrintLine()
+        for b in stencil.GetProducerBuffers():
+            stencil_distance = stencil.output.offset.get() - b.offset.get()
+            # TODO: calculate for more than 2 dims
+            p.PrintLine('p_base_%s_counter++;' % b.name)
+            if len(tile_size)>1:
+                p.PrintLine('if(p_base_%s_counter == tile_data_num)' % b.name)
+                p.DoScope()
+                p.PrintLine('p_base_%s_counter = 0;' % b.name)
+                p.PrintLine('reset_bases_%s:' % b.name, 0)
+                p.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+                p.DoScope()
+                p.PrintLine('#pragma HLS unroll', 0)
+                p.PrintLine('i_base_%s[unroll_index] = unroll_index-%d; // STENCIL_DISTANCE' % (b.name, stencil_distance))
+                p.PrintLine('j_base_%s[unroll_index] = 0;' % b.name)
+                p.UnScope()
+                p.PrintLine('p_base_%s += TILE_SIZE_DIM_0-%d+1; // TILE_SIZE_DIM_0-STENCIL_DIM_0+1' % (b.name, GetStencilDim(overall_stencil_window)[0]))
+                p.UnScope()
 
-def PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dram_separate, input_chan, output_chan):
-    buf = GetBuffer(tile_size, A, k)
-    points = GetPoints(tile_size, A, k)
-    printer.PrintLine('extern "C"')
-    printer.PrintLine('{')
-    printer.PrintLine()
-    printer.PrintLine('void %s_kernel(' % app_name)
-    printer.DoIndent()
+    p.UnScope()
+    p.UnScope()
+
+def PrintInterface(p, stencil):
+    tile_size = stencil.tile_size
+    unroll_factor = stencil.unroll_factor
+    app_name = stencil.app_name
+    extra_params = stencil.extra_params
+    dram_bank = stencil.dram_bank
+    dram_separate = stencil.dram_separate
+    input_chan = stencil.input.chan
+    output_chan = stencil.output.chan
+
+    p.PrintLine('extern "C"')
+    p.PrintLine('{')
+    p.PrintLine()
+    p.PrintLine('void %s_kernel(' % app_name)
+    p.DoIndent()
     for c in range(output_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('ap_uint<BURST_WIDTH>* var_output_%d_%d,' % (c, i))
+        for i in range(dram_bank):
+            p.PrintLine('ap_uint<BURST_WIDTH>* var_output_%d_%d,' % (c, i))
     for c in range(input_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('ap_uint<BURST_WIDTH>* var_input_%d_%d,' % (c, i))
+        for i in range(dram_bank):
+            p.PrintLine('ap_uint<BURST_WIDTH>* var_input_%d_%d,' % (c, i))
     if extra_params:
-        for param in extra_params:
-            printer.PrintLine('%s* var_%s,' % (param.type, param.name))
-    printer.PrintLine('int64_t coalesced_data_num,')
-    printer.PrintLine('int64_t tile_data_num,')
+        for param in extra_params.values():
+            p.PrintLine('%s* var_%s,' % (param.type, param.name))
+    p.PrintLine('int64_t coalesced_data_num,')
+    p.PrintLine('int64_t tile_data_num,')
     for i in range(len(tile_size)-1):
-        printer.PrintLine('int32_t tile_num_dim_%d,' % i)
-    printer.PrintLine('int32_t input_size_dim_%d)' % (len(tile_size)-1))
-    printer.UnIndent()
-    printer.PrintLine('{')
-    printer.DoIndent()
+        p.PrintLine('int32_t tile_num_dim_%d,' % i)
+    p.PrintLine('int32_t input_size_dim_%d)' % (len(tile_size)-1))
+    p.UnIndent()
+    p.DoScope()
 
-    chan = 0
-    for i in range(dram_chan):
+    bank = 0
+    for i in range(dram_bank):
         for c in range(output_chan):
-            printer.PrintLine('#pragma HLS interface m_axi port=var_output_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, chan), 0)
-        chan += 1
+            p.PrintLine('#pragma HLS interface m_axi port=var_output_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
+        bank += 1
     if not dram_separate:
-        chan = 0
-    for i in range(dram_chan):
+        bank = 0
+    for i in range(dram_bank):
         for c in range(input_chan):
-            printer.PrintLine('#pragma HLS interface m_axi port=var_input_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, chan), 0)
-        chan += 1
+            p.PrintLine('#pragma HLS interface m_axi port=var_input_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
+        bank += 1
     if extra_params:
-        for param in extra_params:
-            printer.PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem0 latency=120' % (param.name, reduce(operator.mul, param.size)), 0)
-    printer.PrintLine()
+        for idx, param in enumerate(extra_params.values()):
+            p.PrintLine('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem%d latency=120' % (param.name, reduce(operator.mul, param.size), idx), 0)
+    p.PrintLine()
     for c in range(output_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('#pragma HLS interface s_axilite port=var_output_%d_%d bundle=control' % (c, i), 0)
+        for i in range(dram_bank):
+            p.PrintLine('#pragma HLS interface s_axilite port=var_output_%d_%d bundle=control' % (c, i), 0)
     for c in range(input_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('#pragma HLS interface s_axilite port=var_input_%d_%d bundle=control' % (c, i), 0)
+        for i in range(dram_bank):
+            p.PrintLine('#pragma HLS interface s_axilite port=var_input_%d_%d bundle=control' % (c, i), 0)
     if extra_params:
-        for param in extra_params:
-            printer.PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param.name, 0)
-    printer.PrintLine('#pragma HLS interface s_axilite port=coalesced_data_num bundle=control', 0)
-    printer.PrintLine('#pragma HLS interface s_axilite port=tile_data_num bundle=control', 0)
+        for param in extra_params.values():
+            p.PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param.name, 0)
+    p.PrintLine('#pragma HLS interface s_axilite port=coalesced_data_num bundle=control', 0)
+    p.PrintLine('#pragma HLS interface s_axilite port=tile_data_num bundle=control', 0)
     for i in range(len(tile_size)-1):
-        printer.PrintLine('#pragma HLS interface s_axilite port=tile_num_dim_%d bundle=control' % i, 0)
-    printer.PrintLine('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % (len(tile_size)-1), 0)
-    printer.PrintLine('#pragma HLS interface s_axilite port=return bundle=control', 0)
-    printer.PrintLine()
+        p.PrintLine('#pragma HLS interface s_axilite port=tile_num_dim_%d bundle=control' % i, 0)
+    p.PrintLine('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % (len(tile_size)-1), 0)
+    p.PrintLine('#pragma HLS interface s_axilite port=return bundle=control', 0)
+    p.PrintLine()
 
     for c in range(input_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >  input_stream_%d_%d( "input_stream_%d_%d");' % ((c, i)*2))
+        for i in range(dram_bank):
+            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >  input_stream_%d_%d( "input_stream_%d_%d");' % ((c, i)*2))
     for c in range(output_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('hls::stream<ap_uint<BURST_WIDTH> > output_stream_%d_%d("output_stream_%d_%d");' % ((c, i)*2))
+        for i in range(dram_bank):
+            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> > output_stream_%d_%d("output_stream_%d_%d");' % ((c, i)*2))
     for c in range(input_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('#pragma HLS stream variable=input_stream_%d_%d depth=32' % (c, i), 0)
+        for i in range(dram_bank):
+            p.PrintLine('#pragma HLS stream variable=input_stream_%d_%d depth=32' % (c, i), 0)
     for c in range(output_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('#pragma HLS stream variable=output_stream_%d_%d depth=32' % (c, i), 0)
-    printer.PrintLine()
+        for i in range(dram_bank):
+            p.PrintLine('#pragma HLS stream variable=output_stream_%d_%d depth=32' % (c, i), 0)
+    p.PrintLine()
 
     if extra_params:
-        for param in extra_params:
+        for param in extra_params.values():
             if param.dup:
                 dup = ('[%d]' % param.dup)
             else:
                 dup = ''
-            printer.PrintLine('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join([str(x) for x in param.size])))
-        printer.PrintLine()
+            p.PrintLine('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join([str(x) for x in param.size])))
+        p.PrintLine()
 
-        for param in extra_params:
-            printer.PrintLine('#pragma HLS array_partition variable=%s complete dim=1' % param.name, 0)
+        for param in extra_params.values():
+            p.PrintLine('#pragma HLS array_partition variable=%s complete dim=1' % param.name, 0)
             dim_offset = 1
             if param.dup:
-                printer.PrintLine('#pragma HLS array_partition variable=%s complete dim=2' % param.name, 0)
+                p.PrintLine('#pragma HLS array_partition variable=%s complete dim=2' % param.name, 0)
                 dim_offset = 2
             for partitioning in param.partitioning:
-                printer.PrintLine('#pragma HLS array_partition variable=%s %s dim=%d%s' % (
+                p.PrintLine('#pragma HLS array_partition variable=%s %s dim=%d%s' % (
                     param.name,
                     partitioning.partition_type,
                     dim_offset+1 if partitioning.dim is None else partitioning.dim+dim_offset,
                     '' if partitioning.factor is None else ' factor=%d' % partitioning.factor,
                 ), 0)
-        printer.PrintLine()
+        p.PrintLine()
 
-        for param in extra_params:
+        for param in extra_params.values():
             if len(param.size) > 1:
                 for dim, size in enumerate(param.size):
-                    printer.PrintLine('uint32_t %s_index_dim_%d = 0;' % (param.name, dim))
-            printer.PrintLine('%s_init:' % param.name, 0)
-            printer.PrintLine('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, reduce(operator.mul, param.size), param.name))
-            printer.DoScope()
-            printer.PrintLine('#pragma HLS pipeline II=1', 0)
-            printer.PrintLine('%s& %s_tmp = var_%s[%s_index];' % (param.type, param.name, param.name, param.name))
-            printer.PrintLine('%s_unrolled:' % param.name, 0)
-            printer.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-            printer.DoScope()
-            printer.PrintLine('#pragma HLS unroll',0)
+                    p.PrintLine('uint32_t %s_index_dim_%d = 0;' % (param.name, dim))
+            p.PrintLine('%s_init:' % param.name, 0)
+            p.PrintLine('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, reduce(operator.mul, param.size), param.name))
+            p.DoScope()
+            p.PrintLine('#pragma HLS pipeline II=1', 0)
+            p.PrintLine('%s& %s_tmp = var_%s[%s_index];' % (param.type, param.name, param.name, param.name))
+            p.PrintLine('%s_unrolled:' % param.name, 0)
+            p.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+            p.DoScope()
+            p.PrintLine('#pragma HLS unroll',0)
             if param.dup is None:
-                printer.PrintLine('%s[unroll_index]%s = %s_tmp;' % ((param.name, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name)))
+                p.PrintLine('%s[unroll_index]%s = %s_tmp;' % ((param.name, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name)))
             else:
                 for i in range(param.dup):
-                    printer.PrintLine('%s[%d][unroll_index]%s = %s_tmp;' % (param.name, i, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name))
-            printer.UnScope()
+                    p.PrintLine('%s[%d][unroll_index]%s = %s_tmp;' % (param.name, i, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name))
+            p.UnScope()
             if len(param.size) > 1:
                 for dim in range(len(param.size)):
-                    printer.PrintLine('++%s_index_dim_%d;' % (param.name, dim))
+                    p.PrintLine('++%s_index_dim_%d;' % (param.name, dim))
                     if dim<len(param.size)-1:
-                        printer.PrintLine('if(%s_index_dim_%d==%d)' % (param.name, dim, param.size[len(param.size)-1-dim]))
-                        printer.DoScope()
-                        printer.PrintLine('%s_index_dim_%d = 0;' % (param.name, dim))
+                        p.PrintLine('if(%s_index_dim_%d==%d)' % (param.name, dim, param.size[len(param.size)-1-dim]))
+                        p.DoScope()
+                        p.PrintLine('%s_index_dim_%d = 0;' % (param.name, dim))
             for size in param.size[:-1]:
-                printer.UnScope()
-            printer.UnScope()
-        printer.PrintLine()
+                p.UnScope()
+            p.UnScope()
+        p.PrintLine()
 
-    extra_params_str = ''.join([param.name+', ' for param in extra_params])
+    extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
 
-    printer.PrintLine('#pragma HLS dataflow', 0)
+    p.PrintLine('#pragma HLS dataflow', 0)
     for c in range(input_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('load(input_stream_%d_%d, var_input_%d_%d, coalesced_data_num);' % ((c, i)*2))
-    output_stream = ', '.join([', '.join(['output_stream_%d_%d' % (c, x) for x in range(dram_chan)]) for c in range(output_chan)])
-    input_stream = ', '.join([', '.join(['input_stream_%d_%d' % (c, x) for x in range(dram_chan)]) for c in range(input_chan)])
+        for i in range(dram_bank):
+            p.PrintLine('load(input_stream_%d_%d, var_input_%d_%d, coalesced_data_num);' % ((c, i)*2))
+    output_stream = ', '.join([', '.join(['output_stream_%d_%d' % (c, x) for x in range(dram_bank)]) for c in range(output_chan)])
+    input_stream = ', '.join([', '.join(['input_stream_%d_%d' % (c, x) for x in range(dram_bank)]) for c in range(input_chan)])
     tile_num_dim = ', '.join(['tile_num_dim_%d' % x for x in range(len(tile_size)-1)])
-    printer.PrintLine('compute(%s, %s, %scoalesced_data_num, tile_data_num, %s, input_size_dim_%d);' % (output_stream, input_stream, extra_params_str, tile_num_dim, len(tile_size)-1))
+    p.PrintLine('compute(%s, %s, %scoalesced_data_num, tile_data_num, %s, input_size_dim_%d);' % (output_stream, input_stream, extra_params_str, tile_num_dim, len(tile_size)-1))
     for c in range(output_chan):
-        for i in range(dram_chan):
-            printer.PrintLine('store(var_output_%d_%d, output_stream_%d_%d, coalesced_data_num);' % ((c, i)*2))
+        for i in range(dram_bank):
+            p.PrintLine('store(var_output_%d_%d, output_stream_%d_%d, coalesced_data_num);' % ((c, i)*2))
 
-    printer.UnScope()
-    printer.PrintLine()
-    printer.PrintLine('}//extern "C"')
+    p.UnScope()
+    p.PrintLine()
+    p.PrintLine('}//extern "C"')
 
-def PrintHeader(printer):
+def PrintHeader(p):
     for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio', 'string', 'ap_int', 'hls_stream']:
-        printer.PrintLine('#include<%s.h>' % header)
-    printer.PrintLine()
+        p.PrintLine('#include<%s.h>' % header)
+    p.PrintLine()
 
-def PrintLoad(printer):
-    printer.PrintLine('void load(hls::stream<ap_uint<BURST_WIDTH> > &to, ap_uint<BURST_WIDTH>* from, int data_num)')
-    printer.DoScope()
-    printer.PrintLine('load_epoch:', 0)
-    printer.PrintLine('for(int i = 0; i < data_num; ++i)')
-    printer.DoScope()
-    printer.PrintLine('#pragma HLS pipeline II=1', 0)
-    printer.PrintLine('to<<from[i];')
-    printer.UnScope()
-    printer.UnScope()
+def PrintLoad(p):
+    p.PrintLine('void load(hls::stream<ap_uint<BURST_WIDTH> > &to, ap_uint<BURST_WIDTH>* from, int data_num)')
+    p.DoScope()
+    p.PrintLine('load_epoch:', 0)
+    p.PrintLine('for(int i = 0; i < data_num; ++i)')
+    p.DoScope()
+    p.PrintLine('#pragma HLS pipeline II=1', 0)
+    p.PrintLine('to<<from[i];')
+    p.UnScope()
+    p.UnScope()
 
-def PrintStore(printer):
-    printer.PrintLine('void store(ap_uint<BURST_WIDTH>* to, hls::stream<ap_uint<BURST_WIDTH> > &from, int data_num)')
-    printer.DoScope()
-    printer.PrintLine('store_epoch:', 0)
-    printer.PrintLine('for(int i = 0; i < data_num; ++i)')
-    printer.DoScope()
-    printer.PrintLine('#pragma HLS pipeline II=1', 0)
-    printer.PrintLine('from>>to[i];')
-    printer.UnScope()
-    printer.UnScope()
+def PrintStore(p):
+    p.PrintLine('void store(ap_uint<BURST_WIDTH>* to, hls::stream<ap_uint<BURST_WIDTH> > &from, int data_num)')
+    p.DoScope()
+    p.PrintLine('store_epoch:', 0)
+    p.PrintLine('for(int i = 0; i < data_num; ++i)')
+    p.DoScope()
+    p.PrintLine('#pragma HLS pipeline II=1', 0)
+    p.PrintLine('from>>to[i];')
+    p.UnScope()
+    p.UnScope()
 
-# for generating iterative
-def GetA(A,  num_iter):
-    if num_iter < 1:
-        return None
-    if num_iter == 1:
-        return A
-    A1 = GetA(A, num_iter-1)
-    A2 = {}
-    for a1 in A1.values():
-        for a in A.values():
-            a2 = [o1+o2 for o1, o2 in zip(a[0], a1[0])]
-            A2[str(a2)] = (a2, A2.get(str(a2), (a2, 0))[1]+a[1]*a1[1])
-    return A2
-
-def gcd(*numbers):
-    from fractions import gcd
-    return reduce(gcd, numbers)
-
-def lcm(*numbers):
-    def lcm(a, b):
-        return (a * b) // gcd(a, b)
-    return reduce(lcm, numbers, 1)
-
-def GetAdderTree(variables, count):
-    global compute_content
-    if len(variables)>1:
-        r1 = GetAdderTree(variables[0:int(len(variables)/2)], count)
-        r2 = GetAdderTree(variables[int(len(variables)/2):], r1[1])
-        compute_content += ['float tmp_adder_%d = %s+%s;' % (r2[1], r1[0], r2[0])]
-        return ('tmp_adder_%d' % r2[1], r2[1]+1)
-    return (variables[0], count)
-
-def PrintCode(stencil, output_file):
+def PrintCode(s, output_file):
     logger.info('Generate kernel code as %s' % output_file.name)
-    printer = Printer(output_file)
-    burst_width = stencil.burst_width
-    dram_chan = stencil.dram_chan
+    p = Printer(output_file)
 
-    app_name = stencil.app_name
-    input_name = stencil.input_name
-    input_type = stencil.input_type
-    input_chan = stencil.input_chan
-    output_type = stencil.output_type
-    output_chan = stencil.output_chan
-    A = stencil.A
-    dim = stencil.dim
-    extra_params = stencil.extra_params
-    compute_content = stencil.compute_content
+    PrintHeader(p)
 
-    tile_size = stencil.tile_size
-    k = stencil.k
-    dram_separate = stencil.dram_separate
+    p.PrintLine()
 
-    pixel_width_i = type_width[input_type]
-    pixel_width_o = type_width[output_type]
-    input_partition = burst_width/pixel_width_i*dram_chan/2 if burst_width/pixel_width_i*dram_chan/2 > k/2 else k/2
-    output_partition = burst_width/pixel_width_o*dram_chan/2 if burst_width/pixel_width_o*dram_chan/2 > k/2 else k/2
+    PrintDefine(p, 'BURST_WIDTH', s.burst_width)
+    p.PrintLine()
 
-    PrintHeader(printer)
+    PrintGuard(p, 'UNROLL_FACTOR', s.unroll_factor)
+    for i in range(len(s.tile_size)-1):
+        PrintGuard(p, 'TILE_SIZE_DIM_%d' % i, s.tile_size[i])
+    PrintGuard(p, 'BURST_WIDTH', s.burst_width)
+    p.PrintLine()
 
-    printer.PrintLine('typedef %s input_type;' % input_type)
-    printer.PrintLine('typedef %s output_type;' % output_type)
-    printer.PrintLine()
+    PrintLoad(p)
+    p.PrintLine()
+    PrintStore(p)
+    p.PrintLine()
+    PrintCompute(p, s)
+    p.PrintLine()
+    PrintInterface(p, s)
 
-    PrintDefine(printer, 'BURST_WIDTH', burst_width)
-    PrintDefine(printer, 'PIXEL_WIDTH_I', pixel_width_i)
-    PrintDefine(printer, 'PIXEL_WIDTH_O', pixel_width_o)
-    #for i, dim in enumerate(GetStencilDim(A)):
-    #    PrintDefine(printer, 'STENCIL_DIM_%d' % i, dim)
-    #PrintDefine(printer, 'STENCIL_DISTANCE', GetStencilDistance(A, tile_size))
-    PrintDefine(printer, 'CHANNEL_NUM_I', input_chan)
-    PrintDefine(printer, 'CHANNEL_NUM_O', output_chan)
-    printer.PrintLine()
-
-    PrintGuard(printer, 'UNROLL_FACTOR', k)
-    for i in range(len(tile_size)-1):
-        PrintGuard(printer, 'TILE_SIZE_DIM_%d' % i, tile_size[i])
-    PrintGuard(printer, 'BURST_WIDTH', burst_width)
-    PrintGuard(printer, 'PIXEL_WIDTH_I', pixel_width_i)
-    PrintGuard(printer, 'PIXEL_WIDTH_O', pixel_width_o)
-    #for i, dim in enumerate(GetStencilDim(A)):
-    #    PrintGuard(printer, 'STENCIL_DIM_%d' % i, dim)
-    #PrintGuard(printer, 'STENCIL_DISTANCE', GetStencilDistance(A, tile_size))
-    printer.PrintLine()
-
-    PrintLoad(printer)
-    printer.PrintLine()
-    PrintStore(printer)
-    printer.PrintLine()
-    PrintCompute(printer, tile_size, A, k, compute_content, input_partition, output_partition, extra_params, input_name, burst_width, pixel_width_i, pixel_width_o, dram_chan, input_chan, output_chan)
-    printer.PrintLine()
-    PrintKernel(printer, tile_size, A, k, app_name, extra_params, dram_chan, dram_separate, input_chan, output_chan)
-
-def main():
-    stencil = GetStencilFromJSON(sys.stdin)
-    PrintCode(stencil, sys.stdout)
-
-if __name__ == '__main__':
-    main()

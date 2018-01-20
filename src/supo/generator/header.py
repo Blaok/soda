@@ -8,7 +8,7 @@ import operator
 import os
 import sys
 sys.path.append(os.path.dirname(__file__))
-from utils import Stencil, Printer, GetStencilFromJSON
+from utils import Stencil, Printer
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -59,16 +59,10 @@ def PrintCode(stencil, header_file):
     p.PrintLine('#endif//HALIDE_FUNCTION_ATTRS')
     p.PrintLine()
 
-    buffers = [stencil.input_name, stencil.output_name] + [param.name for param in stencil.extra_params]
+    buffers = [stencil.input.name, stencil.output.name] + [param.name for param in stencil.extra_params.values()]
     p.PrintLine('int %s(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS;' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x for x in buffers])))
     p.PrintLine()
 
     p.PrintLine('#endif//HALIDE_%s_H_' % stencil.app_name.upper())
     p.PrintLine()
 
-def main():
-    stencil = GetStencilFromJSON(sys.stdin)
-    PrintCode(stencil, sys.stdout)
-
-if __name__ == '__main__':
-    main()
