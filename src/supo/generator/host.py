@@ -537,7 +537,7 @@ def PrintWrapped(p, stencil):
     p.PrintLine('double elapsed_time = 0.;')
     p.PrintLine('elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;')
     p.PrintLine('printf("Kernel execution time: %lf us\\n", elapsed_time);')
-    p.PrintLine('printf("Kernel throughput:     %lf pixel/ns\\n", input_size_dim_0*input_size_dim_1/elapsed_time/1e3);')
+    p.PrintLine('printf("Kernel throughput:     %%lf pixel/ns\\n", %s/elapsed_time/1e3);' % '*'.join(['%s_size_dim_%d' % (stencil.input.name, x) for x in range(stencil.dim)]))
     p.UnScope()
     p.PrintLine('else')
     p.DoScope()
