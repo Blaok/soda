@@ -9,7 +9,7 @@ import operator
 import os
 import sys
 
-from supo.generator.utils import coords_in_tile, coords_in_orig, Stencil, Printer, PrintDefine, PrintGuard, SerializeIterative, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
+from supo.generator.utils import coords_in_tile, coords_in_orig, type_width, IsFloat, Stencil, Printer, PrintDefine, PrintGuard, SerializeIterative, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
 from supo.grammar import ExtraParam
 
 logger = logging.getLogger('__main__').getChild(__name__)
@@ -297,7 +297,11 @@ def PrintCompute(p, stencil):
         for c in range(input_chan):
             for i in range(consume_produce_ratio_i):
                 for j in range(dram_bank):
-                    p.PrintLine('buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d] = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (input_name, c, pixel_width_i, dram_bank, i, dram_bank, j, c, i*dram_bank+j, pixel_width_i, pixel_width_i))
+                    if IsFloat(input_type):
+                        p.PrintLine('uint%d_t raw_bits_chan_%d_bank_%d = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (type_width[input_type], c, i*dram_bank+j, c, i*dram_bank+j, pixel_width_i, pixel_width_i))
+                        p.PrintLine('buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d] = *(%s*)(&raw_bits_chan_%d_bank_%d);' % (input_name, c, pixel_width_i, dram_bank, i, dram_bank, j, input_type, c, i*dram_bank+j))
+                    else:
+                        p.PrintLine('buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d] = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (input_name, c, pixel_width_i, dram_bank, i, dram_bank, j, c, i*dram_bank+j, pixel_width_i, pixel_width_i))
         p.UnScope()
         p.UnScope()
     else:
@@ -485,7 +489,11 @@ def PrintCompute(p, stencil):
         for c in range(output_chan):
             for i in range(consume_produce_ratio_o):
                 for j in range(dram_bank):
-                    p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d];' % (c, i*dram_bank+j, pixel_width_o, pixel_width_o, output_name, c, pixel_width_o, dram_bank, i, dram_bank, j))
+                    if IsFloat(output_type):
+                        p.PrintLine('%s raw_bits_chan_%d_bank_%d = buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d];' % (output_type, c, i*dram_bank+j, output_name, c, pixel_width_o, dram_bank, i, dram_bank, j))
+                        p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = *(uint%d_t*)(&raw_bits_chan_%d_bank_%d);' % (c, i*dram_bank+j, pixel_width_o, pixel_width_o, type_width[output_type], c, i*dram_bank+j))
+                    else:
+                        p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = buffer_%s_chan_%d[BURST_WIDTH/%d*%d*%d+j*%d+%d];' % (c, i*dram_bank+j, pixel_width_o, pixel_width_o, output_name, c, pixel_width_o, dram_bank, i, dram_bank, j))
         p.UnScope()
         for c in range(output_chan):
             for i in range(consume_produce_ratio_o):

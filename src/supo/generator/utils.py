@@ -238,6 +238,9 @@ def GetCType(supo_type):
         return supo_type+'_t'
     return supo_type
 
+def IsFloat(supo_type):
+    return supo_type in {'float', 'double'}
+
 def PrintGuard(printer, var, val):
     printer.PrintLine('#if %s != %d' % (var, val))
     printer.PrintLine('#error %s != %d' % (var, val))
