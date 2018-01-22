@@ -30,7 +30,7 @@ Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
 ExtraParam: 'param' type=Type (',' attrs=ExtraParamAttr)*  ':' name=ID ('[' size=INT ']')+;
 ExtraParamAttr: 'dup' dup=Number | partitioning=Partitioning;
 Factor: (sign=PlusOrMinus)? operand=Operand;
-Float: /((\d+\.|\d*\.\d+)([+-]?[Ee]\d+)?|\d+[+-]?[Ee]\d+)[FfLl]?/;
+Float: /(((\d*\.\d+|\d+\.)([+-]?[Ee]\d+)?)|(\d+[+-]?[Ee]\d+))[FfLl]?/;
 Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Input: 'input' type=Type ':' name=ID ('[' chan=Integer ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
 Integer: ('+'|'-')?(Hex|Bin|Oct|Dec);
