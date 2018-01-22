@@ -321,7 +321,11 @@ def PrintCompute(p, stencil):
         p.PrintLine('#pragma HLS unroll', 0)
         for c in range(input_chan):
             for i in range(dram_bank):
-                p.PrintLine('buffer_%s_chan_%d[j*%d+%d] = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (input_name, c, dram_bank, i, c, i, pixel_width_i, pixel_width_i))
+                if IsFloat(input_type):
+                    p.PrintLine('uint%d_t raw_bits_chan_%d_bank_%d = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (type_width[input_type], c, i, c, i, pixel_width_i, pixel_width_i))
+                    p.PrintLine('buffer_%s_chan_%d[j*%d+%d] = *(%s*)(&raw_bits_chan_%d_bank_%d);' % (input_name, c, dram_bank, i, input_type, c, i))
+                else:
+                    p.PrintLine('buffer_%s_chan_%d[j*%d+%d] = tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d);' % (input_name, c, dram_bank, i, c, i, pixel_width_i, pixel_width_i))
         p.UnScope()
         p.PrintLine('break;')
         p.UnScope()
@@ -511,7 +515,11 @@ def PrintCompute(p, stencil):
         p.PrintLine('#pragma HLS unroll', 0)
         for c in range(output_chan):
             for i in range(dram_bank):
-                p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = buffer_%s_chan_%d[j*%d+%d];' % (c, i, pixel_width_o, pixel_width_o, output_name, c, dram_bank, i))
+                if IsFloat(output_type):
+                    p.PrintLine('%s raw_bits_chan_%d_bank_%d = buffer_%s_chan_%d[j*%d+%d];' % (output_type, c, i, output_name, c, dram_bank, i))
+                    p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = *(uint%d_t*)(&raw_bits_chan_%d_bank_%d);' % (c, i, pixel_width_o, pixel_width_o, type_width[output_type], c, i))
+                else:
+                    p.PrintLine('tmp_chan_%d_bank_%d((j+1)*%d-1, j*%d) = buffer_%s_chan_%d[j*%d+%d];' % (c, i, pixel_width_o, pixel_width_o, output_name, c, dram_bank, i))
         p.UnScope()
         for c in range(output_chan):
             for i in range(dram_bank):
