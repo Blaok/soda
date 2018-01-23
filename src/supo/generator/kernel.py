@@ -208,6 +208,7 @@ def PrintCompute(p, stencil):
         for c in range(b.chan):
             if len(buf['FFs'])>0:
                 p.PrintLine('#pragma HLS array_partition variable=FF_%s_chan_%d complete' % (b.name, c), 0)
+                p.PrintLine('#pragma HLS resource variable=FF_%s_chan_%d latency=1' % (b.name, c), 0)
 
         for c in range(b.chan):
             for fifo_length in buf['FIFOs'].keys():
@@ -240,6 +241,7 @@ def PrintCompute(p, stencil):
             p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR*%d];' % (input_type, input_name, c, produce_consume_ratio_i))
     for c in range(input_chan):
         p.PrintLine('#pragma HLS array_partition variable=buffer_%s_chan_%d complete dim=0' % (input_name, c), 0)
+        p.PrintLine('#pragma HLS resource variable=buffer_%s_chan_%d latency=1' % (input_name, c), 0)
     p.PrintLine()
 
     msg = 'intermediate buffer for '+b.name
@@ -252,6 +254,7 @@ def PrintCompute(p, stencil):
             p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR];' % (b.type, b.name, c))
         for c in range(b.chan):
             p.PrintLine('#pragma HLS array_partition variable=buffer_%s_chan_%d complete dim=0' % (b.name, c), 0)
+            p.PrintLine('#pragma HLS resource variable=buffer_%s_chan_%d latency=1' % (b.name, c), 0)
         p.PrintLine()
 
     msg = 'output buffer'
@@ -264,6 +267,7 @@ def PrintCompute(p, stencil):
             p.PrintLine('%s buffer_%s_chan_%d[UNROLL_FACTOR*%d];' % (output_type, output_name, c, produce_consume_ratio_o))
     for c in range(output_chan):
         p.PrintLine('#pragma HLS array_partition variable=buffer_%s_chan_%d complete dim=0' % (output_name, c), 0)
+        p.PrintLine('#pragma HLS resource variable=buffer_%s_chan_%d latency=1' % (output_name, c), 0)
     p.PrintLine()
 
     p.PrintLine('// produce output')
@@ -392,6 +396,7 @@ def PrintCompute(p, stencil):
                 p.PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
                 p.DoScope('unroll_index')
                 p.PrintLine('#pragma HLS unroll', 0)
+                p.PrintLine('#pragma HLS latency min=1', 0)
 
                 if print_aux:
                     for i in range(len(tile_size)):
@@ -467,20 +472,29 @@ def PrintCompute(p, stencil):
 
     for b in stencil.GetProducerBuffers():
         buf = reuse_buffers[b.name]
+        p.DoScope()
+        p.PrintLine('#pragma HLS latency min=1 max=1', 0)
+        first = True
         for idx, item in enumerate(buf['inputs']):
+            if first:
+                first = False
+            else:
+                p.PrintLine()
             msg = 'move reuse chain %d for buffer %s' % (idx, b.name)
             logger.debug(msg)
             p.PrintLine('// '+msg)
             PrintUpdate(p, unroll_factor, GetProduceMap(buf), GetConsumeMap(buf, unroll_factor), {'inputs':{'index':idx, 'produce':item}}, b.chan, b.name)
-            p.PrintLine()
 
         if len(buf['FIFOs'])>0:
+            p.PrintLine()
             msg = 'move FIFO ptrs for buffer %s' % b.name
             logger.debug(msg)
             p.PrintLine('// '+msg)
             for fifo_length in buf['FIFOs'].keys():
                 p.PrintLine('FIFO_%d_%s_ptr = FIFO_%d_%s_ptr==uint%d_t(%d-1) ? 0 : FIFO_%d_%s_ptr+1;' % (fifo_length/unroll_factor, b.name, fifo_length/unroll_factor, b.name, 2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor))) ,fifo_length/unroll_factor, fifo_length/unroll_factor, b.name))
-            p.PrintLine()
+
+        p.UnScope()
+        p.PrintLine()
 
     if produce_consume_ratio_o <= 1:
         p.DoScope()
