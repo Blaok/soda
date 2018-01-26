@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls exe bitstream check-afi-status mktemp
+.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp
 
 APP ?= blur
 SDA_VER := 2017.1
@@ -96,6 +96,8 @@ endif # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 
 exe: $(BIN)/$(HOST_BIN)
+
+kernel: $(TMP)/$(KERNEL_SRCS)
 
 check-afi-status:
 	@echo -n 'AFI state: ';aws ec2 describe-fpga-images --fpga-image-ids $$(jq -r '.FpgaImageId' $(BIT)/$(HW_XCLBIN:.xclbin=.afi))|jq '.FpgaImages[0].State.Code' -r
