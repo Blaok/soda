@@ -13,7 +13,7 @@ from utils import Stencil, Printer
 logger = logging.getLogger('__main__').getChild(__name__)
 
 def PrintCode(stencil, header_file):
-    logger.info('Generate host header code as %s' % header_file.name)
+    logger.info('generate host header code as %s' % header_file.name)
     p = Printer(header_file)
     p.PrintLine('#ifndef HALIDE_%s_H_' % stencil.app_name.upper())
     p.PrintLine('#define HALIDE_%s_H_' % stencil.app_name.upper())

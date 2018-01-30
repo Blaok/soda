@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls exe bitstream check-afi-status mktemp
+.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp
 
 APP ?= blur
 SDA_VER := 2017.1
@@ -97,6 +97,8 @@ hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 
 exe: $(BIN)/$(HOST_BIN)
 
+kernel: $(TMP)/$(KERNEL_SRCS)
+
 check-afi-status:
 	@echo -n 'AFI state: ';aws ec2 describe-fpga-images --fpga-image-ids $$(jq -r '.FpgaImageId' $(BIT)/$(HW_XCLBIN:.xclbin=.afi))|jq '.FpgaImages[0].State.Code' -r
 
@@ -144,19 +146,21 @@ $(BIT)/$(CSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS)
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 	src/fix-xclbin2-size $@
 
-$(BIT)/$(COSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS)
+$(BIT)/$(COSIM_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 	@mkdir -p $(BIT)
 	@mkdir -p $(RPT)
-	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -o $@ $<
+	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -l -o $@ $<
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 	src/fix-xclbin2-size $@
 
 $(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 	@mkdir -p $(BIT)
-	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -l -o $@ $<
+	@mkdir -p $(TMP)
 	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@cp $(TMP)/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/{*_timing_summary,kernel_util}_routed.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
+	@ln -sf $(realpath $(TMP))/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/kernel_util_routed.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
+	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -l -o $@ $<
+	@cp --remove-destination $(TMP)/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/{*_timing_summary,kernel_util}_routed.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 	src/fix-xclbin2-size $@
@@ -170,10 +174,11 @@ endif # AWS_BUCKET
 
 $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(TMP)/$(KERNEL_SRCS)
 	@mkdir -p $(OBJ)
-	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -c -o $@ $<
+	@mkdir -p $(TMP)
 	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@cp $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/vivado_hls.log $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@cp $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/*.rpt $(RPT)/$(HW_XCLBIN:.xclbin=)
+	@ln -sf $(realpath $(TMP))/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/{vivado_hls.log,$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/$(KERNEL_NAME)_csynth.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
+	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -c -o $@ $<
+	@cp --remove-destination $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/{vivado_hls.log,$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/*.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 

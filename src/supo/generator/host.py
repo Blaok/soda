@@ -375,7 +375,7 @@ def PrintWrapped(p, stencil):
     p.DoScope()
     p.PrintLine('switch(dram_bank)')
     p.DoScope()
-    for i in range(1, int(max_dram_bank/2)+1):
+    for i in range(1, max_dram_bank//2+1):
         p.PrintLine('case %d:' % i)
         p.DoIndent()
         for c in range(i):
@@ -797,7 +797,7 @@ def PrintTest(p, stencil):
     p.UnScope()
 
 def PrintCode(stencil, host_file):
-    logger.info('Generate host source code as %s' % host_file.name)
+    logger.info('generate host source code as %s' % host_file.name)
     p = Printer(host_file)
     PrintHeader(p)
     p.PrintLine('#include"%s.h"' % stencil.app_name)
