@@ -82,6 +82,13 @@ class SupoProgram(object):
         self.unroll_factor = kwargs.pop('unroll_factor')
         self.dram_separate = kwargs.pop('dram_separate')=='yes'
 
+        # normalize
+        for e in self.output.output_expr:
+            e.Normalize(self.extra_params)
+        for intermediate in self.intermediates:
+            for e in intermediate.expr:
+                e.Normalize(self.extra_params)
+
     def __str__(self):
         return \
             ('burst width: %d\n' % self.burst_width) + \
@@ -114,6 +121,11 @@ class Expression(object):
             self.loads = sum([op.GetLoads() for op in self.operand], [])
         return self.loads
 
+    def Normalize(self, norm_offset, extra_params):
+        for op in self.operand:
+            op.Normalize(norm_offset, extra_params)
+        del self.loads
+
 class Term(object):
     def __init__(self, **kwargs):
         self.operand = kwargs.pop('operand')
@@ -136,6 +148,11 @@ class Term(object):
             self.loads = sum([op.GetLoads() for op in self.operand], [])
         return self.loads
 
+    def Normalize(self, norm_offset, extra_params):
+        for op in self.operand:
+            op.Normalize(norm_offset, extra_params)
+        del self.loads
+
 class Factor(object):
     def __init__(self, **kwargs):
         self.operand = kwargs.pop('operand')
@@ -151,6 +168,10 @@ class Factor(object):
         if not hasattr(self, 'loads'):
             self.loads = self.operand.GetLoads()
         return self.loads
+
+    def Normalize(self, norm_offset, extra_params):
+        self.operand.Normalize(norm_offset, extra_params)
+        del self.loads
 
 class Operand(object):
     def __init__(self, **kwargs):
@@ -188,6 +209,18 @@ class Operand(object):
             else:
                 raise SemanticError('invalid Operand %s' % str(self))
         return self.loads
+
+    def Normalize(self, norm_offset, extra_params):
+        if self.expr is not None:
+            self.expr.Normalize(norm_offset, extra_params)
+            del self.loads
+        elif self.num is not None:
+            pass
+        elif self.name is not None:
+            msg = '%s[%d](%s)' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]))
+            self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
+            logger.debug('load at %s normalized to %s[%d](%s)' % (msg, self.name, self.chan, ', '.join([str(x) for x in self.idx])))
+            del self.loads
 
 class Input(object):
     def __init__(self, **kwargs):
@@ -319,4 +352,12 @@ class OutputExpr(object):
         if not hasattr(self, 'loads'):
             self.loads = self.expr.GetLoads()
         return self.loads
+
+    def Normalize(self, extra_params):
+        norm_offset = tuple(min(load.idx[d] for load in self.GetLoads() if load.name not in extra_params) for d in range(len(self.idx)))
+        logger.debug('norm offset of %s: %s' % (self.name, norm_offset))
+        self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
+        logger.debug('normalized idx of %s: %s' % (self.name, self.idx))
+        self.expr.Normalize(norm_offset, extra_params)
+        del self.loads
 
