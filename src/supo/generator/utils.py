@@ -20,20 +20,7 @@ max_dram_bank = 4
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
-class MutableInt():
-    def __init__(self, value):
-        self.value = value
-    def __index__(self):
-        return self.value
-    def str(self):
-        return str(self.value)
-    def get(self):
-        return self.value
-    def set(self, value):
-        self.value = value
-        return self.value
-
-Buffer = namedtuple('Buffer', ['name', 'type', 'chan', 'idx', 'parent', 'children', 'offset'])
+#Buffer = namedtuple('Buffer', ['name', 'type', 'chan', 'idx', 'parent', 'children', 'offset'])
 # Buffer.name: str
 # Buffer.type: str
 # Buffer.chan: int
@@ -41,14 +28,32 @@ Buffer = namedtuple('Buffer', ['name', 'type', 'chan', 'idx', 'parent', 'childre
 # Buffer.parent: [Stage]
 # Buffer.children: [Stage, ...]
 # Buffer.offset: MutableInt
+class Buffer(object):
+    def __init__(self, **kwargs):
+        self.name = kwargs.pop('name')
+        self.type = kwargs.pop('type')
+        self.chan = kwargs.pop('chan')
+        self.idx = kwargs.pop('idx', [])
+        self.parent = kwargs.pop('parent', None)
+        self.children = kwargs.pop('children', [])
+        self.offset = kwargs.pop('offset', 0)
 
-Stage = namedtuple('Stage', ['window', 'offset', 'delay', 'expr', 'inputs', 'output'])
+#Stage = namedtuple('Stage', ['window', 'offset', 'delay', 'expr', 'inputs', 'output'])
 # Stage.window: {str: [(int, ...), ...], ...}
 # Stage.offset: {str: [int, ...], ...}
 # Stage.delay: {str: int, ...}
 # Stage.expr: [OutputExpr, ...]
 # Stage.inputs: {str: Buffer, ...}
 # Stage.output: Buffer
+class Stage(object):
+    def __init__(self, **kwargs):
+        self.window = kwargs.pop('window')
+        self.offset = kwargs.pop('offset')
+        self.delay = kwargs.pop('delay', {})
+        self.expr = kwargs.pop('expr')
+        self.inputs = kwargs.pop('inputs')
+        self.output = kwargs.pop('output')
+        self.name = self.output.name
 
 class Stencil(object):
     def __init__(self, **kwargs):
@@ -74,16 +79,16 @@ class Stencil(object):
         input_node = kwargs.pop('input')
         output_node = kwargs.pop('output')
         intermediates = kwargs.pop('intermediates')
-        self.buffers = {i.name: Buffer(i.name, i.type, i.chan, [e.idx for e in i.expr], parent=[], children=[], offset=MutableInt(0)) for i in intermediates}
+        self.buffers = {i.name: Buffer(name=i.name, type=i.type, chan=i.chan, idx=[e.idx for e in i.expr]) for i in intermediates}
         if input_node.name in self.buffers:
             raise SemanticError('input name conflict with buffers: %s' % self.input.name)
         else:
-            self.input = Buffer(input_node.name, input_node.type, input_node.chan, idx=[], parent=[], children=[], offset=MutableInt(0))
+            self.input = Buffer(name=input_node.name, type=input_node.type, chan=input_node.chan)
             self.buffers[self.input.name] = self.input
         if output_node.name in self.buffers:
             raise SemanticError('output name conflict with buffers: %s' % self.output.name)
         else:
-            self.output = Buffer(output_node.name, output_node.type, output_node.chan, [e.idx for e in output_node.output_expr], parent=[], children=[], offset=MutableInt(0))
+            self.output = Buffer(name=output_node.name, type=output_node.type, chan=output_node.chan, idx=[e.idx for e in output_node.output_expr])
             self.buffers[self.output.name] = self.output
 
         self.stages = {}
@@ -91,27 +96,27 @@ class Stencil(object):
             child_buffer = self.buffers[intermediate.name]
             parent_buffers = self.GetParentBuffersFor(intermediate)
             window = self.GetWindowFor(intermediate)
-            this_stage = Stage(window,
+            this_stage = Stage(window=window,
                 offset={n: SerializeIterative(w, self.tile_size) for n, w in window.items()},
                 delay={},
                 expr=self.GetExprFor(intermediate),
                 inputs=parent_buffers,
                 output=child_buffer)
             self.stages[intermediate.name] = this_stage
-            child_buffer.parent.append(this_stage)
+            child_buffer.parent = this_stage
             for b in parent_buffers.values():
                 b.children.append(this_stage)
 
         parent_buffers = self.GetParentBuffersFor(output_node)
         window = self.GetWindowFor(output_node)
-        output_stage = Stage(window,
+        output_stage = Stage(window=window,
             offset={n: SerializeIterative(w, self.tile_size) for n, w in window.items()},
             delay={},
             expr=self.GetExprFor(output_node),
             inputs=parent_buffers,
             output=self.output)
         self.stages[output_node.name] = output_stage
-        self.output.parent.append(output_stage)
+        self.output.parent = output_stage
         for b in parent_buffers.values():
             b.children.append(output_stage)
 
@@ -119,30 +124,30 @@ class Stencil(object):
         logger.info('calculate buffer offsets')
         processing_queue = deque([self.input.name])
         processed_buffers = {self.input.name}
-        logger.debug('buffer %s is at offset %d' % (self.input.name, self.input.offset.get()))
+        logger.debug('buffer %s is at offset %d' % (self.input.name, self.input.offset))
         while len(processing_queue)>0:
             b = self.buffers[processing_queue.popleft()]
             logger.debug('inspecting buffer %s\'s children' % b.name)
             for s in b.children:
-                if {x.name for x in s.inputs.values()} <= processed_buffers and s.output.name not in processed_buffers:
+                if {x.name for x in s.inputs.values()} <= processed_buffers and s.name not in processed_buffers:
                     # good, all inputs are processed, can determine offset of current buffer
-                    logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.output.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
-                    s.output.offset.set(max([s.output.offset.get()] + [x.offset.get()+s.offset[x.name][-1] for x in s.inputs.values()]))
-                    logger.debug('buffer %s is at offset %d' % (s.output.name, s.output.offset.get()))
+                    logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
+                    s.output.offset = max([s.output.offset] + [x.offset+s.offset[x.name][-1] for x in s.inputs.values()])
+                    logger.debug('buffer %s is at offset %d' % (s.name, s.output.offset))
                     for x in s.inputs.values():
-                        delay = s.output.offset.get() - (x.offset.get()+s.offset[x.name][-1])
+                        delay = s.output.offset - (x.offset+s.offset[x.name][-1])
                         if delay>0:
-                            logger.debug('buffer %s arrives at buffer %s at offset %d < %d; add %d delay' % (x.name, s.output.name, x.offset.get()+s.offset[x.name][-1], s.output.offset.get(), delay))
+                            logger.debug('buffer %s arrives at buffer %s at offset %d < %d; add %d delay' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset, delay))
                         else:
-                            logger.debug('buffer %s arrives at buffer %s at offset %d = %d; good' % (x.name, s.output.name, x.offset.get()+s.offset[x.name][-1], s.output.offset.get()))
+                            logger.debug('buffer %s arrives at buffer %s at offset %d = %d; good' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset))
                         s.delay[x.name] = max(delay, 0)
-                        logger.debug('set delay of %s <- %s to %d' % (s.output.name, x.name, s.delay[x.name]))
-                    processing_queue.append(s.output.name)
-                    processed_buffers.add(s.output.name)
+                        logger.debug('set delay of %s <- %s to %d' % (s.name, x.name, s.delay[x.name]))
+                    processing_queue.append(s.name)
+                    processed_buffers.add(s.name)
                 else:
                     for bb in s.inputs.values():
                         if bb.name not in processed_buffers:
-                            logger.debug('buffer %s requires buffer %s as an input' % (s.output.name, bb.name))
+                            logger.debug('buffer %s requires buffer %s as an input' % (s.name, bb.name))
                             logger.debug('but buffer %s isn\'t processed yet' % bb.name)
                             logger.debug('add %s to scheduling queue' % bb.name)
                             processing_queue.append(bb.name)
@@ -151,16 +156,16 @@ class Stencil(object):
         LoadPrinter = lambda node: '%s(%s)' % (node.name, ', '.join(map(str, node.idx))) if node.name in self.extra_params else '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         StorePrinter = lambda node: '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         for s in self.stages.values():
-            logger.debug('stage: %s <- [%s]' % (s.output.name, ', '.join(['%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values()])))
+            logger.debug('stage: %s <- [%s]' % (s.name, ', '.join(['%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values()])))
         for s in self.stages.values():
             for e in s.expr:
                 logger.debug('stage.expr: %s' % e.GetCode(LoadPrinter, StorePrinter))
         for s in self.stages.values():
             for n, w in s.offset.items():
-                logger.debug('stage.offset: %s <- %s@[%s]' % (s.output.name, n, ', '.join(map(str, w))))
+                logger.debug('stage.offset: %s <- %s@[%s]' % (s.name, n, ', '.join(map(str, w))))
         for s in self.stages.values():
             for n, d in s.delay.items():
-                logger.debug('stage.delay: %s <- %s delayed %d' % (s.output.name, n, d))
+                logger.debug('stage.delay: %s <- %s delayed %d' % (s.name, n, d))
 
         # parameters generated from the above parameters
         self.pixel_width_i = type_width[self.input.type]
@@ -266,10 +271,10 @@ def GetStencilDim(A):
 def GetOverallStencilWindow(input_buffer, output_buffer):
     logger.debug('get overall stencil window of %s <- %s' % (output_buffer.name, input_buffer.name))
     all_points = set()
-    if len(output_buffer.parent)>0:
-        for name, points in output_buffer.parent[0].window.items():
+    if output_buffer.parent is not None:
+        for name, points in output_buffer.parent.window.items():
             if name != input_buffer.name:
-                recursive_points = GetOverallStencilWindow(input_buffer, output_buffer.parent[0].inputs[name])
+                recursive_points = GetOverallStencilWindow(input_buffer, output_buffer.parent.inputs[name])
                 all_points |= set.union(*[{tuple(map(operator.add, p, point)) for p in recursive_points} for point in points])
             all_points |= set(points)
     logger.debug('overall stencil window of %s <- %s is %s' % (output_buffer.name, input_buffer.name, all_points))

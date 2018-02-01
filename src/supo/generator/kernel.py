@@ -26,16 +26,16 @@ def GetChains(tile_size, b, unroll_factor):
 def GetPoints(tile_size, b, unroll_factor):
     all_points = {} # {name:{offset:{unroll_index:point_index}}}
     for s in b.children:
-        all_points[s.output.name] = {}
+        all_points[s.name] = {}
         offsets = SerializeIterative(s.window[b.name], tile_size)
         max_offset = max(offsets)
         for unroll_index in range(unroll_factor):
             for idx, offset in enumerate(offsets):
-                all_points[s.output.name].setdefault(max_offset-offset+s.delay[b.name]+unroll_index, {})[unroll_factor-1-unroll_index] = idx
+                all_points[s.name].setdefault(max_offset-offset+s.delay[b.name]+unroll_index, {})[unroll_factor-1-unroll_index] = idx
     for s in b.children:
-        for offset, points in all_points[s.output.name].items():
+        for offset, points in all_points[s.name].items():
             for unroll_index, point in points.items():
-                logger.debug('%s <- %s @ offset=%d <=> (%s) @ unroll_index=%d' % (s.output.name, b.name, offset, ', '.join(map(str, s.window[b.name][point])), unroll_index))
+                logger.debug('%s <- %s @ offset=%d <=> (%s) @ unroll_index=%d' % (s.name, b.name, offset, ', '.join(map(str, s.window[b.name][point])), unroll_index))
     return all_points
 
 def GetBuffer(tile_size, b, unroll_factor):
@@ -224,11 +224,11 @@ def PrintCompute(p, stencil):
         p.PrintLine('// '+msg)
         for s in b.children:
             for c in range(b.chan):
-                p.PrintLine('%s points_from_%s_to_%s_chan_%d[UNROLL_FACTOR][%d];' % (b.type, b.name, s.output.name, c, len(s.window[b.name])))
+                p.PrintLine('%s points_from_%s_to_%s_chan_%d[UNROLL_FACTOR][%d];' % (b.type, b.name, s.name, c, len(s.window[b.name])))
             for idx, point in enumerate(s.window[b.name]):
-                p.PrintLine('//%s points_from_%s_to_%s_chan_x[UNROLL_FACTOR][%d] <=> %s[x](%s)' % (' '*(len(b.type)-2), b.name, s.output.name, idx, b.name, ', '.join(map(str, point))))
+                p.PrintLine('//%s points_from_%s_to_%s_chan_x[UNROLL_FACTOR][%d] <=> %s[x](%s)' % (' '*(len(b.type)-2), b.name, s.name, idx, b.name, ', '.join(map(str, point))))
             for c in range(b.chan):
-                p.PrintLine('#pragma HLS array_partition variable=points_from_%s_to_%s_chan_%d complete dim=0' % (b.name, s.output.name, c), 0)
+                p.PrintLine('#pragma HLS array_partition variable=points_from_%s_to_%s_chan_%d complete dim=0' % (b.name, s.name, c), 0)
         p.PrintLine()
 
     msg = 'input buffer'
@@ -364,35 +364,35 @@ def PrintCompute(p, stencil):
         b = stencil.buffers[processing_queue.popleft()]
         logger.debug('inspecting buffer %s\'s children' % b.name)
         for s in b.children:
-            if {x.name for x in s.inputs.values()} <= processed_buffers and s.output.name not in processed_buffers:
+            if {x.name for x in s.inputs.values()} <= processed_buffers and s.name not in processed_buffers:
                 # good, all inputs are processed, can emit code to produce current buffer
-                logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.output.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
+                logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
 
                 # start emitting code for stage %s
-                logger.debug('emit code for stage %s' % s.output.name)
+                logger.debug('emit code for stage %s' % s.name)
                 # connect points from previous buffer/FIFO/FF
                 for bb in s.inputs.values():
                     buf = reuse_buffers[bb.name]
-                    points = all_points[bb.name][s.output.name]
-                    logger.debug('%s <- %s points: %s' % (s.output.name, bb.name, points))
-                    logger.debug('%s <- %s buf: %s' % (s.output.name, bb.name, buf))
+                    points = all_points[bb.name][s.name]
+                    logger.debug('%s <- %s points: %s' % (s.name, bb.name, points))
+                    logger.debug('%s <- %s buf: %s' % (s.name, bb.name, buf))
                     for idx, offset in enumerate(buf['inputs']):
                         for unroll_index, point in points.get(offset, {}).items():
                             for c in range(bb.chan):
-                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = buffer_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.output.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
+                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = buffer_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
                     for idx, offset in enumerate(buf['FFs']):
                         for unroll_index, point in points.get(offset, {}).items():
                             for c in range(bb.chan):
-                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FF_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.output.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
+                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FF_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
                     for fifo_length in buf['FIFOs'].keys():
                         for idx, offset in enumerate(buf['FIFOs'][fifo_length]):
                             for unroll_index, point in points.get(offset, {}).items():
                                 for c in range(bb.chan):
-                                    p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FIFO_%d_%s_chan_%d_fifo_%d; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.output.name, c, unroll_index, point, fifo_length/unroll_factor, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
+                                    p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FIFO_%d_%s_chan_%d_fifo_%d; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, fifo_length/unroll_factor, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
 
                 p.PrintLine()
 
-                p.PrintLine('compute_%s_unrolled:' % s.output.name, 0)
+                p.PrintLine('compute_%s_unrolled:' % s.name, 0)
                 p.PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
                 p.DoScope('unroll_index')
                 p.PrintLine('#pragma HLS unroll', 0)
@@ -400,19 +400,19 @@ def PrintCompute(p, stencil):
 
                 if print_aux:
                     for i in range(len(tile_size)):
-                        p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.output.name)*2))
+                        p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
                     for i in range(len(tile_size)-1):
-                        p.PrintLine('int32_t %c_%s = %c_base_%s+%c_%s;' % ((coords_in_orig[i], s.output.name)*2 + (coords_in_tile[i], s.output.name)))
-                    p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.output.name, coords_in_tile[len(tile_size)-1], s.output.name))
+                        p.PrintLine('int32_t %c_%s = %c_base_%s+%c_%s;' % ((coords_in_orig[i], s.name)*2 + (coords_in_tile[i], s.name)))
+                    p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.name, coords_in_tile[len(tile_size)-1], s.name))
                     p.PrintLine()
 
                 for bb in s.inputs.values():
                     for c in range(bb.chan):
                         for idx, point in enumerate(s.window[bb.name]):
-                            p.PrintLine('%s& load_%s_for_%s_chan_%d_at_%s = points_from_%s_to_%s_chan_%d[unroll_index][%d];' % (bb.type, bb.name, s.output.name, c, '_'.join([str(x).replace('-', 'm') for x in point]), bb.name, s.output.name, c, idx))
+                            p.PrintLine('%s& load_%s_for_%s_chan_%d_at_%s = points_from_%s_to_%s_chan_%d[unroll_index][%d];' % (bb.type, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in point]), bb.name, s.name, c, idx))
                 p.PrintLine()
 
-                LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in extra_params else 'load_%s_for_%s_chan_%d_at_%s' % (node.name, s.output.name, node.chan, '_'.join([str(x).replace('-', 'm') for x in node.idx]))
+                LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in extra_params else 'load_%s_for_%s_chan_%d_at_%s' % (node.name, s.name, node.chan, '_'.join([str(x).replace('-', 'm') for x in node.idx]))
                 StorePrinter = lambda node: '%s result_chan_%d' % (output_type, node.chan) if node.name == output_name else 'buffer_%s_chan_%d[unroll_index]' % (node.name, node.chan)
 
                 for e in s.expr:
@@ -436,22 +436,22 @@ def PrintCompute(p, stencil):
 
                 if print_aux:
                     p.PrintLine()
-                    p.PrintLine('%c_%s += UNROLL_FACTOR;' % (coords_in_tile[0], s.output.name))
+                    p.PrintLine('%c_%s += UNROLL_FACTOR;' % (coords_in_tile[0], s.name))
                     if len(tile_size)>1:
-                        p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_0)' % (coords_in_tile[0], s.output.name))
+                        p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_0)' % (coords_in_tile[0], s.name))
                         p.DoScope()
-                        p.PrintLine('%c_%s -= TILE_SIZE_DIM_0;' % (coords_in_tile[0], s.output.name))
-                        p.PrintLine('++%c_%s;' % (coords_in_tile[1], s.output.name))
+                        p.PrintLine('%c_%s -= TILE_SIZE_DIM_0;' % (coords_in_tile[0], s.name))
+                        p.PrintLine('++%c_%s;' % (coords_in_tile[1], s.name))
                         if len(tile_size)>2:
-                            p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_1)' % (coords_in_tile[1], s.output.name))
+                            p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_1)' % (coords_in_tile[1], s.name))
                             p.DoScope()
-                            p.PrintLine('%c_%s -= TILE_SIZE_DIM_1;' % (coords_in_tile[1], s.output.name))
-                            p.PrintLine('++%c_%s;' % (coords_in_tile[2], s.output.name))
+                            p.PrintLine('%c_%s -= TILE_SIZE_DIM_1;' % (coords_in_tile[1], s.name))
+                            p.PrintLine('++%c_%s;' % (coords_in_tile[2], s.name))
                             if len(tile_size)>3:
-                                p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_2)' % (coords_in_tile[2], s.output.name))
+                                p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_2)' % (coords_in_tile[2], s.name))
                                 p.DoScope()
-                                p.PrintLine('%c_%s -= TILE_SIZE_DIM_2;' % (coords_in_tile[2], s.output.name))
-                                p.PrintLine('++%c_%s;' % (coords_in_tile[3], s.output.name))
+                                p.PrintLine('%c_%s -= TILE_SIZE_DIM_2;' % (coords_in_tile[2], s.name))
+                                p.PrintLine('++%c_%s;' % (coords_in_tile[3], s.name))
                                 p.UnScope()
                             p.UnScope()
                         p.UnScope()
@@ -460,12 +460,12 @@ def PrintCompute(p, stencil):
                 p.PrintLine()
                 # finish emitting code
 
-                processing_queue.append(s.output.name)
-                processed_buffers.add(s.output.name)
+                processing_queue.append(s.name)
+                processed_buffers.add(s.name)
             else:
                 for bb in s.inputs.values():
                     if bb.name not in processed_buffers:
-                        logger.debug('buffer %s requires buffer %s as an input' % (s.output.name, bb.name))
+                        logger.debug('buffer %s requires buffer %s as an input' % (s.name, bb.name))
                         logger.debug('but buffer %s isn\'t produced yet' % bb.name)
                         logger.debug('add %s to scheduling queue' % bb.name)
                         processing_queue.append(bb.name)
