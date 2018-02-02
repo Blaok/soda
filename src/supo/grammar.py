@@ -83,11 +83,9 @@ class SupoProgram(object):
         self.dram_separate = kwargs.pop('dram_separate')=='yes'
 
         # normalize
-        for e in self.output.output_expr:
-            e.Normalize(self.extra_params)
+        self.output.Normalize(self.extra_params)
         for intermediate in self.intermediates:
-            for e in intermediate.expr:
-                e.Normalize(self.extra_params)
+            intermediate.Normalize(self.extra_params)
 
     def __str__(self):
         return \
@@ -183,7 +181,7 @@ class Operand(object):
 
     def __str__(self):
         if self.name:
-            return '%s[%d](%s)' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]))
+            return '%s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx)))
         if self.num:
             return str(self.num)
         if self.expr:
@@ -204,7 +202,7 @@ class Operand(object):
             elif self.num is not None:
                 self.loads = []
             elif self.name is not None:
-                logger.debug('load at %s[%d](%s)' % (self.name, self.chan, ', '.join([str(x) for x in self.idx])))
+                logger.debug('load at %s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx))))
                 self.loads = [Load(self.name, self.chan, self.idx)]
             else:
                 raise SemanticError('invalid Operand %s' % str(self))
@@ -217,9 +215,9 @@ class Operand(object):
         elif self.num is not None:
             pass
         elif self.name is not None:
-            msg = '%s[%d](%s)' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]))
+            msg = '%s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx)))
             self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
-            logger.debug('load at %s normalized to %s[%d](%s)' % (msg, self.name, self.chan, ', '.join([str(x) for x in self.idx])))
+            logger.debug('load at %s normalized to %s[%d](%s)' % (msg, self.name, self.chan, ', '.join(map(str, self.idx))))
             del self.loads
 
 class Input(object):
@@ -257,7 +255,7 @@ class ExtraParam(object):
         return ('param %s: %s[%s]%s%s' % (
             self.type,
             self.name,
-            ']['.join([str(x) for x in self.size]),
+            ']['.join(map(str, self.size)),
             '' if self.dup is None else (', dup x%d' % self.dup),
             ''.join([', %s partition%s%s' % (
                 x.partition_type,
@@ -300,6 +298,12 @@ class Output(object):
             self.loads = sum([e.GetLoads() for e in self.output_expr], [])
         return self.loads
 
+    def Normalize(self, extra_params):
+        dim = range(len(next(iter(self.output_expr)).idx))
+        norm_offset = tuple(min(min(load.idx[d]-e.idx[d] for load in e.GetLoads() if load.name not in extra_params) for e in self.output_expr) for d in dim)
+        for e in self.output_expr:
+            e.Normalize(tuple(norm_offset[d]+e.idx[d] for d in dim), extra_params)
+
 class Intermediate(object):
     def __init__(self, **kwargs):
         self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
@@ -334,16 +338,22 @@ class Intermediate(object):
             self.loads = sum([e.GetLoads() for e in self.expr], [])
         return self.loads
 
+    def Normalize(self, extra_params):
+        dim = range(len(next(iter(self.expr)).idx))
+        norm_offset = tuple(min(min(load.idx[d]-e.idx[d] for load in e.GetLoads() if load.name not in extra_params) for e in self.expr) for d in dim)
+        for e in self.expr:
+            e.Normalize(tuple(norm_offset[d]+e.idx[d] for d in dim), extra_params)
+
 class OutputExpr(object):
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
         self.chan = StringToInteger(kwargs.pop('chan'), 0)
         self.idx = tuple(kwargs.pop('idx'))
         self.expr = kwargs.pop('expr')
-        logger.debug('store at %s[%d](%s)' % (self.name, self.chan, ', '.join([str(x) for x in self.idx])))
+        logger.debug('store at %s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx))))
 
     def __str__(self):
-        return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join([str(x) for x in self.idx]), self.expr))
+        return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join(map(str, self.idx)), self.expr))
 
     def GetCode(self, LoadPrinter, StorePrinter):
         return '%s = %s;' % (StorePrinter(self), self.expr.GetCode(LoadPrinter, StorePrinter))
@@ -353,11 +363,9 @@ class OutputExpr(object):
             self.loads = self.expr.GetLoads()
         return self.loads
 
-    def Normalize(self, extra_params):
-        norm_offset = tuple(min(load.idx[d] for load in self.GetLoads() if load.name not in extra_params) for d in range(len(self.idx)))
-        logger.debug('norm offset of %s: %s' % (self.name, norm_offset))
+    def Normalize(self, norm_offset, extra_params):
+        logger.debug('norm offset of %s[%d]: %s' % (self.name, self.chan, norm_offset))
         self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
-        logger.debug('normalized idx of %s: %s' % (self.name, self.idx))
         self.expr.Normalize(norm_offset, extra_params)
         del self.loads
 
