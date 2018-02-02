@@ -134,7 +134,6 @@ def PrintCompute(p, stencil):
     produce_consume_ratio_o = int((burst_width*dram_bank)/(pixel_width_o*unroll_factor))
     consume_produce_ratio_o = int((pixel_width_o*unroll_factor)/(burst_width*dram_bank))
 
-    print_aux = False
 
     logger.debug('generate compute function')
 
@@ -174,24 +173,26 @@ def PrintCompute(p, stencil):
         all_points[b.name] = GetPoints(tile_size, b, unroll_factor)
     overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
 
-    for b in stencil.GetProducerBuffers():
-        buf = reuse_buffers[b.name]
-        points_from_b = all_points[b.name]
-
-        if print_aux:
+    for b in stencil.GetConsumerBuffers():
+        if stencil.print_aux:
             msg = 'aux parameters for %s' % b.name
             logger.debug('generate '+msg)
             p.PrintLine('// '+msg)
-            stencil_distance = stencil.output.offset.get() - b.offset.get()
+            stencil_distance = b.offset
             p.PrintLine('int32_t i_base_%s[UNROLL_FACTOR] = {%s};' % (b.name, ', '.join([str(x-stencil_distance) for x in range(unroll_factor)])))
             for i in range(1, len(tile_size)):
                 p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_tile[i], b.name))
             for i in range(len(tile_size)-1):
-                p.PrintLine('int32_t %c_base_%s = 0;' % (coords_in_orig[i], b.name))
-                p.PrintLine('int32_t %c_base_%s_counter = 0;' % (coords_in_orig[i], b.name))
+                p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_orig[i], b.name))
             for i in range(len(tile_size)):
                 p.PrintLine('#pragma HLS array_partition variable=%s_base_%s complete' % (coords_in_tile[i], b.name), 0)
+            for i in range(len(tile_size)-1):
+                p.PrintLine('#pragma HLS array_partition variable=%s_base_%s complete' % (coords_in_orig[i], b.name), 0)
             p.PrintLine()
+
+    for b in stencil.GetProducerBuffers():
+        buf = reuse_buffers[b.name]
+        points_from_b = all_points[b.name]
 
         # reuse chains
         msg = 'reuse chains for %s' % b.name
@@ -398,11 +399,11 @@ def PrintCompute(p, stencil):
                 p.PrintLine('#pragma HLS unroll', 0)
                 p.PrintLine('#pragma HLS latency min=1', 0)
 
-                if print_aux:
+                if stencil.print_aux:
                     for i in range(len(tile_size)):
                         p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
                     for i in range(len(tile_size)-1):
-                        p.PrintLine('int32_t %c_%s = %c_base_%s+%c_%s;' % ((coords_in_orig[i], s.name)*2 + (coords_in_tile[i], s.name)))
+                        p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_orig[i], s.name)*2))
                     p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.name, coords_in_tile[len(tile_size)-1], s.name))
                     p.PrintLine()
 
@@ -431,28 +432,6 @@ def PrintCompute(p, stencil):
                             p.DoScope()
                             for c in range(output_chan):
                                 p.PrintLine('buffer_%s_chan_%d[unroll_index+UNROLL_FACTOR*%d] = result_chan_%d;' % (output_name, c, i, c))
-                            p.UnScope()
-                        p.UnScope()
-
-                if print_aux:
-                    p.PrintLine()
-                    p.PrintLine('%c_%s += UNROLL_FACTOR;' % (coords_in_tile[0], s.name))
-                    if len(tile_size)>1:
-                        p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_0)' % (coords_in_tile[0], s.name))
-                        p.DoScope()
-                        p.PrintLine('%c_%s -= TILE_SIZE_DIM_0;' % (coords_in_tile[0], s.name))
-                        p.PrintLine('++%c_%s;' % (coords_in_tile[1], s.name))
-                        if len(tile_size)>2:
-                            p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_1)' % (coords_in_tile[1], s.name))
-                            p.DoScope()
-                            p.PrintLine('%c_%s -= TILE_SIZE_DIM_1;' % (coords_in_tile[1], s.name))
-                            p.PrintLine('++%c_%s;' % (coords_in_tile[2], s.name))
-                            if len(tile_size)>3:
-                                p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_2)' % (coords_in_tile[2], s.name))
-                                p.DoScope()
-                                p.PrintLine('%c_%s -= TILE_SIZE_DIM_2;' % (coords_in_tile[2], s.name))
-                                p.PrintLine('++%c_%s;' % (coords_in_tile[3], s.name))
-                                p.UnScope()
                             p.UnScope()
                         p.UnScope()
 
@@ -493,6 +472,93 @@ def PrintCompute(p, stencil):
             for fifo_length in buf['FIFOs'].keys():
                 p.PrintLine('FIFO_%d_%s_ptr = FIFO_%d_%s_ptr==uint%d_t(%d-1) ? 0 : FIFO_%d_%s_ptr+1;' % (fifo_length/unroll_factor, b.name, fifo_length/unroll_factor, b.name, 2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor))) ,fifo_length/unroll_factor, fifo_length/unroll_factor, b.name))
 
+        p.UnScope()
+        p.PrintLine()
+
+    if stencil.print_aux:
+        p.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+        p.DoScope()
+        p.PrintLine('#pragma HLS unroll', 0)
+        p.PrintLine('#pragma HLS latency min=1 max=1', 0)
+
+        for b in stencil.GetConsumerBuffers():
+            s = b.parent
+            PrintIfTile = lambda d: p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_%d)' % (coords_in_tile[d], s.name, d))
+            PrintIfTileLastDim = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_tile[d], s.name, d))
+            PrintIfTensor = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_orig[d], s.name, d))
+            PrintIncrementTile = lambda d: p.PrintLine('++%c_%s;' % (coords_in_tile[d], s.name))
+            PrintDecrementTile = lambda d: p.PrintLine('%c_%s -= TILE_SIZE_DIM_%d;' % (coords_in_tile[d], s.name, d))
+            PrintIncrementOrig = lambda d: p.PrintLine('%c_%s += TILE_SIZE_DIM_%d - %s + 1;' % (coords_in_orig[d], s.name, d, overall_stencil_dim[d]))
+            PrintDecrementOrig = lambda d: p.PrintLine('%c_%s = 0;' % (coords_in_orig[d], s.name))
+            PrintDecrementTileLastDim = lambda d: p.PrintLine('%c_%s -= input_size_dim_%d;' % (coords_in_tile[d], s.name, d))
+            overall_stencil_dim = GetStencilDim(overall_stencil_window)
+
+            for i in range(len(tile_size)):
+                p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
+            for i in range(len(tile_size)-1):
+                p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_orig[i], s.name)*2))
+            p.PrintLine()
+
+            p.PrintLine('%c_%s += UNROLL_FACTOR;' % (coords_in_tile[0], s.name))
+            if len(tile_size)>1:
+                PrintIfTile(0)
+                p.DoScope()
+                PrintDecrementTile(0)
+                PrintIncrementTile(1)
+                if len(tile_size)>2:
+                    PrintIfTile(1)
+                    p.DoScope()
+                    PrintDecrementTile(1)
+                    PrintIncrementTile(2)
+                    if len(tile_size)>3:
+                        PrintIfTile(2)
+                        p.DoScope()
+                        PrintDecrementTile(2)
+                        PrintIncrementTile(3)
+
+                        PrintIfTileLastDim(3)
+                        p.DoScope()
+                        PrintDecrementTileLastDim(3)
+                        PrintIncrementOrig(0)
+                        PrintIfTensor(0)
+                        p.DoScope()
+                        PrintDecrementOrig(0)
+                        PrintIncrementOrig(1)
+                        PrintIfTensor(1)
+                        p.DoScope()
+                        PrintDecrementOrig(1)
+                        PrintIncrementOrig(2)
+                        p.UnScope()
+                        p.UnScope()
+                        p.UnScope()
+
+                        p.UnScope()
+                    else:
+                        PrintIfTileLastDim(2)
+                        p.DoScope()
+                        PrintDecrementTileLastDim(2)
+                        PrintIncrementOrig(0)
+
+                        PrintIfTensor(0)
+                        p.DoScope()
+                        PrintDecrementOrig(0)
+                        PrintIncrementOrig(1)
+                        p.UnScope()
+
+                        p.UnScope()
+                    p.UnScope()
+                else:
+                    PrintIfTileLastDim(1)
+                    p.DoScope()
+                    PrintDecrementTileLastDim(1)
+                    PrintIncrementOrig(0)
+                    p.UnScope()
+                p.UnScope()
+            else:
+                PrintIfTileLastDim(0)
+                p.DoScope()
+                PrintDecrementTileLastDim(0)
+                p.UnScope()
         p.UnScope()
         p.PrintLine()
 
@@ -540,10 +606,10 @@ def PrintCompute(p, stencil):
                 p.PrintLine('to_chan_%d_bank_%d<<tmp_chan_%d_bank_%d;' % (c, i, c, i))
         p.UnScope()
 
-    if print_aux:
+    if False: # stencil.print_aux:
         p.PrintLine()
         for b in stencil.GetProducerBuffers():
-            stencil_distance = stencil.output.offset.get() - b.offset.get()
+            stencil_distance = stencil.output.offset - b.offset
             # TODO: calculate for more than 2 dims
             p.PrintLine('p_base_%s_counter++;' % b.name)
             if len(tile_size)>1:
@@ -647,7 +713,7 @@ def PrintInterface(p, stencil):
                 dup = ('[%d]' % param.dup)
             else:
                 dup = ''
-            p.PrintLine('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join([str(x) for x in param.size])))
+            p.PrintLine('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join(map(str, param.size))))
         p.PrintLine()
 
         for param in extra_params.values():
