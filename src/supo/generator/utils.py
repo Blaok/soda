@@ -20,25 +20,37 @@ max_dram_bank = 4
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
-#Buffer = namedtuple('Buffer', ['name', 'type', 'chan', 'idx', 'parent', 'children', 'offset'])
+class InternalError(Exception):
+    pass
+
 # Buffer.name: str
 # Buffer.type: str
 # Buffer.chan: int
-# Buffer.idx: [(int, ...), ...]
+# Buffer.idx: (int, ...)
 # Buffer.parent: [Stage]
 # Buffer.children: [Stage, ...]
-# Buffer.offset: MutableInt
+# Buffer.offset: int
 class Buffer(object):
-    def __init__(self, **kwargs):
-        self.name = kwargs.pop('name')
-        self.type = kwargs.pop('type')
-        self.chan = kwargs.pop('chan')
-        self.idx = kwargs.pop('idx', [])
-        self.parent = kwargs.pop('parent', None)
-        self.children = kwargs.pop('children', [])
-        self.offset = kwargs.pop('offset', 0)
+    def __init__(self, node):
+        self.name = node.name
+        self.type = node.type
+        self.chan = node.chan
+        if isinstance(node, supo.grammar.Output):
+            self.idx = next(iter(node.output_expr)).idx
+            for e in node.output_expr:
+                if e.idx != self.idx:
+                    raise InternalError('Normalization went wrong')
+        elif isinstance(node, supo.grammar.Intermediate):
+            self.idx = next(iter(node.expr)).idx
+            for e in node.expr:
+                if e.idx != self.idx:
+                    raise InternalError('Normalization went wrong')
+        else:
+            self.idx = None
+        self.parent = None
+        self.children = []
+        self.offset = 0
 
-#Stage = namedtuple('Stage', ['window', 'offset', 'delay', 'expr', 'inputs', 'output'])
 # Stage.window: {str: [(int, ...), ...], ...}
 # Stage.offset: {str: [int, ...], ...}
 # Stage.delay: {str: int, ...}
@@ -53,10 +65,15 @@ class Stage(object):
         self.expr = kwargs.pop('expr')
         self.inputs = kwargs.pop('inputs')
         self.output = kwargs.pop('output')
+
+        # shortcuts
         self.name = self.output.name
+        self.idx =self.output.idx
 
 class Stencil(object):
     def __init__(self, **kwargs):
+        self.iterate = kwargs.pop('iterate', None)
+        self.print_aux = kwargs.pop('print_aux', None) or self.iterate
         # platform determined
         self.burst_width = kwargs.pop('burst_width')
         self.dram_bank = kwargs.pop('dram_bank')
@@ -79,16 +96,16 @@ class Stencil(object):
         input_node = kwargs.pop('input')
         output_node = kwargs.pop('output')
         intermediates = kwargs.pop('intermediates')
-        self.buffers = {i.name: Buffer(name=i.name, type=i.type, chan=i.chan, idx=[e.idx for e in i.expr]) for i in intermediates}
+        self.buffers = {i.name: Buffer(i) for i in intermediates}
         if input_node.name in self.buffers:
             raise SemanticError('input name conflict with buffers: %s' % self.input.name)
         else:
-            self.input = Buffer(name=input_node.name, type=input_node.type, chan=input_node.chan)
+            self.input = Buffer(input_node)
             self.buffers[self.input.name] = self.input
         if output_node.name in self.buffers:
             raise SemanticError('output name conflict with buffers: %s' % self.output.name)
         else:
-            self.output = Buffer(name=output_node.name, type=output_node.type, chan=output_node.chan, idx=[e.idx for e in output_node.output_expr])
+            self.output = Buffer(output_node)
             self.buffers[self.output.name] = self.output
 
         self.stages = {}
@@ -156,13 +173,13 @@ class Stencil(object):
         LoadPrinter = lambda node: '%s(%s)' % (node.name, ', '.join(map(str, node.idx))) if node.name in self.extra_params else '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         StorePrinter = lambda node: '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         for s in self.stages.values():
-            logger.debug('stage: %s <- [%s]' % (s.name, ', '.join(['%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values()])))
+            logger.debug('stage: %s@(%s) <- [%s]' % (s.name, ', '.join(map(str, s.idx)), ', '.join('%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values())))
         for s in self.stages.values():
             for e in s.expr:
                 logger.debug('stage.expr: %s' % e.GetCode(LoadPrinter, StorePrinter))
         for s in self.stages.values():
             for n, w in s.offset.items():
-                logger.debug('stage.offset: %s <- %s@[%s]' % (s.name, n, ', '.join(map(str, w))))
+                logger.debug('stage.offset: %s@%d <- %s@[%s]' % (s.name, Serialize(s.output.idx, self.tile_size), n, ', '.join(map(str, w))))
         for s in self.stages.values():
             for n, d in s.delay.items():
                 logger.debug('stage.delay: %s <- %s delayed %d' % (s.name, n, d))
@@ -176,6 +193,9 @@ class Stencil(object):
     def GetProducerBuffers(self):
         return [b for b in self.buffers.values() if len(b.children)>0]
 
+    def GetConsumerBuffers(self):
+        return [b for b in self.buffers.values() if b.parent is not None]
+
     # return [Buffer, ...]
     def GetParentBuffersFor(self, node):
         return {x: self.buffers[x] for x in {x.name for x in node.GetLoads() if x.name not in self.extra_params}}
@@ -184,7 +204,7 @@ class Stencil(object):
     def GetWindowFor(self, node):
         loads = node.GetLoads() # [Load, ...]
         load_names = {l.name for l in loads if l.name not in self.extra_params}
-        return {name: sorted({l.idx for l in loads if l.name == name}|{(0,)*self.dim}, key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
+        return {name: sorted({l.idx for l in loads if l.name == name}|{(0,)*self.dim}|({self.buffers[node.name].idx} if self.iterate else set()), key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
 
     # return [OutputExpr, ...]
     def GetExprFor(self, node):
@@ -277,6 +297,6 @@ def GetOverallStencilWindow(input_buffer, output_buffer):
                 recursive_points = GetOverallStencilWindow(input_buffer, output_buffer.parent.inputs[name])
                 all_points |= set.union(*[{tuple(map(operator.add, p, point)) for p in recursive_points} for point in points])
             all_points |= set(points)
-    logger.debug('overall stencil window of %s <- %s is %s' % (output_buffer.name, input_buffer.name, all_points))
+    logger.debug('overall stencil window of %s (%s) <- %s is %s' % (output_buffer.name, ', '.join(map(str, output_buffer.idx)), input_buffer.name, all_points))
     return all_points
 
