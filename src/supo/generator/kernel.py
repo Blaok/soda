@@ -2,6 +2,7 @@
 from collections import deque
 from fractions import Fraction
 from functools import reduce
+import itertools
 import json
 import logging
 import math
@@ -9,7 +10,7 @@ import operator
 import os
 import sys
 
-from supo.generator.utils import coords_in_tile, coords_in_orig, type_width, IsFloat, Stencil, Printer, PrintDefine, PrintGuard, SerializeIterative, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
+from supo.generator.utils import *
 from supo.grammar import ExtraParam
 
 logger = logging.getLogger('__main__').getChild(__name__)
@@ -154,9 +155,11 @@ def PrintCompute(p, stencil):
             p.PrintLine('%s param_%s%s[UNROLL_FACTOR][%s],' % (param.type, param.name, dup_str, ']['.join(map(str, param.size))))
     p.PrintLine('int64_t coalesced_data_num,')
     p.PrintLine('int64_t tile_data_num,')
-    for i in range(len(tile_size)-1):
-        p.PrintLine('int32_t tile_num_dim_%d,' % i)
-    p.PrintLine('int32_t input_size_dim_%d)' % (len(tile_size)-1))
+    for d in range(stencil.dim-1):
+        p.PrintLine('int32_t tile_num_dim_%d,' % d)
+    for d in range(stencil.dim-1):
+        p.PrintLine('int32_t input_size_dim_%d,' % d)
+    p.PrintLine('int32_t input_size_dim_%d)' % (stencil.dim-1))
     p.UnIndent()
     p.DoScope()
 
@@ -173,12 +176,14 @@ def PrintCompute(p, stencil):
         all_points[b.name] = GetPoints(tile_size, b, unroll_factor)
     overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
 
-    for b in stencil.GetConsumerBuffers():
-        if stencil.print_aux:
+    if stencil.print_aux:
+        for b in stencil.GetConsumerBuffers():
             msg = 'aux parameters for %s' % b.name
             logger.debug('generate '+msg)
             p.PrintLine('// '+msg)
-            stencil_distance = b.offset
+            stencil_window = GetOverallStencilWindow(stencil.input, b)
+            overall_idx = GetStencilWindowOffset(stencil_window)
+            stencil_distance = b.offset-Serialize(overall_idx, stencil.tile_size)
             p.PrintLine('int32_t i_base_%s[UNROLL_FACTOR] = {%s};' % (b.name, ', '.join([str(x-stencil_distance) for x in range(unroll_factor)])))
             for i in range(1, len(tile_size)):
                 p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_tile[i], b.name))
@@ -369,7 +374,7 @@ def PrintCompute(p, stencil):
                 # good, all inputs are processed, can emit code to produce current buffer
                 logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
 
-                # start emitting code for stage %s
+                # start emitting code for stage s
                 logger.debug('emit code for stage %s' % s.name)
                 # connect points from previous buffer/FIFO/FF
                 for bb in s.inputs.values():
@@ -403,7 +408,7 @@ def PrintCompute(p, stencil):
                     for i in range(len(tile_size)):
                         p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
                     for i in range(len(tile_size)-1):
-                        p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_orig[i], s.name)*2))
+                        p.PrintLine('int32_t %c_%s = %c_base_%s[unroll_index]+%c_%s;' % ((coords_in_orig[i], s.name)*2+(coords_in_tile[i], s.name)))
                     p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.name, coords_in_tile[len(tile_size)-1], s.name))
                     p.PrintLine()
 
@@ -419,6 +424,41 @@ def PrintCompute(p, stencil):
                 for e in s.expr:
                     p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
 
+                if stencil.iterate:
+                    p.PrintLine()
+                    bb = next(iter(s.inputs.values()))
+                    stencil_window = GetOverallStencilWindow(bb, s.output)
+                    stencil_dim = GetStencilDim(stencil_window)
+                    output_idx = GetStencilWindowOffset(stencil_window)
+                    IndexTile = lambda d: '%c_%s' % (coords_in_tile[d], s.name)
+                    IndexOrig = lambda d: '%c_%s' % (coords_in_orig[d], s.name)
+                    MarginCondition = lambda d: ('(0<=%s && %s<%d) || ' % (IndexOrig(d), IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
+                    p.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join(MarginCondition(d) for d in range(stencil.dim))))
+                    p.DoScope()
+                    p.PrintLine('// forward input to output directly and preserve tensor border')
+                    for c in range(s.output.chan):
+                        if s.name == output_name:
+                            dst = 'result_chan_%d' % c
+                        else:
+                            dst = 'buffer_%s_chan_%d[unroll_index]' % (s.name, c)
+                        p.PrintLine('%s = load_%s_for_%s_chan_%d_at_%s;' % (dst, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in s.idx])))
+                    p.UnScope()
+                    for d in range(stencil.dim-1):
+                        if stencil_dim[d] < 2:
+                            continue
+                        p.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
+                        p.DoScope()
+                        p.PrintLine('switch(%s)' % IndexTile(d))
+                        p.DoScope()
+                        for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
+                            p.PrintLine('case %d:' % i)
+                            p.DoScope()
+                            p.PrintLine('// duplicate output to border buffer')
+                            p.PrintLine('break;')
+                            p.UnScope()
+                        p.UnScope()
+                        p.UnScope()
+
                 if len(s.output.children)==0:
                     p.PrintLine()
                     if produce_consume_ratio_o <= 1:
@@ -432,6 +472,7 @@ def PrintCompute(p, stencil):
                             p.DoScope()
                             for c in range(output_chan):
                                 p.PrintLine('buffer_%s_chan_%d[unroll_index+UNROLL_FACTOR*%d] = result_chan_%d;' % (output_name, c, i, c))
+                            p.PrintLine('break;')
                             p.UnScope()
                         p.UnScope()
 
@@ -483,6 +524,7 @@ def PrintCompute(p, stencil):
 
         for b in stencil.GetConsumerBuffers():
             s = b.parent
+            overall_stencil_dim = GetStencilDim(overall_stencil_window)
             PrintIfTile = lambda d: p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_%d)' % (coords_in_tile[d], s.name, d))
             PrintIfTileLastDim = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_tile[d], s.name, d))
             PrintIfTensor = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_orig[d], s.name, d))
@@ -491,7 +533,6 @@ def PrintCompute(p, stencil):
             PrintIncrementOrig = lambda d: p.PrintLine('%c_%s += TILE_SIZE_DIM_%d - %s + 1;' % (coords_in_orig[d], s.name, d, overall_stencil_dim[d]))
             PrintDecrementOrig = lambda d: p.PrintLine('%c_%s = 0;' % (coords_in_orig[d], s.name))
             PrintDecrementTileLastDim = lambda d: p.PrintLine('%c_%s -= input_size_dim_%d;' % (coords_in_tile[d], s.name, d))
-            overall_stencil_dim = GetStencilDim(overall_stencil_window)
 
             for i in range(len(tile_size)):
                 p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
@@ -606,26 +647,6 @@ def PrintCompute(p, stencil):
                 p.PrintLine('to_chan_%d_bank_%d<<tmp_chan_%d_bank_%d;' % (c, i, c, i))
         p.UnScope()
 
-    if False: # stencil.print_aux:
-        p.PrintLine()
-        for b in stencil.GetProducerBuffers():
-            stencil_distance = stencil.output.offset - b.offset
-            # TODO: calculate for more than 2 dims
-            p.PrintLine('p_base_%s_counter++;' % b.name)
-            if len(tile_size)>1:
-                p.PrintLine('if(p_base_%s_counter == tile_data_num)' % b.name)
-                p.DoScope()
-                p.PrintLine('p_base_%s_counter = 0;' % b.name)
-                p.PrintLine('reset_bases_%s:' % b.name, 0)
-                p.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-                p.DoScope()
-                p.PrintLine('#pragma HLS unroll', 0)
-                p.PrintLine('i_base_%s[unroll_index] = unroll_index-%d; // STENCIL_DISTANCE' % (b.name, stencil_distance))
-                p.PrintLine('j_base_%s[unroll_index] = 0;' % b.name)
-                p.UnScope()
-                p.PrintLine('p_base_%s += TILE_SIZE_DIM_0-%d+1; // TILE_SIZE_DIM_0-STENCIL_DIM_0+1' % (b.name, GetStencilDim(overall_stencil_window)[0]))
-                p.UnScope()
-
     p.UnScope()
     p.UnScope()
 
@@ -655,9 +676,11 @@ def PrintInterface(p, stencil):
             p.PrintLine('%s* var_%s,' % (param.type, param.name))
     p.PrintLine('int64_t coalesced_data_num,')
     p.PrintLine('int64_t tile_data_num,')
-    for i in range(len(tile_size)-1):
+    for i in range(stencil.dim-1):
         p.PrintLine('int32_t tile_num_dim_%d,' % i)
-    p.PrintLine('int32_t input_size_dim_%d)' % (len(tile_size)-1))
+    for d in range(stencil.dim-1):
+        p.PrintLine('int32_t input_size_dim_%d,' % d)
+    p.PrintLine('int32_t input_size_dim_%d)' % (stencil.dim-1))
     p.UnIndent()
     p.DoScope()
 
@@ -687,9 +710,10 @@ def PrintInterface(p, stencil):
             p.PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param.name, 0)
     p.PrintLine('#pragma HLS interface s_axilite port=coalesced_data_num bundle=control', 0)
     p.PrintLine('#pragma HLS interface s_axilite port=tile_data_num bundle=control', 0)
-    for i in range(len(tile_size)-1):
-        p.PrintLine('#pragma HLS interface s_axilite port=tile_num_dim_%d bundle=control' % i, 0)
-    p.PrintLine('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % (len(tile_size)-1), 0)
+    for d in range(stencil.dim-1):
+        p.PrintLine('#pragma HLS interface s_axilite port=tile_num_dim_%d bundle=control' % d, 0)
+    for d in range(stencil.dim):
+        p.PrintLine('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % d, 0)
     p.PrintLine('#pragma HLS interface s_axilite port=return bundle=control', 0)
     p.PrintLine()
 
@@ -768,10 +792,11 @@ def PrintInterface(p, stencil):
     for c in range(input_chan):
         for i in range(dram_bank):
             p.PrintLine('load(input_stream_%d_%d, var_input_%d_%d, coalesced_data_num);' % ((c, i)*2))
-    output_stream = ', '.join([', '.join(['output_stream_%d_%d' % (c, x) for x in range(dram_bank)]) for c in range(output_chan)])
-    input_stream = ', '.join([', '.join(['input_stream_%d_%d' % (c, x) for x in range(dram_bank)]) for c in range(input_chan)])
-    tile_num_dim = ', '.join(['tile_num_dim_%d' % x for x in range(len(tile_size)-1)])
-    p.PrintLine('compute(%s, %s, %scoalesced_data_num, tile_data_num, %s, input_size_dim_%d);' % (output_stream, input_stream, extra_params_str, tile_num_dim, len(tile_size)-1))
+    output_stream = ', '.join(', '.join('output_stream_%d_%d' % (c, x) for x in range(dram_bank)) for c in range(output_chan))
+    input_stream = ', '.join(', '.join('input_stream_%d_%d' % (c, x) for x in range(dram_bank)) for c in range(input_chan))
+    tile_num_dim = ', '.join('tile_num_dim_%d' % d for d in range(stencil.dim-1))
+    input_size_dim = ', '.join('input_size_dim_%d' % d for d in range(stencil.dim))
+    p.PrintLine('compute(%s, %s, %scoalesced_data_num, tile_data_num, %s, %s);' % (output_stream, input_stream, extra_params_str, tile_num_dim, input_size_dim))
     for c in range(output_chan):
         for i in range(dram_bank):
             p.PrintLine('store(var_output_%d_%d, output_stream_%d_%d, coalesced_data_num);' % ((c, i)*2))

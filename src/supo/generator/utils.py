@@ -289,14 +289,18 @@ def GetStencilDim(A):
     return [max_index-min_index+1 for max_index, min_index in zip([max([point[dim] for point in A]) for dim in range(len(next(iter(A))))], [min([point[dim] for point in A]) for dim in range(len(next(iter(A))))])]
 
 def GetOverallStencilWindow(input_buffer, output_buffer):
+    # normalize store index to 0
     logger.debug('get overall stencil window of %s <- %s' % (output_buffer.name, input_buffer.name))
     all_points = set()
     if output_buffer.parent is not None:
         for name, points in output_buffer.parent.window.items():
             if name != input_buffer.name:
                 recursive_points = GetOverallStencilWindow(input_buffer, output_buffer.parent.inputs[name])
-                all_points |= set.union(*[{tuple(map(operator.add, p, point)) for p in recursive_points} for point in points])
-            all_points |= set(points)
-    logger.debug('overall stencil window of %s (%s) <- %s is %s' % (output_buffer.name, ', '.join(map(str, output_buffer.idx)), input_buffer.name, all_points))
+                all_points |= set.union(*[{tuple(map(lambda a, b, c: a + b - c, p, point, output_buffer.idx)) for p in recursive_points} for point in points])
+            all_points |= set(tuple(map(operator.sub, point, output_buffer.idx)) for point in points)
+    logger.debug('overall stencil window of %s (%s) <- %s is %s' % (output_buffer.name, ', '.join(['0']*len(output_buffer.idx)), input_buffer.name, all_points))
     return all_points
 
+def GetStencilWindowOffset(stencil_window):
+    # only works if window is normalized to store at 0
+    return tuple(-min(p[d] for p in stencil_window) for d in range(len(next(iter(stencil_window)))))
