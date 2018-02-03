@@ -18,7 +18,7 @@ coords_in_orig = 'pqrs'
 type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
 max_dram_bank = 4
 
-logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger('__main__').getChild(__name__)
 
 class InternalError(Exception):
     pass
@@ -138,51 +138,51 @@ class Stencil(object):
             b.children.append(output_stage)
 
         # now that we have global knowledge of the buffers we can calculate the offsets of buffers
-        logger.info('calculate buffer offsets')
+        _logger.info('calculate buffer offsets')
         processing_queue = deque([self.input.name])
         processed_buffers = {self.input.name}
-        logger.debug('buffer %s is at offset %d' % (self.input.name, self.input.offset))
+        _logger.debug('buffer %s is at offset %d' % (self.input.name, self.input.offset))
         while len(processing_queue)>0:
             b = self.buffers[processing_queue.popleft()]
-            logger.debug('inspecting buffer %s\'s children' % b.name)
+            _logger.debug('inspecting buffer %s\'s children' % b.name)
             for s in b.children:
                 if {x.name for x in s.inputs.values()} <= processed_buffers and s.name not in processed_buffers:
                     # good, all inputs are processed, can determine offset of current buffer
-                    logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
+                    _logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
                     s.output.offset = max([s.output.offset] + [x.offset+s.offset[x.name][-1] for x in s.inputs.values()])
-                    logger.debug('buffer %s is at offset %d' % (s.name, s.output.offset))
+                    _logger.debug('buffer %s is at offset %d' % (s.name, s.output.offset))
                     for x in s.inputs.values():
                         delay = s.output.offset - (x.offset+s.offset[x.name][-1])
                         if delay>0:
-                            logger.debug('buffer %s arrives at buffer %s at offset %d < %d; add %d delay' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset, delay))
+                            _logger.debug('buffer %s arrives at buffer %s at offset %d < %d; add %d delay' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset, delay))
                         else:
-                            logger.debug('buffer %s arrives at buffer %s at offset %d = %d; good' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset))
+                            _logger.debug('buffer %s arrives at buffer %s at offset %d = %d; good' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset))
                         s.delay[x.name] = max(delay, 0)
-                        logger.debug('set delay of %s <- %s to %d' % (s.name, x.name, s.delay[x.name]))
+                        _logger.debug('set delay of %s <- %s to %d' % (s.name, x.name, s.delay[x.name]))
                     processing_queue.append(s.name)
                     processed_buffers.add(s.name)
                 else:
                     for bb in s.inputs.values():
                         if bb.name not in processed_buffers:
-                            logger.debug('buffer %s requires buffer %s as an input' % (s.name, bb.name))
-                            logger.debug('but buffer %s isn\'t processed yet' % bb.name)
-                            logger.debug('add %s to scheduling queue' % bb.name)
+                            _logger.debug('buffer %s requires buffer %s as an input' % (s.name, bb.name))
+                            _logger.debug('but buffer %s isn\'t processed yet' % bb.name)
+                            _logger.debug('add %s to scheduling queue' % bb.name)
                             processing_queue.append(bb.name)
 
-        logger.debug('buffers: '+str(list(self.buffers.keys())))
+        _logger.debug('buffers: '+str(list(self.buffers.keys())))
         LoadPrinter = lambda node: '%s(%s)' % (node.name, ', '.join(map(str, node.idx))) if node.name in self.extra_params else '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         StorePrinter = lambda node: '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         for s in self.stages.values():
-            logger.debug('stage: %s@(%s) <- [%s]' % (s.name, ', '.join(map(str, s.idx)), ', '.join('%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values())))
+            _logger.debug('stage: %s@(%s) <- [%s]' % (s.name, ', '.join(map(str, s.idx)), ', '.join('%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values())))
         for s in self.stages.values():
             for e in s.expr:
-                logger.debug('stage.expr: %s' % e.GetCode(LoadPrinter, StorePrinter))
+                _logger.debug('stage.expr: %s' % e.GetCode(LoadPrinter, StorePrinter))
         for s in self.stages.values():
             for n, w in s.offset.items():
-                logger.debug('stage.offset: %s@%d <- %s@[%s]' % (s.name, Serialize(s.output.idx, self.tile_size), n, ', '.join(map(str, w))))
+                _logger.debug('stage.offset: %s@%d <- %s@[%s]' % (s.name, Serialize(s.output.idx, self.tile_size), n, ', '.join(map(str, w))))
         for s in self.stages.values():
             for n, d in s.delay.items():
-                logger.debug('stage.delay: %s <- %s delayed %d' % (s.name, n, d))
+                _logger.debug('stage.delay: %s <- %s delayed %d' % (s.name, n, d))
 
         # parameters generated from the above parameters
         self.pixel_width_i = type_width[self.input.type]
@@ -204,7 +204,7 @@ class Stencil(object):
     def GetWindowFor(self, node):
         loads = node.GetLoads() # [Load, ...]
         load_names = {l.name for l in loads if l.name not in self.extra_params}
-        return {name: sorted({l.idx for l in loads if l.name == name}|{(0,)*self.dim}|({self.buffers[node.name].idx} if self.iterate else set()), key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
+        return {name: sorted({l.idx for l in loads if l.name == name}|({self.buffers[node.name].idx} if self.iterate else set()), key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
 
     # return [OutputExpr, ...]
     def GetExprFor(self, node):
@@ -283,14 +283,17 @@ def SerializeIterative(iterative, tile_size):
     return [Serialize(x, tile_size) for x in iterative]
 
 def GetStencilDistance(stencil_window, tile_size):
-    return (lambda x:max(x)-min(x))(SerializeIterative(stencil_window, tile_size))
+    return max(SerializeIterative(stencil_window, tile_size))+Serialize(GetStencilWindowOffset(stencil_window), tile_size)
 
 def GetStencilDim(A):
     return [max_index-min_index+1 for max_index, min_index in zip([max([point[dim] for point in A]) for dim in range(len(next(iter(A))))], [min([point[dim] for point in A]) for dim in range(len(next(iter(A))))])]
 
+_overall_stencil_window_cache = {}
 def GetOverallStencilWindow(input_buffer, output_buffer):
     # normalize store index to 0
-    logger.debug('get overall stencil window of %s <- %s' % (output_buffer.name, input_buffer.name))
+    if (id(input_buffer), id(output_buffer)) in _overall_stencil_window_cache:
+        return _overall_stencil_window_cache[(id(input_buffer), id(output_buffer))]
+    _logger.debug('get overall stencil window of %s <- %s' % (output_buffer.name, input_buffer.name))
     all_points = set()
     if output_buffer.parent is not None:
         for name, points in output_buffer.parent.window.items():
@@ -298,7 +301,8 @@ def GetOverallStencilWindow(input_buffer, output_buffer):
                 recursive_points = GetOverallStencilWindow(input_buffer, output_buffer.parent.inputs[name])
                 all_points |= set.union(*[{tuple(map(lambda a, b, c: a + b - c, p, point, output_buffer.idx)) for p in recursive_points} for point in points])
             all_points |= set(tuple(map(operator.sub, point, output_buffer.idx)) for point in points)
-    logger.debug('overall stencil window of %s (%s) <- %s is %s' % (output_buffer.name, ', '.join(['0']*len(output_buffer.idx)), input_buffer.name, all_points))
+    _logger.debug('overall stencil window of %s (%s) <- %s is %s' % (output_buffer.name, ', '.join(['0']*len(output_buffer.idx)), input_buffer.name, all_points))
+    _overall_stencil_window_cache[(id(input_buffer), id(output_buffer))] = all_points
     return all_points
 
 def GetStencilWindowOffset(stencil_window):

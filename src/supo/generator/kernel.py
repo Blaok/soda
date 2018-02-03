@@ -183,8 +183,8 @@ def PrintCompute(p, stencil):
             p.PrintLine('// '+msg)
             stencil_window = GetOverallStencilWindow(stencil.input, b)
             overall_idx = GetStencilWindowOffset(stencil_window)
-            stencil_distance = b.offset-Serialize(overall_idx, stencil.tile_size)
-            p.PrintLine('int32_t i_base_%s[UNROLL_FACTOR] = {%s};' % (b.name, ', '.join([str(x-stencil_distance) for x in range(unroll_factor)])))
+            delay =  (GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size))
+            p.PrintLine('int32_t i_base_%s[UNROLL_FACTOR] = {%s};' % (b.name, ', '.join([str(x-delay) for x in range(unroll_factor)])))
             for i in range(1, len(tile_size)):
                 p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_tile[i], b.name))
             for i in range(len(tile_size)-1):
@@ -833,7 +833,7 @@ def PrintStore(p):
     p.UnScope()
 
 def PrintCode(s, output_file):
-    logger.info('Generate kernel code as %s' % output_file.name)
+    logger.info('generate kernel code as %s' % output_file.name)
     p = Printer(output_file)
 
     PrintHeader(p)
