@@ -248,7 +248,7 @@ class Stencil(object):
             if hasattr(node, 'preserve_border'):
                 # preserve border from node.preserve_border to node.name
                 windows = self.stages[node.name].window
-                windows.setdefault(node.preserve_border, list(windows.get(node.preserve_border, set())|{next(iter(node.expr)).idx}))
+                windows.setdefault(node.preserve_border, list(set(windows.get(node.preserve_border, set()))|{next(iter(node.expr)).idx}))
                 stencil_window = GetOverallStencilWindow(self.buffers[node.preserve_border], self.buffers[node.name])
                 self.stages[node.name].delay.setdefault(node.preserve_border, GetStencilDistance(stencil_window, self.tile_size)-Serialize(GetStencilWindowOffset(stencil_window), self.tile_size))
                 _logger.debug('window for %s is %s' % (node.name, windows))
