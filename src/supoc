@@ -49,6 +49,16 @@ def main():
                         metavar='(yes|no)',
                         dest='dram_separate',
                         help='override DRAM separation')
+    parser.add_argument('--iterate',
+                        type=int,
+                        metavar='#ITERATION',
+                        dest='iterate',
+                        help='override iterate directive; repeat execution multiple times iteratively')
+    parser.add_argument('--border',
+                        type=str,
+                        metavar='(ignore|preserve)',
+                        dest='border',
+                        help='override border handling strategy')
     parser.add_argument(type=str,
                         dest='supo_src',
                         metavar='file',
@@ -109,6 +119,8 @@ def main():
         stencil = supo.generator.utils.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
             dram_bank = args.dram_bank if args.dram_bank is not None else supo_model.dram_bank,
+            border = args.border if args.border is not None else supo_model.border,
+            iterate = args.iterate if args.iterate is not None else supo_model.iterate,
             app_name = supo_model.app_name,
             input = supo_model.input,
             output = supo_model.output,

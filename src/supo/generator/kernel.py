@@ -176,14 +176,14 @@ def PrintCompute(p, stencil):
         all_points[b.name] = GetPoints(tile_size, b, unroll_factor)
     overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
 
-    if stencil.print_aux:
-        for b in stencil.GetConsumerBuffers():
+    for b in stencil.GetConsumerBuffers():
+        if b.parent.PreserveBorderFrom():
             msg = 'aux parameters for %s' % b.name
             logger.debug('generate '+msg)
             p.PrintLine('// '+msg)
             stencil_window = GetOverallStencilWindow(stencil.input, b)
             overall_idx = GetStencilWindowOffset(stencil_window)
-            delay =  (GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size))
+            delay = GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size)
             p.PrintLine('int32_t i_base_%s[UNROLL_FACTOR] = {%s};' % (b.name, ', '.join([str(x-delay) for x in range(unroll_factor)])))
             for i in range(1, len(tile_size)):
                 p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_tile[i], b.name))
@@ -364,131 +364,112 @@ def PrintCompute(p, stencil):
 
     # computational kernel must be scheduled in order
     logger.info('generate computational kernel')
-    processing_queue = deque([stencil.input.name])
-    processed_buffers = {stencil.input.name}
-    while len(processing_queue)>0:
-        b = stencil.buffers[processing_queue.popleft()]
-        logger.debug('inspecting buffer %s\'s children' % b.name)
-        for s in b.children:
-            if {x.name for x in s.inputs.values()} <= processed_buffers and s.name not in processed_buffers:
-                # good, all inputs are processed, can emit code to produce current buffer
-                logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
-
-                # start emitting code for stage s
-                logger.debug('emit code for stage %s' % s.name)
-                # connect points from previous buffer/FIFO/FF
-                for bb in s.inputs.values():
-                    buf = reuse_buffers[bb.name]
-                    points = all_points[bb.name][s.name]
-                    logger.debug('%s <- %s points: %s' % (s.name, bb.name, points))
-                    logger.debug('%s <- %s buf: %s' % (s.name, bb.name, buf))
-                    for idx, offset in enumerate(buf['inputs']):
-                        for unroll_index, point in points.get(offset, {}).items():
-                            for c in range(bb.chan):
-                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = buffer_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
-                    for idx, offset in enumerate(buf['FFs']):
-                        for unroll_index, point in points.get(offset, {}).items():
-                            for c in range(bb.chan):
-                                p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FF_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
-                    for fifo_length in buf['FIFOs'].keys():
-                        for idx, offset in enumerate(buf['FIFOs'][fifo_length]):
-                            for unroll_index, point in points.get(offset, {}).items():
-                                for c in range(bb.chan):
-                                    p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FIFO_%d_%s_chan_%d_fifo_%d; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, fifo_length/unroll_factor, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
-
-                p.PrintLine()
-
-                p.PrintLine('compute_%s_unrolled:' % s.name, 0)
-                p.PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-                p.DoScope('unroll_index')
-                p.PrintLine('#pragma HLS unroll', 0)
-                p.PrintLine('#pragma HLS latency min=1', 0)
-
-                if stencil.print_aux:
-                    for i in range(len(tile_size)):
-                        p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
-                    for i in range(len(tile_size)-1):
-                        p.PrintLine('int32_t %c_%s = %c_base_%s[unroll_index]+%c_%s;' % ((coords_in_orig[i], s.name)*2+(coords_in_tile[i], s.name)))
-                    p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.name, coords_in_tile[len(tile_size)-1], s.name))
-                    p.PrintLine()
-
-                for bb in s.inputs.values():
+    for s in stencil.GetStagesChronologically():
+        # start emitting code for stage s
+        logger.debug('emit code for stage %s' % s.name)
+        # connect points from previous buffer/FIFO/FF
+        for bb in s.inputs.values():
+            buf = reuse_buffers[bb.name]
+            points = all_points[bb.name][s.name]
+            logger.debug('%s <- %s points: %s' % (s.name, bb.name, points))
+            logger.debug('%s <- %s buf: %s' % (s.name, bb.name, buf))
+            for idx, offset in enumerate(buf['inputs']):
+                for unroll_index, point in points.get(offset, {}).items():
                     for c in range(bb.chan):
-                        for idx, point in enumerate(s.window[bb.name]):
-                            p.PrintLine('%s& load_%s_for_%s_chan_%d_at_%s = points_from_%s_to_%s_chan_%d[unroll_index][%d];' % (bb.type, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in point]), bb.name, s.name, c, idx))
-                p.PrintLine()
+                        p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = buffer_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
+            for idx, offset in enumerate(buf['FFs']):
+                for unroll_index, point in points.get(offset, {}).items():
+                    for c in range(bb.chan):
+                        p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FF_%s_chan_%d[%d]; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
+            for fifo_length in buf['FIFOs'].keys():
+                for idx, offset in enumerate(buf['FIFOs'][fifo_length]):
+                    for unroll_index, point in points.get(offset, {}).items():
+                        for c in range(bb.chan):
+                            p.PrintLine("points_from_%s_to_%s_chan_%d[%d][%d] = FIFO_%d_%s_chan_%d_fifo_%d; // %s[%d](%s) @ unroll_index=%d" % (bb.name, s.name, c, unroll_index, point, fifo_length/unroll_factor, bb.name, c, idx, bb.name, c, ', '.join([str(x) for x in s.window[bb.name][point]]), unroll_index))
 
-                LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in extra_params else 'load_%s_for_%s_chan_%d_at_%s' % (node.name, s.name, node.chan, '_'.join([str(x).replace('-', 'm') for x in node.idx]))
-                StorePrinter = lambda node: '%s result_chan_%d' % (output_type, node.chan) if node.name == output_name else 'buffer_%s_chan_%d[unroll_index]' % (node.name, node.chan)
+        p.PrintLine()
 
-                for e in s.expr:
-                    p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+        p.PrintLine('compute_%s_unrolled:' % s.name, 0)
+        p.PrintLine('for(int32_t unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+        p.DoScope('unroll_index')
+        p.PrintLine('#pragma HLS unroll', 0)
+        p.PrintLine('#pragma HLS latency min=1', 0)
 
-                if stencil.iterate:
-                    p.PrintLine()
-                    bb = next(iter(s.inputs.values()))
-                    stencil_window = GetOverallStencilWindow(bb, s.output)
-                    stencil_dim = GetStencilDim(stencil_window)
-                    output_idx = GetStencilWindowOffset(stencil_window)
-                    IndexTile = lambda d: '%c_%s' % (coords_in_tile[d], s.name)
-                    IndexOrig = lambda d: '%c_%s' % (coords_in_orig[d], s.name)
-                    MarginCondition = lambda d: ('(0<=%s && %s<%d) || ' % (IndexOrig(d), IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
-                    p.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join(MarginCondition(d) for d in range(stencil.dim))))
+        if s.PreserveBorderFrom():
+            for i in range(len(tile_size)):
+                p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
+            for i in range(len(tile_size)-1):
+                p.PrintLine('int32_t %c_%s = %c_base_%s[unroll_index]+%c_%s;' % ((coords_in_orig[i], s.name)*2+(coords_in_tile[i], s.name)))
+            p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.name, coords_in_tile[len(tile_size)-1], s.name))
+            p.PrintLine()
+
+        for bb in s.inputs.values():
+            for c in range(bb.chan):
+                for idx, point in enumerate(s.window[bb.name]):
+                    p.PrintLine('%s& load_%s_for_%s_chan_%d_at_%s = points_from_%s_to_%s_chan_%d[unroll_index][%d];' % (bb.type, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in point]), bb.name, s.name, c, idx))
+        p.PrintLine()
+
+        LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in extra_params else 'load_%s_for_%s_chan_%d_at_%s' % (node.name, s.name, node.chan, '_'.join([str(x).replace('-', 'm') for x in node.idx]))
+        StorePrinter = lambda node: '%s result_chan_%d' % (output_type, node.chan) if node.name == output_name else 'buffer_%s_chan_%d[unroll_index]' % (node.name, node.chan)
+
+        for e in s.expr:
+            p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+
+        if s.PreserveBorderFrom():
+            p.PrintLine()
+            bb = s.PreserveBorderFrom()
+            stencil_window = GetOverallStencilWindow(bb, s.output)
+            stencil_dim = GetStencilDim(stencil_window)
+            output_idx = GetStencilWindowOffset(stencil_window)
+            IndexTile = lambda d: '%c_%s' % (coords_in_tile[d], s.name)
+            IndexOrig = lambda d: '%c_%s' % (coords_in_orig[d], s.name)
+            MarginCondition = lambda d: ('(0<=%s && %s<%d) || ' % (IndexOrig(d), IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
+            p.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join(MarginCondition(d) for d in range(stencil.dim))))
+            p.DoScope()
+            p.PrintLine('// forward input to output directly and preserve tensor border')
+            for c in range(s.output.chan):
+                if s.name == output_name:
+                    dst = 'result_chan_%d' % c
+                else:
+                    dst = 'buffer_%s_chan_%d[unroll_index]' % (s.name, c)
+                p.PrintLine('%s = load_%s_for_%s_chan_%d_at_%s;' % (dst, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in s.idx])))
+            p.UnScope()
+            for d in range(stencil.dim-1):
+                if stencil_dim[d] < 2:
+                    continue
+                p.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
+                p.DoScope()
+                p.PrintLine('switch(%s)' % IndexTile(d))
+                p.DoScope()
+                for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
+                    p.PrintLine('case %d:' % i)
                     p.DoScope()
-                    p.PrintLine('// forward input to output directly and preserve tensor border')
-                    for c in range(s.output.chan):
-                        if s.name == output_name:
-                            dst = 'result_chan_%d' % c
-                        else:
-                            dst = 'buffer_%s_chan_%d[unroll_index]' % (s.name, c)
-                        p.PrintLine('%s = load_%s_for_%s_chan_%d_at_%s;' % (dst, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in s.idx])))
+                    p.PrintLine('// duplicate output to border buffer')
+                    p.PrintLine('break;')
                     p.UnScope()
-                    for d in range(stencil.dim-1):
-                        if stencil_dim[d] < 2:
-                            continue
-                        p.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
-                        p.DoScope()
-                        p.PrintLine('switch(%s)' % IndexTile(d))
-                        p.DoScope()
-                        for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
-                            p.PrintLine('case %d:' % i)
-                            p.DoScope()
-                            p.PrintLine('// duplicate output to border buffer')
-                            p.PrintLine('break;')
-                            p.UnScope()
-                        p.UnScope()
-                        p.UnScope()
-
-                if len(s.output.children)==0:
-                    p.PrintLine()
-                    if produce_consume_ratio_o <= 1:
-                        for c in range(output_chan):
-                            p.PrintLine('buffer_%s_chan_%d[unroll_index] = result_chan_%d;' % (output_name, c, c))
-                    else:
-                        p.PrintLine('switch(epoch&%d)' % (produce_consume_ratio_o-1))
-                        p.DoScope()
-                        for i in range(produce_consume_ratio_o):
-                            p.PrintLine('case %d:' % i)
-                            p.DoScope()
-                            for c in range(output_chan):
-                                p.PrintLine('buffer_%s_chan_%d[unroll_index+UNROLL_FACTOR*%d] = result_chan_%d;' % (output_name, c, i, c))
-                            p.PrintLine('break;')
-                            p.UnScope()
-                        p.UnScope()
-
                 p.UnScope()
-                p.PrintLine()
-                # finish emitting code
+                p.UnScope()
 
-                processing_queue.append(s.name)
-                processed_buffers.add(s.name)
+        if len(s.output.children)==0:
+            p.PrintLine()
+            if produce_consume_ratio_o <= 1:
+                for c in range(output_chan):
+                    p.PrintLine('buffer_%s_chan_%d[unroll_index] = result_chan_%d;' % (output_name, c, c))
             else:
-                for bb in s.inputs.values():
-                    if bb.name not in processed_buffers:
-                        logger.debug('buffer %s requires buffer %s as an input' % (s.name, bb.name))
-                        logger.debug('but buffer %s isn\'t produced yet' % bb.name)
-                        logger.debug('add %s to scheduling queue' % bb.name)
-                        processing_queue.append(bb.name)
+                p.PrintLine('switch(epoch&%d)' % (produce_consume_ratio_o-1))
+                p.DoScope()
+                for i in range(produce_consume_ratio_o):
+                    p.PrintLine('case %d:' % i)
+                    p.DoScope()
+                    for c in range(output_chan):
+                        p.PrintLine('buffer_%s_chan_%d[unroll_index+UNROLL_FACTOR*%d] = result_chan_%d;' % (output_name, c, i, c))
+                    p.PrintLine('break;')
+                    p.UnScope()
+                p.UnScope()
+
+        p.UnScope()
+        p.PrintLine()
+        # finish emitting code
 
     for b in stencil.GetProducerBuffers():
         buf = reuse_buffers[b.name]
@@ -516,7 +497,7 @@ def PrintCompute(p, stencil):
         p.UnScope()
         p.PrintLine()
 
-    if stencil.print_aux:
+    if stencil.iterate:
         p.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
         p.DoScope()
         p.PrintLine('#pragma HLS unroll', 0)
@@ -524,6 +505,8 @@ def PrintCompute(p, stencil):
 
         for b in stencil.GetConsumerBuffers():
             s = b.parent
+            if s.PreserveBorderFrom() is None:
+                continue
             overall_stencil_dim = GetStencilDim(overall_stencil_window)
             PrintIfTile = lambda d: p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_%d)' % (coords_in_tile[d], s.name, d))
             PrintIfTileLastDim = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_tile[d], s.name, d))

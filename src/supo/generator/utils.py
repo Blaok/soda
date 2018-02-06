@@ -2,6 +2,7 @@
 from collections import deque, namedtuple
 from fractions import Fraction
 from functools import reduce
+import copy
 import json
 import logging
 import math
@@ -27,17 +28,18 @@ class InternalError(Exception):
 # Buffer.type: str
 # Buffer.chan: int
 # Buffer.idx: (int, ...)
-# Buffer.parent: [Stage]
-# Buffer.children: [Stage, ...]
+# Buffer.parent: Stage
+# Buffer.children: {Stage, ...}
 # Buffer.offset: int
+# Buffer.border: ('preserve', {Stage, ...})
 class Buffer(object):
     def __init__(self, node):
         self.name = node.name
         self.type = node.type
         self.chan = node.chan
         if isinstance(node, supo.grammar.Output):
-            self.idx = next(iter(node.output_expr)).idx
-            for e in node.output_expr:
+            self.idx = next(iter(node.expr)).idx
+            for e in node.expr:
                 if e.idx != self.idx:
                     raise InternalError('Normalization went wrong')
         elif isinstance(node, supo.grammar.Intermediate):
@@ -48,8 +50,15 @@ class Buffer(object):
         else:
             self.idx = None
         self.parent = None
-        self.children = []
+        self.children = set()
         self.offset = 0
+        self.border = None
+
+    def __str__(self):
+        return '%s(%s)' % (type(self).__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items()))
+
+    def PreserveBorderTo(self):
+        return self.border[1] if self.border is not None and self.border[0] == 'preserve' else None
 
 # Stage.window: {str: [(int, ...), ...], ...}
 # Stage.offset: {str: [int, ...], ...}
@@ -57,6 +66,7 @@ class Buffer(object):
 # Stage.expr: [OutputExpr, ...]
 # Stage.inputs: {str: Buffer, ...}
 # Stage.output: Buffer
+# Stage.border: ('preserve', Buffer)
 class Stage(object):
     def __init__(self, **kwargs):
         self.window = kwargs.pop('window')
@@ -65,15 +75,25 @@ class Stage(object):
         self.expr = kwargs.pop('expr')
         self.inputs = kwargs.pop('inputs')
         self.output = kwargs.pop('output')
+        self.border = None
 
         # shortcuts
         self.name = self.output.name
-        self.idx =self.output.idx
+        self.idx = self.output.idx
+
+    def __str__(self):
+        return '%s(%s)' % (type(self).__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items()))
+
+    def PreserveBorderFrom(self):
+        return self.border[1] if self.border is not None and self.border[0] == 'preserve' else None
 
 class Stencil(object):
     def __init__(self, **kwargs):
-        self.iterate = kwargs.pop('iterate', None)
-        self.print_aux = kwargs.pop('print_aux', None) or self.iterate
+        self.iterate = kwargs.pop('iterate')
+        if self.iterate < 1:
+            raise SemanticError('cannot iterate %d times' % self.iterate)
+        self.border = kwargs.pop('border')
+        self.preserve_border = self.border == 'preserve'
         # platform determined
         self.burst_width = kwargs.pop('burst_width')
         self.dram_bank = kwargs.pop('dram_bank')
@@ -95,15 +115,55 @@ class Stencil(object):
         # stage-specific
         input_node = kwargs.pop('input')
         output_node = kwargs.pop('output')
+
+        if self.iterate > 1:
+            if input_node.type != output_node.type:
+                raise SemanticError('input must have the same type as output if iterate > 1 times, current input has type %s but output has type %s' % (input_node.type, output_node.type))
+            if input_node.chan != output_node.chan:
+                raise SemanticError('input must have the same number of channel as output if iterate > 1 times, current input has %d chanels but output has %d channels' % (input_node.chan, output_node.chan))
+            _logger.debug('pipeline %d iterations of %s -> %s' % (self.iterate, input_node.name, output_node.name))
+
         intermediates = kwargs.pop('intermediates')
+        intermediate_names = set(x.name for x in intermediates)
+
+        new_intermediates = []
+        preserved_borders = {}  # {to: {from, ...}, ...}
+        NameFromIter = lambda n, i: n+'_iter%d' % i if i > 0 else n
+        IntermediateLoadCallBack = lambda n: NameFromIter(n, iteration) if n == input_node.name else NameFromIter(n, iteration) if n in intermediate_names else n
+        OutputLoadCallBack = lambda n: NameFromIter(n, iteration-1) if n == input_node.name or n in intermediate_names else n
+        for iteration in range(1, self.iterate):
+            new_intermediate = supo.grammar.Intermediate(output_node=output_node)
+            new_intermediate.MutateLoad(OutputLoadCallBack)
+            new_intermediate.MutateStore(lambda n: NameFromIter(input_node.name, iteration))
+            if self.preserve_border:
+                border_from = NameFromIter(input_node.name, iteration-1)
+                new_intermediate.PreserveBorder(border_from)
+                preserved_borders.setdefault(new_intermediate.name, set()).add(border_from)
+            new_intermediates.append(new_intermediate)
+            for intermediate in intermediates:
+                new_intermediate = copy.deepcopy(intermediate)
+                new_intermediate.MutateLoad(IntermediateLoadCallBack)
+                new_intermediate.MutateStore(lambda n: NameFromIter(n, iteration))
+                new_intermediates.append(new_intermediate)
+        if self.preserve_border:
+            border_from = NameFromIter(input_node.name, self.iterate-1)
+            output_node.PreserveBorder(border_from)
+            preserved_borders.setdefault(output_node.name, set()).add(border_from)
+        output_node.MutateLoad(lambda n: NameFromIter(n, self.iterate-1))
+        intermediates += new_intermediates
+
+        _logger.debug(input_node)
+        _logger.debug(intermediates)
+        _logger.debug(output_node)
+
         self.buffers = {i.name: Buffer(i) for i in intermediates}
-        if input_node.name in self.buffers:
-            raise SemanticError('input name conflict with buffers: %s' % self.input.name)
+        if input_node.name in intermediate_names:
+            raise SemanticError('input name conflict with buffer: %s' % self.input.name)
         else:
             self.input = Buffer(input_node)
             self.buffers[self.input.name] = self.input
-        if output_node.name in self.buffers:
-            raise SemanticError('output name conflict with buffers: %s' % self.output.name)
+        if output_node.name in intermediate_names:
+            raise SemanticError('output name conflict with buffer: %s' % self.output.name)
         else:
             self.output = Buffer(output_node)
             self.buffers[self.output.name] = self.output
@@ -118,11 +178,12 @@ class Stencil(object):
                 delay={},
                 expr=self.GetExprFor(intermediate),
                 inputs=parent_buffers,
-                output=child_buffer)
+                output=child_buffer,
+                border=intermediate.border)
             self.stages[intermediate.name] = this_stage
             child_buffer.parent = this_stage
             for b in parent_buffers.values():
-                b.children.append(this_stage)
+                b.children.add(this_stage)
 
         parent_buffers = self.GetParentBuffersFor(output_node)
         window = self.GetWindowFor(output_node)
@@ -131,16 +192,28 @@ class Stencil(object):
             delay={},
             expr=self.GetExprFor(output_node),
             inputs=parent_buffers,
-            output=self.output)
+            output=self.output,
+            border=output_node.border)
         self.stages[output_node.name] = output_stage
         self.output.parent = output_stage
         for b in parent_buffers.values():
-            b.children.append(output_stage)
+            b.children.add(output_stage)
+
+        # let buffer/stage remember which stages/buffers to send/recv as borders
+        for dst, srcs in preserved_borders.items():
+            for src in srcs:
+                _logger.debug('border from %s to %s' % (src, dst))
+            if self.buffers[src].border is None:
+                self.buffers[src].border = ('preserve', set())
+            self.buffers[src].border[1].add(self.stages[dst])
+            if self.stages[dst].border is None:
+                self.stages[dst].border = ('preserve', self.buffers[src])
 
         # now that we have global knowledge of the buffers we can calculate the offsets of buffers
         _logger.info('calculate buffer offsets')
         processing_queue = deque([self.input.name])
         processed_buffers = {self.input.name}
+        self.chronological_buffers = [self.input]
         _logger.debug('buffer %s is at offset %d' % (self.input.name, self.input.offset))
         while len(processing_queue)>0:
             b = self.buffers[processing_queue.popleft()]
@@ -161,6 +234,7 @@ class Stencil(object):
                         _logger.debug('set delay of %s <- %s to %d' % (s.name, x.name, s.delay[x.name]))
                     processing_queue.append(s.name)
                     processed_buffers.add(s.name)
+                    self.chronological_buffers.append(s.output)
                 else:
                     for bb in s.inputs.values():
                         if bb.name not in processed_buffers:
@@ -168,6 +242,16 @@ class Stencil(object):
                             _logger.debug('but buffer %s isn\'t processed yet' % bb.name)
                             _logger.debug('add %s to scheduling queue' % bb.name)
                             processing_queue.append(bb.name)
+
+        # setup preserving borders, has to be done here because overall window cannot be generated before dependency graph is created
+        for node in intermediates+[output_node]:
+            if hasattr(node, 'preserve_border'):
+                windows = self.stages[node.name].window
+                windows.setdefault(node.preserve_border, list(windows.get(node.preserve_border, set())|{next(iter(node.expr)).idx}))
+                self.stages[node.name].delay.setdefault(node.preserve_border, 0)
+                _logger.debug('window for %s is %s' % (node.name, windows))
+                self.stages[node.name].inputs.setdefault(node.preserve_border, self.buffers[node.preserve_border])
+                self.buffers[node.preserve_border].children.add(self.stages[node.name])
 
         _logger.debug('buffers: '+str(list(self.buffers.keys())))
         LoadPrinter = lambda node: '%s(%s)' % (node.name, ', '.join(map(str, node.idx))) if node.name in self.extra_params else '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
@@ -196,6 +280,9 @@ class Stencil(object):
     def GetConsumerBuffers(self):
         return [b for b in self.buffers.values() if b.parent is not None]
 
+    def GetStagesChronologically(self):
+        return [self.stages[b.name] for b in self.chronological_buffers if b.name in self.stages]
+
     # return [Buffer, ...]
     def GetParentBuffersFor(self, node):
         return {x: self.buffers[x] for x in {x.name for x in node.GetLoads() if x.name not in self.extra_params}}
@@ -204,12 +291,14 @@ class Stencil(object):
     def GetWindowFor(self, node):
         loads = node.GetLoads() # [Load, ...]
         load_names = {l.name for l in loads if l.name not in self.extra_params}
-        return {name: sorted({l.idx for l in loads if l.name == name}|({self.buffers[node.name].idx} if self.iterate else set()), key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
+        windows = {name: sorted({l.idx for l in loads if l.name == name}, key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
+        _logger.debug('window for %s is %s' % (node.name, windows))
+        return windows
 
     # return [OutputExpr, ...]
     def GetExprFor(self, node):
         if isinstance(node, supo.grammar.Output):
-            return node.output_expr
+            return node.expr
         if isinstance(node, supo.grammar.Intermediate):
             return node.expr
         raise SemanticError('cannot get expression for %s' % str(type(node)))
@@ -300,8 +389,9 @@ def GetOverallStencilWindow(input_buffer, output_buffer):
             if name != input_buffer.name:
                 recursive_points = GetOverallStencilWindow(input_buffer, output_buffer.parent.inputs[name])
                 all_points |= set.union(*[{tuple(map(lambda a, b, c: a + b - c, p, point, output_buffer.idx)) for p in recursive_points} for point in points])
-            all_points |= set(tuple(map(operator.sub, point, output_buffer.idx)) for point in points)
-    _logger.debug('overall stencil window of %s (%s) <- %s is %s' % (output_buffer.name, ', '.join(['0']*len(output_buffer.idx)), input_buffer.name, all_points))
+            else:
+                all_points |= set(tuple(map(operator.sub, point, output_buffer.idx)) for point in points)
+    _logger.debug('overall stencil window of %s (%s) <- %s is %s (%d points)' % (output_buffer.name, ', '.join(['0']*len(output_buffer.idx)), input_buffer.name, all_points, len(all_points)))
     _overall_stencil_window_cache[(id(input_buffer), id(output_buffer))] = all_points
     return all_points
 

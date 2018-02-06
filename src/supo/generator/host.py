@@ -737,84 +737,68 @@ def PrintTest(p, stencil):
     LoadPrinter = lambda node: '%s_img%s' % (node.name, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['(%c%+d)*%s.stride[%d]' % (coords_in_orig[d], node.idx[d] - s.idx[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
     StorePrinter = lambda node: '%s result_chan_%d' % (stencil.output.type, node.chan) if node.name == stencil.output.name else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
 
-    #logger.info('calculate buffer offsets')
-    processing_queue = deque([stencil.input.name])
-    processed_buffers = {stencil.input.name}
-    while len(processing_queue)>0:
-        b = stencil.buffers[processing_queue.popleft()]
-        logger.debug('inspecting %s_img\'s children' % b.name)
-        for s in b.children:
-            if {x.name for x in s.inputs.values()} <= processed_buffers and s.output.name not in processed_buffers:
-                # good, all inputs are processed, can emit code to produce current buffer
-                logger.debug('input%s for %s_img (i.e. %s) %s produced' % ('' if len(s.inputs)==1 else 's', s.output.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
+    for s in stencil.GetStagesChronologically():
+        logger.debug('emit code to produce %s_img' % s.output.name)
+        p.PrintLine('// produce %s, can be parallelized with -fopenmp' % s.output.name)
+        p.PrintLine('#pragma omp parallel for', 0)
+        stencil_window = GetOverallStencilWindow(stencil.input, s.output)
+        stencil_dim = GetStencilDim(stencil_window)
+        output_idx = GetStencilWindowOffset(stencil_window)
+        for d in range(0, stencil.dim):
+            dim = stencil.dim-d-1
+            p.PrintLine('for(int32_t %c = %d; %c<dims[%d]-%d; ++%c)' % (coords_in_orig[dim], output_idx[dim], coords_in_orig[dim], dim, stencil_dim[dim]-output_idx[dim]-1, coords_in_orig[dim]))
+            p.DoScope()
+        for e in s.expr:
+            p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+        p.PrintLine()
+        if len(s.output.children)==0:
+            for c in range(stencil.output.chan):
+                run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
+                p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
+                p.DoScope()
+                params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
+                if stencil.output.type[-2:]=='_t':
+                    p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
+                else:
+                    p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
+                p.PrintLine('++error_count;')
+                p.UnScope()
+        for d in range(0, stencil.dim):
+            p.UnScope()
+        p.PrintLine()
 
-                logger.debug('emit code to produce %s_img' % s.output.name)
-                p.PrintLine('// produce %s, can be parallelized with -fopenmp' % s.output.name)
-                p.PrintLine('#pragma omp parallel for', 0)
-                stencil_window = GetOverallStencilWindow(stencil.input, s.output)
-                stencil_dim = GetStencilDim(stencil_window)
-                output_idx = GetStencilWindowOffset(stencil_window)
-                for d in range(0, stencil.dim):
-                    dim = stencil.dim-d-1
-                    p.PrintLine('for(int32_t %c = %d; %c<dims[%d]-%d; ++%c)' % (coords_in_orig[dim], output_idx[dim], coords_in_orig[dim], dim, stencil_dim[dim]-output_idx[dim]-1, coords_in_orig[dim]))
+        if s.PreserveBorderFrom():
+            p.PrintLine('// handle borders for iterative stencil')
+            p.PrintLine('#pragma omp parallel for', 0)
+            bb = s.PreserveBorderFrom()
+            stencil_window = GetOverallStencilWindow(bb, s.output)
+            stencil_dim = GetStencilDim(stencil_window)
+            output_idx = GetStencilWindowOffset(stencil_window)
+            for d in range(0, stencil.dim):
+                dim = stencil.dim-d-1
+                p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, coords_in_orig[dim]))
+                p.DoScope()
+            p.PrintLine('if(!(%s))' % ' && '.join('%c>=%d && %c<dims[%d]-%d' % (coords_in_orig[d], output_idx[d], coords_in_orig[d], d, stencil_dim[d]-output_idx[d]-1) for d in range(stencil.dim)))
+            p.DoScope()
+            GroudTruth = lambda c: '%s_img[%s+%d*%s.stride[%d]]' % (bb.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], bb.name, d) for d in range(stencil.dim)]), c, bb.name, stencil.dim)
+            for e in s.expr:
+                p.PrintLine('%s = %s;' % (StorePrinter(e), GroudTruth(e.chan)))
+            if len(s.output.children)==0:
+                for c in range(stencil.output.chan):
+                    run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
+                    p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
                     p.DoScope()
-                for e in s.expr:
-                    p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
-                p.PrintLine()
-                if len(s.output.children)==0:
-                    for c in range(stencil.output.chan):
-                        run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
-                        p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
-                        p.DoScope()
-                        params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
-                        if stencil.output.type[-2:]=='_t':
-                            p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
-                        else:
-                            p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
-                        p.PrintLine('++error_count;')
-                        p.UnScope()
-                for d in range(0, stencil.dim):
+                    params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
+                    if stencil.output.type[-2:]=='_t':
+                        p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
+                    else:
+                        p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
+                    p.PrintLine('++error_count;')
                     p.UnScope()
-                p.PrintLine()
-
-                if stencil.iterate:
-                    p.PrintLine('// handle borders for iterative stencil')
-                    p.PrintLine('#pragma omp parallel for', 0)
-                    for d in range(0, stencil.dim):
-                        dim = stencil.dim-d-1
-                        p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, coords_in_orig[dim]))
-                        p.DoScope()
-                    p.PrintLine('if(!(%s))' % ' && '.join('%c>=%d && %c<dims[%d]-%d' % (coords_in_orig[d], output_idx[d], coords_in_orig[d], d, stencil_dim[d]-output_idx[d]-1) for d in range(stencil.dim)))
-                    p.DoScope()
-                    GroudTruth = lambda c: '%s_img[%s+%d*%s.stride[%d]]' % (stencil.input.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(stencil.dim)]), c, stencil.input.name, stencil.dim)
-                    for e in s.expr:
-                        p.PrintLine('%s = %s;' % (StorePrinter(e), GroudTruth(e.chan)))
-                    if len(s.output.children)==0:
-                        for c in range(stencil.output.chan):
-                            run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
-                            p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
-                            p.DoScope()
-                            params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
-                            if stencil.output.type[-2:]=='_t':
-                                p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
-                            else:
-                                p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
-                            p.PrintLine('++error_count;')
-                            p.UnScope()
-                    p.UnScope()
-                    for d in range(0, stencil.dim):
-                        p.UnScope()
-                    p.PrintLine()
-
-                processing_queue.append(s.output.name)
-                processed_buffers.add(s.output.name)
-            else:
-                for bb in s.inputs.values():
-                    if bb.name not in processed_buffers:
-                        logger.debug('%s_img requires %s_img as an input' % (s.output.name, bb.name))
-                        logger.debug('but %s_img isn\'t produced yet' % bb.name)
-                        logger.debug('add %s_img to scheduling queue' % bb.name)
-                        processing_queue.append(bb.name)
+            p.UnScope()
+            for d in range(0, stencil.dim):
+                p.UnScope()
+            p.PrintLine()
 
     p.PrintLine('if(error_count==0)')
     p.DoScope()

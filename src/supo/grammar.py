@@ -1,5 +1,6 @@
 #!/usr/bin/python3.6
 from collections import deque, namedtuple
+import copy
 import logging
 import operator
 import os
@@ -17,6 +18,8 @@ SupoProgram:
     ('dram' 'separate' ':' dram_separate=YesOrNo)
     ('unroll' 'factor' ':' unroll_factor=INT)
     ('kernel' ':' app_name=ID)
+    ('border' ':' border=BorderStrategies)
+    ('iterate' ':' iterate=INT)
     input=Input
     output=Output
     (extra_params=ExtraParam)*
@@ -24,6 +27,7 @@ SupoProgram:
     Comment*
 )#;
 Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
+BorderStrategies: 'ignore'|'preserve';
 Comment: /\s*#.*$/;
 Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
@@ -39,7 +43,7 @@ MulOrDiv: '*'|'/'|'%';
 Number: Float|Integer;
 Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Operand: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
-Output: 'output' type=Type ':' (output_expr=OutputExpr)+;
+Output: 'output' type=Type ':' (expr=OutputExpr)+;
 OutputExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
 Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
 PlusOrMinus: '+'|'-';
@@ -81,6 +85,8 @@ class SupoProgram(object):
         self.intermediates = kwargs.pop('intermediates')
         self.unroll_factor = kwargs.pop('unroll_factor')
         self.dram_separate = kwargs.pop('dram_separate')=='yes'
+        self.iterate = kwargs.pop('iterate')
+        self.border = kwargs.pop('border')
 
         # normalize
         self.output.Normalize(self.extra_params)
@@ -124,6 +130,12 @@ class Expression(object):
             op.Normalize(norm_offset, extra_params)
         del self.loads
 
+    def MutateLoad(self, cb):
+        for op in self.operand:
+            op.MutateLoad(cb)
+        if hasattr(self, 'loads'):
+            del self.loads
+
 class Term(object):
     def __init__(self, **kwargs):
         self.operand = kwargs.pop('operand')
@@ -151,6 +163,12 @@ class Term(object):
             op.Normalize(norm_offset, extra_params)
         del self.loads
 
+    def MutateLoad(self, cb):
+        for op in self.operand:
+            op.MutateLoad(cb)
+        if hasattr(self, 'loads'):
+            del self.loads
+
 class Factor(object):
     def __init__(self, **kwargs):
         self.operand = kwargs.pop('operand')
@@ -170,6 +188,11 @@ class Factor(object):
     def Normalize(self, norm_offset, extra_params):
         self.operand.Normalize(norm_offset, extra_params)
         del self.loads
+
+    def MutateLoad(self, cb):
+        self.operand.MutateLoad(cb)
+        if hasattr(self, 'loads'):
+            del self.loads
 
 class Operand(object):
     def __init__(self, **kwargs):
@@ -220,6 +243,16 @@ class Operand(object):
             logger.debug('load at %s normalized to %s[%d](%s)' % (msg, self.name, self.chan, ', '.join(map(str, self.idx))))
             del self.loads
 
+    def MutateLoad(self, cb):
+        if self.expr is not None:
+            self.expr.MutateLoad(cb)
+        elif self.num is not None:
+            pass
+        elif self.name is not None:
+            self.name = cb(self.name)
+        if hasattr(self, 'loads'):
+            del self.loads
+
 class Input(object):
     def __init__(self, **kwargs):
         self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
@@ -230,7 +263,7 @@ class Input(object):
         self.tile_size = kwargs.pop('tile_size')+[0]
 
     def __str__(self):
-        return ('input %s: %s[%d](%s)' % (self.type, self.chan, self.name, ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
+        return ('input %s: %s[%d](%s)' % (self.type, self.name, self.chan, ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
 
 class ExtraParam(object):
     def __init__(self, **kwargs):
@@ -267,8 +300,8 @@ class ExtraParam(object):
 class Output(object):
     def __init__(self, **kwargs):
         self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
-        self.output_expr = kwargs.pop('output_expr')
-        for e in self.output_expr:
+        self.expr = kwargs.pop('expr')
+        for e in self.expr:
             if hasattr(self, 'name'):
                 if self.name != e.name:
                     err_msg = 'output had name %s but now renamed to %s' % (self.name, e.name)
@@ -286,26 +319,52 @@ class Output(object):
             err_msg = ('output channel poorly-defined: %s' % str(self.chan))
             raise SemanticError(err_msg)
         self.chan = len(self.chan)
+        self.border = None
 
     def __str__(self):
-        return ('output %s: %s' % (self.type, self.output_expr))
+        return ('output %s: %s' % (self.type, self.expr))
+
+    def PreserveBorder(self, node_name):
+        self.preserve_border = node_name
+        self.border = ('preserve', node_name)
 
     def GetCode(self, LoadPrinter, StorePrinter):
-        return [x.GetCode(LoadPrinter, StorePrinter) for x in self.output_expr]
+        return [x.GetCode(LoadPrinter, StorePrinter) for x in self.expr]
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
-            self.loads = sum([e.GetLoads() for e in self.output_expr], [])
+            self.loads = sum([e.GetLoads() for e in self.expr], [])
         return self.loads
 
     def Normalize(self, extra_params):
-        dim = range(len(next(iter(self.output_expr)).idx))
-        norm_offset = tuple(min(min(load.idx[d]-e.idx[d] for load in e.GetLoads() if load.name not in extra_params) for e in self.output_expr) for d in dim)
-        for e in self.output_expr:
+        dim = range(len(next(iter(self.expr)).idx))
+        norm_offset = tuple(min(min(load.idx[d]-e.idx[d] for load in e.GetLoads() if load.name not in extra_params) for e in self.expr) for d in dim)
+        for e in self.expr:
             e.Normalize(tuple(norm_offset[d]+e.idx[d] for d in dim), extra_params)
+
+    def MutateLoad(self, cb):
+        for e in self.expr:
+            e.MutateLoad(cb)
+        if hasattr(self, 'loads'):
+            del self.loads
+
+    def MutateStore(self, cb):
+        self.name = cb(self.name)
+        for e in self.expr:
+            e.name = cb(e.name)
+        if hasattr(self, 'loads'):
+            del self.loads
 
 class Intermediate(object):
     def __init__(self, **kwargs):
+        if 'output_node' in kwargs:
+            output_node = kwargs.pop('output_node')
+            self.name = output_node.name
+            self.type = output_node.type
+            self.chan = output_node.chan
+            self.border = output_node.border
+            self.expr = copy.deepcopy(output_node.expr)
+            return
         self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
         self.expr = kwargs.pop('expr')
         for e in self.expr:
@@ -326,9 +385,14 @@ class Intermediate(object):
             err_msg = ('intermediate channel poorly-defined: %s' % str(self.chan))
             raise SemanticError(err_msg)
         self.chan = len(self.chan)
+        self.border = None
 
-    def __str__(self):
-        return ('intermediate %s: %s' % (self.type, self.expr))
+    def __repr__(self):
+        return '%s(%s)' % (self.__class__.__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items() if k[0]!='_'))
+
+    def PreserveBorder(self, node_name):
+        self.preserve_border = node_name
+        self.border = ('preserve', node_name)
 
     def GetCode(self, LoadPrinter, StorePrinter):
         return [x.GetCode(LoadPrinter, StorePrinter) for x in self.expr]
@@ -343,6 +407,21 @@ class Intermediate(object):
         norm_offset = tuple(min(min(load.idx[d]-e.idx[d] for load in e.GetLoads() if load.name not in extra_params) for e in self.expr) for d in dim)
         for e in self.expr:
             e.Normalize(tuple(norm_offset[d]+e.idx[d] for d in dim), extra_params)
+        if hasattr(self, 'loads'):
+            del self.loads
+
+    def MutateLoad(self, cb):
+        for e in self.expr:
+            e.MutateLoad(cb)
+        if hasattr(self, 'loads'):
+            del self.loads
+
+    def MutateStore(self, cb):
+        self.name = cb(self.name)
+        for e in self.expr:
+            e.name = cb(e.name)
+        if hasattr(self, 'loads'):
+            del self.loads
 
 class OutputExpr(object):
     def __init__(self, **kwargs):
@@ -354,6 +433,9 @@ class OutputExpr(object):
 
     def __str__(self):
         return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join(map(str, self.idx)), self.expr))
+
+    def __repr__(self):
+        return '%s(%s)' % (self.__class__.__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items() if k[0]!='_'))
 
     def GetCode(self, LoadPrinter, StorePrinter):
         return '%s = %s;' % (StorePrinter(self), self.expr.GetCode(LoadPrinter, StorePrinter))
@@ -368,4 +450,9 @@ class OutputExpr(object):
         self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
         self.expr.Normalize(norm_offset, extra_params)
         del self.loads
+
+    def MutateLoad(self, cb):
+        self.expr.MutateLoad(cb)
+        if hasattr(self, 'loads'):
+            del self.loads
 
