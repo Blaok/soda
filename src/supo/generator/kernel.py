@@ -410,10 +410,11 @@ def PrintCompute(p, stencil):
         p.PrintLine()
 
         LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in extra_params else 'load_%s_for_%s_chan_%d_at_%s' % (node.name, s.name, node.chan, '_'.join([str(x).replace('-', 'm') for x in node.idx]))
-        StorePrinter = lambda node: '%s result_chan_%d' % (output_type, node.chan) if node.name == output_name else 'buffer_%s_chan_%d[unroll_index]' % (node.name, node.chan)
+        StorePrinter = lambda node: 'result_chan_%d' % node.chan if node.name == output_name else 'buffer_%s_chan_%d[unroll_index]' % (node.name, node.chan)
 
-        for e in s.expr:
-            p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+        if s.name == output_name:
+            for c in range(s.output.chan):
+                p.PrintLine('%s result_chan_%d;' % (s.output.type, c))
 
         if s.PreserveBorderFrom():
             p.PrintLine()
@@ -434,6 +435,11 @@ def PrintCompute(p, stencil):
                     dst = 'buffer_%s_chan_%d[unroll_index]' % (s.name, c)
                 p.PrintLine('%s = load_%s_for_%s_chan_%d_at_%s;' % (dst, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in s.idx])))
             p.UnScope()
+            p.PrintLine('else')
+            p.DoScope()
+            for e in s.expr:
+                p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+            p.UnScope()
             for d in range(stencil.dim-1):
                 if stencil_dim[d] < 2:
                     continue
@@ -449,6 +455,9 @@ def PrintCompute(p, stencil):
                     p.UnScope()
                 p.UnScope()
                 p.UnScope()
+        else:
+            for e in s.expr:
+                p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
 
         if len(s.output.children)==0:
             p.PrintLine()
