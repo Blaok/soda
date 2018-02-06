@@ -246,9 +246,11 @@ class Stencil(object):
         # setup preserving borders, has to be done here because overall window cannot be generated before dependency graph is created
         for node in intermediates+[output_node]:
             if hasattr(node, 'preserve_border'):
+                # preserve border from node.preserve_border to node.name
                 windows = self.stages[node.name].window
                 windows.setdefault(node.preserve_border, list(windows.get(node.preserve_border, set())|{next(iter(node.expr)).idx}))
-                self.stages[node.name].delay.setdefault(node.preserve_border, 0)
+                stencil_window = GetOverallStencilWindow(self.buffers[node.preserve_border], self.buffers[node.name])
+                self.stages[node.name].delay.setdefault(node.preserve_border, GetStencilDistance(stencil_window, self.tile_size)-Serialize(GetStencilWindowOffset(stencil_window), self.tile_size))
                 _logger.debug('window for %s is %s' % (node.name, windows))
                 self.stages[node.name].inputs.setdefault(node.preserve_border, self.buffers[node.preserve_border])
                 self.buffers[node.preserve_border].children.add(self.stages[node.name])
