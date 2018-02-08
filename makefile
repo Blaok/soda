@@ -20,16 +20,17 @@ HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DI
 
 SHELL = /bin/bash
 SRC ?= src
-OBJ ?= obj/$(word 2,$(subst :, ,$(XDEVICE)))
-BIN ?= bin/$(word 2,$(subst :, ,$(XDEVICE)))
-BIT ?= bit/$(word 2,$(subst :, ,$(XDEVICE)))
-RPT ?= rpt/$(word 2,$(subst :, ,$(XDEVICE)))
-TMP ?= tmp/$(word 2,$(subst :, ,$(XDEVICE)))
+OBJ ?= obj/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+BIN ?= bin/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+BIT ?= bit/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+RPT ?= rpt/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+TMP ?= tmp/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
 
 AWS_AFI_DIR ?= afis
 AWS_AFI_LOG ?= logs
 CXX ?= g++
 CLCXX ?= xocc
+COMMIT = $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quiet || echo '-dirty')
 
 XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
