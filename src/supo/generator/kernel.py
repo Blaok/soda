@@ -504,7 +504,14 @@ def PrintCompute(p, stencil):
             IndexTile = lambda d: '%c_%s' % (coords_in_tile[d], s.name)
             IndexOrig = lambda d: '%c_%s' % (coords_in_orig[d], s.name)
             MarginCondition = lambda d: ('(0<=%s && %s<%d) || ' % (IndexOrig(d), IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
-            p.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join(MarginCondition(d) for d in range(stencil.dim))))
+            for d in range(stencil.dim):
+                p.PrintLine('bool margin_condition_dim_%d[1];' % d)
+                p.PrintLine('#pragma HLS resource variable=margin_condition_dim_%d latency=1 core=RAM_2P_LUTRAM' % d, 0)
+                p.DoScope()
+                p.PrintLine('#pragma HLS latency min=1', 0)
+                p.PrintLine('margin_condition_dim_%d[0] = %s;' % (d, MarginCondition(d)))
+                p.UnScope()
+            p.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join('margin_condition_dim_%d[0]' % d for d in range(stencil.dim))))
             p.DoScope()
             p.PrintLine('// forward input to output directly and preserve tensor border')
             for c in range(s.output.chan):
@@ -512,28 +519,30 @@ def PrintCompute(p, stencil):
                     dst = 'result_chan_%d' % c
                 else:
                     dst = 'buffer_%s_chan_%d[unroll_index]' % (s.name, c)
+                p.PrintLine('#pragma HLS latency min=1', 0)
                 p.PrintLine('%s = load_%s_for_%s_chan_%d_at_%s;' % (dst, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in s.idx])))
             p.UnScope()
             p.PrintLine('else')
             p.DoScope()
             for e in s.expr:
+                p.PrintLine('#pragma HLS latency min=1', 0)
                 p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
             p.UnScope()
-            for d in range(stencil.dim-1):
-                if stencil_dim[d] < 2:
-                    continue
-                p.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
-                p.DoScope()
-                p.PrintLine('switch(%s)' % IndexTile(d))
-                p.DoScope()
-                for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
-                    p.PrintLine('case %d:' % i)
-                    p.DoScope()
-                    p.PrintLine('// duplicate output to border buffer')
-                    p.PrintLine('break;')
-                    p.UnScope()
-                p.UnScope()
-                p.UnScope()
+            #for d in range(stencil.dim-1):
+            #    if stencil_dim[d] < 2:
+            #        continue
+            #    p.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
+            #    p.DoScope()
+            #    p.PrintLine('switch(%s)' % IndexTile(d))
+            #    p.DoScope()
+            #    for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
+            #        p.PrintLine('case %d:' % i)
+            #        p.DoScope()
+            #        p.PrintLine('// duplicate output to border buffer')
+            #        p.PrintLine('break;')
+            #        p.UnScope()
+            #    p.UnScope()
+            #    p.UnScope()
         else:
             for e in s.expr:
                 p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
