@@ -713,7 +713,10 @@ def PrintTest(p, stencil):
         dim = stencil.dim-d-1
         p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, coords_in_orig[dim]))
         p.DoScope()
-    p.PrintLine('%s_img[%s] = %s;' % (stencil.input.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(input_dim)]), '+'.join(coords_in_orig[0:input_dim])))
+    init_val = '+'.join(coords_in_orig[0:input_dim])
+    if IsFloat(stencil.input.type):
+        init_val = '(%s)/(%s%s)' % (init_val, '%d+' % stencil.input.chan if stencil.input.chan>1 else '', '+'.join('dims[%d]' % d for d in range(stencil.dim)))
+    p.PrintLine('%s_img[%s] = %s;' % (stencil.input.name, '+'.join('%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(input_dim)), init_val))
     for d in range(0, input_dim):
         p.UnScope()
     p.PrintLine()
