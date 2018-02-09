@@ -108,10 +108,7 @@ def PrintUpdate(p, unroll_factor, producer_map, consumer_map, src, chan, variabl
         return
 
     for c in range(chan):
-        p.DoScope()
-        p.PrintLine('#pragma HLS latency min=1', 0)
         p.PrintLine('%s = %s;' % (dst_str[c], src_str[c]))
-        p.UnScope()
 
 def PrintCompute(p, stencil):
     app_name = stencil.app_name
@@ -187,11 +184,15 @@ def PrintCompute(p, stencil):
             stencil_window = GetOverallStencilWindow(stencil.input, b)
             overall_idx = GetStencilWindowOffset(stencil_window)
             delay = GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size)
-            p.PrintLine('int32_t i_base_%s = %d;' % (b.name, -delay))
+            p.PrintLine('int32_t i_base_%s[UNROLL_FACTOR] = {%s};' % (b.name, ', '.join([str(x-delay) for x in range(unroll_factor)])))
             for i in range(1, len(tile_size)):
-                p.PrintLine('int32_t %c_base_%s = 0;' % (coords_in_tile[i], b.name))
+                p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_tile[i], b.name))
             for i in range(len(tile_size)-1):
-                p.PrintLine('int32_t %c_base_%s = 0;' % (coords_in_orig[i], b.name))
+                p.PrintLine('int32_t %c_base_%s[UNROLL_FACTOR] = {0};' % (coords_in_orig[i], b.name))
+            for i in range(len(tile_size)):
+                p.PrintLine('#pragma HLS array_partition variable=%s_base_%s complete' % (coords_in_tile[i], b.name), 0)
+            for i in range(len(tile_size)-1):
+                p.PrintLine('#pragma HLS array_partition variable=%s_base_%s complete' % (coords_in_orig[i], b.name), 0)
             p.PrintLine()
 
     for b in stencil.GetProducerBuffers():
@@ -395,91 +396,11 @@ def PrintCompute(p, stencil):
         p.PrintLine('#pragma HLS latency min=1', 0)
 
         if s.PreserveBorderFrom():
-            p.PrintLine('int32_t %c_%s = %c_base_%s+unroll_index;' % ((coords_in_tile[0], s.name)*2))
-            for i in range(1,len(tile_size)):
-                p.PrintLine('int32_t %c_%s = %c_base_%s;' % ((coords_in_tile[i], s.name)*2))
+            for i in range(len(tile_size)):
+                p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
             for i in range(len(tile_size)-1):
-                p.PrintLine('int32_t %c_%s = %c_base_%s+%c_%s;' % ((coords_in_orig[i], s.name)*2+(coords_in_tile[i], s.name)))
+                p.PrintLine('int32_t %c_%s = %c_base_%s[unroll_index]+%c_%s;' % ((coords_in_orig[i], s.name)*2+(coords_in_tile[i], s.name)))
             p.PrintLine('int32_t %c_%s = %c_%s;' % (coords_in_orig[len(tile_size)-1], s.name, coords_in_tile[len(tile_size)-1], s.name))
-            overall_stencil_dim = GetStencilDim(overall_stencil_window)
-            PrintIfTile = lambda d: p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_%d)' % (coords_in_tile[d], s.name, d))
-            PrintIfTileLastDim = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_tile[d], s.name, d))
-            PrintIfTensor = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_orig[d], s.name, d))
-            PrintIncrementTile = lambda d: p.PrintLine('++%c_%s;' % (coords_in_tile[d], s.name))
-            PrintDecrementTile = lambda d: p.PrintLine('%c_%s -= TILE_SIZE_DIM_%d;' % (coords_in_tile[d], s.name, d))
-            PrintIncrementOrig = lambda d: p.PrintLine('%c_%s += TILE_SIZE_DIM_%d - %s + 1;' % (coords_in_orig[d], s.name, d, overall_stencil_dim[d]))
-            PrintDecrementOrig = lambda d: p.PrintLine('%c_%s = 0;' % (coords_in_orig[d], s.name))
-            PrintDecrementTileLastDim = lambda d: p.PrintLine('%c_%s -= input_size_dim_%d;' % (coords_in_tile[d], s.name, d))
-
-            if len(tile_size)>1:
-                PrintIfTile(0)
-                p.DoScope()
-                p.PrintLine('#pragma HLS latency min=1', 0)
-                PrintDecrementTile(0)
-                PrintIncrementTile(1)
-                if len(tile_size)>2:
-                    PrintIfTile(1)
-                    p.DoScope()
-                    p.PrintLine('#pragma HLS latency min=1', 0)
-                    PrintDecrementTile(1)
-                    PrintIncrementTile(2)
-                    if len(tile_size)>3:
-                        PrintIfTile(2)
-                        p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
-                        PrintDecrementTile(2)
-                        PrintIncrementTile(3)
-
-                        PrintIfTileLastDim(3)
-                        p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
-                        PrintDecrementTileLastDim(3)
-                        PrintIncrementOrig(0)
-                        PrintIfTensor(0)
-                        p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
-                        PrintDecrementOrig(0)
-                        PrintIncrementOrig(1)
-                        PrintIfTensor(1)
-                        p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
-                        PrintDecrementOrig(1)
-                        PrintIncrementOrig(2)
-                        p.UnScope()
-                        p.UnScope()
-                        p.UnScope()
-
-                        p.UnScope()
-                    else:
-                        PrintIfTileLastDim(2)
-                        p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
-                        PrintDecrementTileLastDim(2)
-                        PrintIncrementOrig(0)
-
-                        PrintIfTensor(0)
-                        p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
-                        PrintDecrementOrig(0)
-                        PrintIncrementOrig(1)
-                        p.UnScope()
-
-                        p.UnScope()
-                    p.UnScope()
-                else:
-                    PrintIfTileLastDim(1)
-                    p.DoScope()
-                    p.PrintLine('#pragma HLS latency min=1', 0)
-                    PrintDecrementTileLastDim(1)
-                    PrintIncrementOrig(0)
-                    p.UnScope()
-                p.UnScope()
-            else:
-                PrintIfTileLastDim(0)
-                p.DoScope()
-                p.PrintLine('#pragma HLS latency min=1', 0)
-                PrintDecrementTileLastDim(0)
-                p.UnScope()
             p.PrintLine()
 
         for bb in s.inputs.values():
@@ -504,14 +425,7 @@ def PrintCompute(p, stencil):
             IndexTile = lambda d: '%c_%s' % (coords_in_tile[d], s.name)
             IndexOrig = lambda d: '%c_%s' % (coords_in_orig[d], s.name)
             MarginCondition = lambda d: ('(0<=%s && %s<%d) || ' % (IndexOrig(d), IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
-            for d in range(stencil.dim):
-                p.PrintLine('bool margin_condition_dim_%d[1];' % d)
-                p.PrintLine('#pragma HLS resource variable=margin_condition_dim_%d latency=1 core=RAM_2P_LUTRAM' % d, 0)
-                p.DoScope()
-                p.PrintLine('#pragma HLS latency min=1', 0)
-                p.PrintLine('margin_condition_dim_%d[0] = %s;' % (d, MarginCondition(d)))
-                p.UnScope()
-            p.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join('margin_condition_dim_%d[0]' % d for d in range(stencil.dim))))
+            p.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join(MarginCondition(d) for d in range(stencil.dim))))
             p.DoScope()
             p.PrintLine('// forward input to output directly and preserve tensor border')
             for c in range(s.output.chan):
@@ -519,30 +433,28 @@ def PrintCompute(p, stencil):
                     dst = 'result_chan_%d' % c
                 else:
                     dst = 'buffer_%s_chan_%d[unroll_index]' % (s.name, c)
-                p.PrintLine('#pragma HLS latency min=1', 0)
                 p.PrintLine('%s = load_%s_for_%s_chan_%d_at_%s;' % (dst, bb.name, s.name, c, '_'.join([str(x).replace('-', 'm') for x in s.idx])))
             p.UnScope()
             p.PrintLine('else')
             p.DoScope()
             for e in s.expr:
-                p.PrintLine('#pragma HLS latency min=1', 0)
                 p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
             p.UnScope()
-            #for d in range(stencil.dim-1):
-            #    if stencil_dim[d] < 2:
-            #        continue
-            #    p.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
-            #    p.DoScope()
-            #    p.PrintLine('switch(%s)' % IndexTile(d))
-            #    p.DoScope()
-            #    for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
-            #        p.PrintLine('case %d:' % i)
-            #        p.DoScope()
-            #        p.PrintLine('// duplicate output to border buffer')
-            #        p.PrintLine('break;')
-            #        p.UnScope()
-            #    p.UnScope()
-            #    p.UnScope()
+            for d in range(stencil.dim-1):
+                if stencil_dim[d] < 2:
+                    continue
+                p.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
+                p.DoScope()
+                p.PrintLine('switch(%s)' % IndexTile(d))
+                p.DoScope()
+                for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
+                    p.PrintLine('case %d:' % i)
+                    p.DoScope()
+                    p.PrintLine('// duplicate output to border buffer')
+                    p.PrintLine('break;')
+                    p.UnScope()
+                p.UnScope()
+                p.UnScope()
         else:
             for e in s.expr:
                 p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
@@ -570,6 +482,8 @@ def PrintCompute(p, stencil):
 
     for b in stencil.GetProducerBuffers():
         buf = reuse_buffers[b.name]
+        p.DoScope()
+        p.PrintLine('#pragma HLS latency min=1 max=1', 0)
         first = True
         for idx, item in enumerate(buf['inputs']):
             if first:
@@ -587,17 +501,18 @@ def PrintCompute(p, stencil):
             logger.debug(msg)
             p.PrintLine('// '+msg)
             for fifo_length in buf['FIFOs'].keys():
-                p.DoScope()
-                p.PrintLine('#pragma HLS latency min=1', 0)
                 p.PrintLine('FIFO_%d_%s_ptr = FIFO_%d_%s_ptr==uint%d_t(%d-1) ? 0 : FIFO_%d_%s_ptr+1;' % (fifo_length/unroll_factor, b.name, fifo_length/unroll_factor, b.name, 2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor))) ,fifo_length/unroll_factor, fifo_length/unroll_factor, b.name))
-                p.UnScope()
 
+        p.UnScope()
+        p.PrintLine()
 
     if stencil.iterate:
-        for b in stencil.GetConsumerBuffers():
-            p.DoScope()
-            p.PrintLine('#pragma HLS latency min=1', 0)
+        p.PrintLine('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+        p.DoScope()
+        p.PrintLine('#pragma HLS unroll', 0)
+        p.PrintLine('#pragma HLS latency min=1 max=1', 0)
 
+        for b in stencil.GetConsumerBuffers():
             s = b.parent
             if s.PreserveBorderFrom() is None:
                 continue
@@ -612,44 +527,38 @@ def PrintCompute(p, stencil):
             PrintDecrementTileLastDim = lambda d: p.PrintLine('%c_%s -= input_size_dim_%d;' % (coords_in_tile[d], s.name, d))
 
             for i in range(len(tile_size)):
-                p.PrintLine('int32_t& %c_%s = %c_base_%s;' % ((coords_in_tile[i], s.name)*2))
+                p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_tile[i], s.name)*2))
             for i in range(len(tile_size)-1):
-                p.PrintLine('int32_t& %c_%s = %c_base_%s;' % ((coords_in_orig[i], s.name)*2))
+                p.PrintLine('int32_t& %c_%s = %c_base_%s[unroll_index];' % ((coords_in_orig[i], s.name)*2))
             p.PrintLine()
 
             p.PrintLine('%c_%s += UNROLL_FACTOR;' % (coords_in_tile[0], s.name))
             if len(tile_size)>1:
                 PrintIfTile(0)
                 p.DoScope()
-                p.PrintLine('#pragma HLS latency min=1', 0)
                 PrintDecrementTile(0)
                 PrintIncrementTile(1)
                 if len(tile_size)>2:
                     PrintIfTile(1)
                     p.DoScope()
-                    p.PrintLine('#pragma HLS latency min=1', 0)
                     PrintDecrementTile(1)
                     PrintIncrementTile(2)
                     if len(tile_size)>3:
                         PrintIfTile(2)
                         p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
                         PrintDecrementTile(2)
                         PrintIncrementTile(3)
 
                         PrintIfTileLastDim(3)
                         p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
                         PrintDecrementTileLastDim(3)
                         PrintIncrementOrig(0)
                         PrintIfTensor(0)
                         p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
                         PrintDecrementOrig(0)
                         PrintIncrementOrig(1)
                         PrintIfTensor(1)
                         p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
                         PrintDecrementOrig(1)
                         PrintIncrementOrig(2)
                         p.UnScope()
@@ -660,13 +569,11 @@ def PrintCompute(p, stencil):
                     else:
                         PrintIfTileLastDim(2)
                         p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
                         PrintDecrementTileLastDim(2)
                         PrintIncrementOrig(0)
 
                         PrintIfTensor(0)
                         p.DoScope()
-                        p.PrintLine('#pragma HLS latency min=1', 0)
                         PrintDecrementOrig(0)
                         PrintIncrementOrig(1)
                         p.UnScope()
@@ -676,7 +583,6 @@ def PrintCompute(p, stencil):
                 else:
                     PrintIfTileLastDim(1)
                     p.DoScope()
-                    p.PrintLine('#pragma HLS latency min=1', 0)
                     PrintDecrementTileLastDim(1)
                     PrintIncrementOrig(0)
                     p.UnScope()
@@ -684,11 +590,10 @@ def PrintCompute(p, stencil):
             else:
                 PrintIfTileLastDim(0)
                 p.DoScope()
-                p.PrintLine('#pragma HLS latency min=1', 0)
                 PrintDecrementTileLastDim(0)
                 p.UnScope()
-            p.UnScope()
-            p.PrintLine()
+        p.UnScope()
+        p.PrintLine()
 
     if produce_consume_ratio_o <= 1:
         p.DoScope()
