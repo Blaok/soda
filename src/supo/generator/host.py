@@ -715,7 +715,7 @@ def PrintTest(p, stencil):
         p.DoScope()
     init_val = '+'.join(coords_in_orig[0:input_dim])
     if IsFloat(stencil.input.type):
-        init_val = '(%s)/(%s%s)' % (init_val, '%d+' % stencil.input.chan if stencil.input.chan>1 else '', '+'.join('dims[%d]' % d for d in range(stencil.dim)))
+        init_val = '%s(%s)/%s(%s%s)' % (stencil.input.type, init_val, stencil.input.type, '%d+' % stencil.input.chan if stencil.input.chan>1 else '', '+'.join('dims[%d]' % d for d in range(stencil.dim)))
     p.PrintLine('%s_img[%s] = %s;' % (stencil.input.name, '+'.join('%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(input_dim)), init_val))
     for d in range(0, input_dim):
         p.UnScope()
@@ -757,7 +757,9 @@ def PrintTest(p, stencil):
         if len(s.output.children)==0:
             for c in range(stencil.output.chan):
                 run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
-                p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
+                p.PrintLine('%s val_fpga = %s;' % (stencil.output.type, run_result))
+                p.PrintLine('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
+                p.PrintLine('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > 0.01)')
                 p.DoScope()
                 params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
                 if stencil.output.type[-2:]=='_t':
