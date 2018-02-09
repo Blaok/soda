@@ -35,6 +35,14 @@ ExtraParam: 'param' type=Type (',' attrs=ExtraParamAttr)*  ':' name=ID ('[' size
 ExtraParamAttr: 'dup' dup=Number | partitioning=Partitioning;
 Factor: (sign=PlusOrMinus)? operand=Operand;
 Float: /(((\d*\.\d+|\d+\.)([+-]?[Ee]\d+)?)|(\d+[+-]?[Ee]\d+))[FfLl]?/;
+Func: name=FuncName '(' operand=Expression (',' operand=Expression)* ')';
+FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
+    'cosh'|'sinh'|'tanh'|'acosh'|'asinh'|'atanh'|
+    'exp'|'frexp'|'ldexp'|'log'|'log10'|'modf'|'exp2'|'expm1'|'ilogb'|'log1p'|'log2'|'logb'|'scalbn'|'scalbln'|
+    'pow'|'sqrt'|'cbrt'|'hypot'|
+    'erf'|'erfc'|'tgamma'|'lgamma'|
+    'ceil'|'floor'|'fmod'|'trunc'|'round'|'lround'|'llround'|'rint'|'lrint'|'llrint'|'nearbyint'|'remainder'|'remquo'|
+    'copysign'|'nan'|'nextafter'|'nexttoward'|'fdim'|'fmax'|'fmin'|'fabs'|'abs'|'fma';
 Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Input: 'input' type=Type ':' name=ID ('[' chan=Integer ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
 Integer: ('+'|'-')?(Hex|Bin|Oct|Dec);
@@ -42,7 +50,7 @@ Intermediate: 'buffer' type=Type ':' (expr=OutputExpr)+;
 MulOrDiv: '*'|'/'|'%';
 Number: Float|Integer;
 Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
-Operand: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
+Operand: func=Func | name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
 Output: 'output' type=Type ':' (expr=OutputExpr)+;
 OutputExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
 Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
@@ -194,8 +202,36 @@ class Factor(object):
         if hasattr(self, 'loads'):
             del self.loads
 
+class Func(object):
+    def __init__(self, **kwargs):
+        self.name = kwargs.pop('name')
+        self.operand = kwargs.pop('operand')
+
+    def __str__(self):
+        return '%s(%s)' % (self.name, ', '.join(str(op) for op in self.operand))
+
+    def GetCode(self, LoadPrinter, StorePrinter):
+        return '%s(%s)' % (self.name, ', '.join(op.GetCode(LoadPrinter, StorePrinter) for op in self.operand))
+
+    def GetLoads(self):
+        if not hasattr(self, 'loads'):
+            self.loads = sum([op.GetLoads() for op in self.operand], [])
+        return self.loads
+
+    def Normalize(self, norm_offset, extra_params):
+        for op in self.operand:
+            op.Normalize(norm_offset, extra_params)
+        del self.loads
+
+    def MutateLoad(self, cb):
+        for op in self.operand:
+            op.MutateLoad(cb)
+        if hasattr(self, 'loads'):
+            del self.loads
+
 class Operand(object):
     def __init__(self, **kwargs):
+        self.func = kwargs.pop('func')
         self.name = kwargs.pop('name')
         self.chan = StringToInteger(kwargs.pop('chan'), 0)
         self.idx = tuple(kwargs.pop('idx'))
@@ -203,6 +239,8 @@ class Operand(object):
         self.expr = kwargs.pop('expr')
 
     def __str__(self):
+        if self.func:
+            return str(self.func)
         if self.name:
             return '%s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx)))
         if self.num:
@@ -211,6 +249,8 @@ class Operand(object):
             return '(%s)' % str(self.expr)
 
     def GetCode(self, LoadPrinter, StorePrinter):
+        if self.func:
+            return self.func.GetCode(LoadPrinter, StorePrinter)
         if self.name:
             return LoadPrinter(self)
         if self.num:
@@ -220,7 +260,9 @@ class Operand(object):
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
-            if self.expr is not None:
+            if self.func is not None:
+                self.loads = self.func.GetLoads()
+            elif self.expr is not None:
                 self.loads = self.expr.GetLoads()
             elif self.num is not None:
                 self.loads = []
@@ -455,4 +497,6 @@ class OutputExpr(object):
         self.expr.MutateLoad(cb)
         if hasattr(self, 'loads'):
             del self.loads
+
+supo_grammar_classes = [SupoProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, OutputExpr, Intermediate]
 
