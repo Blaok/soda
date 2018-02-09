@@ -221,7 +221,12 @@ def PrintCompute(p, stencil):
         p.PrintLine()
 
         for fifo_length in buf['FIFOs'].keys():
-            p.PrintLine('uint%d_t FIFO_%d_%s_ptr = 0;' % (2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor))), fifo_length/unroll_factor, b.name))
+            ptr_width = 2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor)))
+            if ptr_width < 8:
+                ptr_width = 8
+            elif ptr_width > 64:
+                ptr_width = 64
+            p.PrintLine('uint%d_t FIFO_%d_%s_ptr = 0;' % (ptr_width, fifo_length/unroll_factor, b.name))
         p.PrintLine()
 
         msg = 'points aliases for %s' % b.name
@@ -589,7 +594,12 @@ def PrintCompute(p, stencil):
             for fifo_length in buf['FIFOs'].keys():
                 p.DoScope()
                 p.PrintLine('#pragma HLS latency min=1', 0)
-                p.PrintLine('FIFO_%d_%s_ptr = FIFO_%d_%s_ptr==uint%d_t(%d-1) ? 0 : FIFO_%d_%s_ptr+1;' % (fifo_length/unroll_factor, b.name, fifo_length/unroll_factor, b.name, 2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor))) ,fifo_length/unroll_factor, fifo_length/unroll_factor, b.name))
+                ptr_width = 2**math.ceil(math.log2(math.log2(fifo_length/unroll_factor)))
+                if ptr_width < 8:
+                    ptr_width = 8
+                elif ptr_width > 64:
+                    ptr_width = 64
+                p.PrintLine('FIFO_%d_%s_ptr = FIFO_%d_%s_ptr==uint%d_t(%d-1) ? 0 : FIFO_%d_%s_ptr+1;' % (fifo_length/unroll_factor, b.name, fifo_length/unroll_factor, b.name, ptr_width ,fifo_length/unroll_factor, fifo_length/unroll_factor, b.name))
                 p.UnScope()
 
 
