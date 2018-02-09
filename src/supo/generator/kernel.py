@@ -595,12 +595,12 @@ def PrintCompute(p, stencil):
 
     if stencil.iterate:
         for b in stencil.GetConsumerBuffers():
-            p.DoScope()
-            p.PrintLine('#pragma HLS latency min=1', 0)
-
             s = b.parent
             if s.PreserveBorderFrom() is None:
                 continue
+            p.DoScope()
+            p.PrintLine('#pragma HLS latency min=1', 0)
+
             overall_stencil_dim = GetStencilDim(overall_stencil_window)
             PrintIfTile = lambda d: p.PrintLine('if(%c_%s>=TILE_SIZE_DIM_%d)' % (coords_in_tile[d], s.name, d))
             PrintIfTileLastDim = lambda d: p.PrintLine('if(%c_%s >= input_size_dim_%d)' % (coords_in_tile[d], s.name, d))
