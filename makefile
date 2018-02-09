@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp
+.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp check-git-status
 
 APP ?= blur
 SDA_VER := 2017.1
@@ -105,8 +105,8 @@ kernel: $(TMP)/$(KERNEL_SRCS)
 check-afi-status:
 	@echo -n 'AFI state: ';aws ec2 describe-fpga-images --fpga-image-ids $$(jq -r '.FpgaImageId' $(BIT)/$(HW_XCLBIN:.xclbin=.afi))|jq '.FpgaImages[0].State.Code' -r
 
-mktemp:
-	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
+check-git-status:
+	@echo $(COMMIT)
 
 ############################## generate source files ##############################
 $(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).supo
