@@ -31,7 +31,7 @@ AWS_AFI_DIR ?= afis
 AWS_AFI_LOG ?= logs
 CXX ?= g++
 CLCXX ?= xocc
-COMMIT = $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quiet || echo '-dirty')
+COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quiet || echo '-dirty')
 
 XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
