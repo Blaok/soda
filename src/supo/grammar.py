@@ -281,13 +281,27 @@ class Func(object):
         return '%s(%s)' % (self.name, ', '.join(str(op) for op in self.operand))
 
     def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
-        return '%s(%s)' % (self.name, ', '.join(op.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency) for op in self.operand))
+        if add_latency:
+            operand_vars = [op.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency) for op in self.operand]
+            printer.PrintLine('%s %s[1];' % (self.GetType(buffers), printer.NewVar()))
+            new_var = printer.LastVar()
+            printer.PrintLine('#pragma HLS resource variable=%s latency=1 core=RAM_2P_LUTRAM' % new_var, 0)
+            printer.DoScope()
+            printer.PrintLine('#pragma HLS latency min=1', 0)
+            printer.PrintLine('%s[0] = %s(%s);' % (new_var, self.name, ', '.join(operand_vars)))
+            printer.UnScope()
+            printer.PrintLine('%s %s = %s[0];' % (self.GetType(buffers), printer.NewVar(), new_var))
+            return printer.LastVar()
+        else:
+            return '%s(%s)' % (self.name, ', '.join(op.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency) for op in self.operand))
 
     def GetType(self, buffers):
-        if self.name in ('sqrt',):   # TODO: complete function type mapping
-            return next(iter(self.operand)).GetType(buffers)
-        else:
-            raise SemanticError('cannot get result type of function %s' % self.name)
+        if not hasattr(self, 'type'):
+            if self.name in ('sqrt',):   # TODO: complete function type mapping
+                self.type = next(iter(self.operand)).GetType(buffers)
+            else:
+                raise SemanticError('cannot get result type of function %s' % self.name)
+        return self.type
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
