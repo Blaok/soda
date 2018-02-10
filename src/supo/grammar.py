@@ -202,7 +202,7 @@ class Term(object):
                 new_var = printer.LastVar()
                 printer.PrintLine('#pragma HLS resource variable=%s latency=1 core=RAM_2P_LUTRAM' % new_var, 0)
                 printer.DoScope()
-                printer.PrintLine('#pragma HLS latency min=1', 0)
+                printer.PrintLine('#pragma HLS latency min=10', 0)
                 printer.PrintLine('%s[0] = %s %s %s;' % (new_var, last_var, operator, this_var))
                 printer.UnScope()
                 printer.PrintLine('%s %s = %s[0];' % (this_type, printer.NewVar(), new_var))
