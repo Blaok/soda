@@ -752,7 +752,7 @@ def PrintTest(p, stencil):
             p.PrintLine('for(int32_t %c = %d; %c<dims[%d]-%d; ++%c)' % (coords_in_orig[dim], output_idx[dim], coords_in_orig[dim], dim, stencil_dim[dim]-output_idx[dim]-1, coords_in_orig[dim]))
             p.DoScope()
         for e in s.expr:
-            p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+            e.PrintCode(p, stencil.buffers, LoadPrinter, StorePrinter)
         p.PrintLine()
         if len(s.output.children)==0:
             for c in range(stencil.output.chan):

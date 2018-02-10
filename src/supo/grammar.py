@@ -2,6 +2,7 @@
 from collections import deque, namedtuple
 import copy
 import logging
+import math
 import operator
 import os
 import sys
@@ -79,6 +80,12 @@ class SemanticWarn(Exception):
 
 Load = namedtuple('Load', ['name', 'chan', 'idx'])
 
+def GetResultType(operand1, operand2, operator):
+    for t in ('double', 'float') + sum([('int%d_t'%w, 'uint%d_t'%w) for w in (64, 32, 16, 8)], tuple()):
+        if t in (operand1, operand2):
+            return t
+    raise SemanticError('cannot parse type: %s %s %s' % (operand1, operator, operand2))
+
 class SupoProgram(object):
     def __init__(self, **kwargs):
         self.burst_width = kwargs.pop('burst_width')
@@ -122,11 +129,29 @@ class Expression(object):
                 str(operand)+' '+str(operator)+' ' for operand, operator
                     in zip(self.operand, self.operator)]), str(self.operand[-1]))
 
-    def GetCode(self, LoadPrinter, StorePrinter):
-        return '%s%s' % \
-            (''.join([
-                operand.GetCode(LoadPrinter, StorePrinter)+' '+operator+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode(LoadPrinter, StorePrinter))
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+        last_operand = next(iter(self.operand))
+        last_var = last_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+        last_type = last_operand.GetType(buffers)
+        for this_operand, operator in zip(self.operand[1:], self.operator):
+            this_type = GetResultType(last_type, this_operand.GetType(buffers), operator)
+            this_var = this_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+            printer.PrintLine('%s %s = %s %s %s;' % (this_type, printer.NewVar(), last_var, operator, this_var))
+            last_operand = this_operand
+            last_var = printer.LastVar()
+            last_type = this_type
+        return printer.LastVar()
+
+    def GetType(self, buffers):
+        if not hasattr(self, 'type'):
+            last_operand = next(iter(self.operand))
+            last_type = last_operand.GetType(buffers)
+            for this_operand, operator in zip(self.operand[1:], self.operator):
+                this_type = GetResultType(last_type, this_operand.GetType(buffers), operator)
+                last_operand = this_operand
+                last_type = this_type
+            self.type = last_type
+        return self.type
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -155,11 +180,29 @@ class Term(object):
                 str(operand)+' '+str(operator)+' ' for operand, operator
                     in zip(self.operand, self.operator)]), str(self.operand[-1]))
 
-    def GetCode(self, LoadPrinter, StorePrinter):
-        return '%s%s' % \
-            (''.join([
-                operand.GetCode(LoadPrinter, StorePrinter)+' '+operator+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), self.operand[-1].GetCode(LoadPrinter, StorePrinter))
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+        last_operand = next(iter(self.operand))
+        last_var = last_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+        last_type = last_operand.GetType(buffers)
+        for this_operand, operator in zip(self.operand[1:], self.operator):
+            this_type = GetResultType(last_type, this_operand.GetType(buffers), operator)
+            this_var = this_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+            printer.PrintLine('%s %s = %s %s %s;' % (this_type, printer.NewVar(), last_var, operator, this_var))
+            last_operand = this_operand
+            last_var = printer.LastVar()
+            last_type = this_type
+        return printer.LastVar()
+
+    def GetType(self, buffers):
+        if not hasattr(self, 'type'):
+            last_operand = next(iter(self.operand))
+            last_type = last_operand.GetType(buffers)
+            for this_operand, operator in zip(self.operand[1:], self.operator):
+                this_type = GetResultType(last_type, this_operand.GetType(buffers), operator)
+                last_operand = this_operand
+                last_type = this_type
+            self.type = last_type
+        return self.type
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -185,8 +228,15 @@ class Factor(object):
     def __str__(self):
         return ('-%s' if self.sign=='-' else '%s') % str(self.operand)
 
-    def GetCode(self, LoadPrinter, StorePrinter):
-        return ('-%s' if self.sign=='-' else '%s') % self.operand.GetCode(LoadPrinter, StorePrinter)
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+        this_var = self.operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+        printer.PrintLine('%s %s = %s%s;' % (self.GetType(buffers), printer.NewVar(), '-' if self.sign=='-' else '', this_var))
+        return printer.LastVar()
+
+    def GetType(self, buffers):
+        if not hasattr(self, 'type'):
+            self.type = self.operand.GetType(buffers)
+        return self.type
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -210,8 +260,14 @@ class Func(object):
     def __str__(self):
         return '%s(%s)' % (self.name, ', '.join(str(op) for op in self.operand))
 
-    def GetCode(self, LoadPrinter, StorePrinter):
-        return '%s(%s)' % (self.name, ', '.join(op.GetCode(LoadPrinter, StorePrinter) for op in self.operand))
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+        return '%s(%s)' % (self.name, ', '.join(op.PrintCode(printer, buffers, LoadPrinter, StorePrinter) for op in self.operand))
+
+    def GetType(self, buffers):
+        if self.name in ('sqrt',):   # TODO: complete function type mapping
+            return next(iter(self.operand)).GetType(buffers)
+        else:
+            raise SemanticError('cannot get result type of function %s' % self.name)
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -248,25 +304,52 @@ class Operand(object):
         if self.expr:
             return '(%s)' % str(self.expr)
 
-    def GetCode(self, LoadPrinter, StorePrinter):
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
         if self.func:
-            return self.func.GetCode(LoadPrinter, StorePrinter)
+            return self.func.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
         if self.name:
             return LoadPrinter(self)
         if self.num:
             return str(self.num)
         if self.expr:
-            return '(%s)' % self.expr.GetCode(LoadPrinter, StorePrinter)
+            return '(%s)' % self.expr.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+
+    def GetType(self, buffers):
+        if not hasattr(self, 'type'):
+            if self.func:
+                self.type = self.func.GetType(buffers)
+            elif self.name:
+                self.type = buffers[self.name].type
+            elif self.num:
+                if '.' in self.num or self.num[-1] in 'Ff':
+                    if self.num[-1] in 'Ff':
+                        self.type = 'float'
+                    else:
+                        self.type = 'double'
+                else:
+                    if self.num[0] == '+' or 'u' in self.num or 'U' in self.num:
+                        self.type = 'u'
+                        width = 2**math.ceil(math.log2(math.log2(StringToInteger(self.num))))
+                    else:
+                        self.type = ''
+                        width = 2**math.ceil(math.log2(math.log2(2*math.fabs(StringToInteger(self.num)))))
+                    width = 8 if width < 8 else 64 if width > 64 else width
+                    self.type += 'int%d_t' % width
+            elif self.expr:
+                self.type = self.expr.GetType(buffers)
+            else:
+                raise SemanticError('invalid Operand %s' % str(self))
+        return self.type
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
-            if self.func is not None:
+            if self.func:
                 self.loads = self.func.GetLoads()
-            elif self.expr is not None:
+            elif self.expr:
                 self.loads = self.expr.GetLoads()
-            elif self.num is not None:
+            elif self.num:
                 self.loads = []
-            elif self.name is not None:
+            elif self.name:
                 logger.debug('load at %s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx))))
                 self.loads = [Load(self.name, self.chan, self.idx)]
             else:
@@ -274,23 +357,23 @@ class Operand(object):
         return self.loads
 
     def Normalize(self, norm_offset, extra_params):
-        if self.expr is not None:
+        if self.expr:
             self.expr.Normalize(norm_offset, extra_params)
             del self.loads
-        elif self.num is not None:
+        elif self.num:
             pass
-        elif self.name is not None:
+        elif self.name:
             msg = '%s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx)))
             self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
             logger.debug('load at %s normalized to %s[%d](%s)' % (msg, self.name, self.chan, ', '.join(map(str, self.idx))))
             del self.loads
 
     def MutateLoad(self, cb):
-        if self.expr is not None:
+        if self.expr:
             self.expr.MutateLoad(cb)
-        elif self.num is not None:
+        elif self.num:
             pass
-        elif self.name is not None:
+        elif self.name:
             self.name = cb(self.name)
         if hasattr(self, 'loads'):
             del self.loads
@@ -370,8 +453,9 @@ class Output(object):
         self.preserve_border = node_name
         self.border = ('preserve', node_name)
 
-    def GetCode(self, LoadPrinter, StorePrinter):
-        return [x.GetCode(LoadPrinter, StorePrinter) for x in self.expr]
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+        for e in self.expr:
+            e.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -436,8 +520,9 @@ class Intermediate(object):
         self.preserve_border = node_name
         self.border = ('preserve', node_name)
 
-    def GetCode(self, LoadPrinter, StorePrinter):
-        return [x.GetCode(LoadPrinter, StorePrinter) for x in self.expr]
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+        for e in self.expr:
+            e.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -479,8 +564,8 @@ class OutputExpr(object):
     def __repr__(self):
         return '%s(%s)' % (self.__class__.__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items() if k[0]!='_'))
 
-    def GetCode(self, LoadPrinter, StorePrinter):
-        return '%s = %s;' % (StorePrinter(self), self.expr.GetCode(LoadPrinter, StorePrinter))
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+        printer.PrintLine('%s = %s;' % (StorePrinter(self), self.expr.PrintCode(printer, buffers, LoadPrinter, StorePrinter)))
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):

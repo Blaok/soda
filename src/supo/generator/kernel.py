@@ -531,7 +531,7 @@ def PrintCompute(p, stencil):
             p.DoScope()
             for e in s.expr:
                 p.PrintLine('#pragma HLS latency min=1', 0)
-                p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+                e.PrintCode(p, stencil.buffers, LoadPrinter, StorePrinter)
             p.UnScope()
             #for d in range(stencil.dim-1):
             #    if stencil_dim[d] < 2:
@@ -550,7 +550,7 @@ def PrintCompute(p, stencil):
             #    p.UnScope()
         else:
             for e in s.expr:
-                p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
+                e.PrintCode(p, stencil.buffers, LoadPrinter, StorePrinter)
 
         if len(s.output.children)==0:
             p.PrintLine()

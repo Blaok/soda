@@ -262,7 +262,7 @@ class Stencil(object):
             _logger.debug('stage: %s@(%s) <- [%s]' % (s.name, ', '.join(map(str, s.idx)), ', '.join('%s@%s' % (x.name, list(set(s.window[x.name]))) for x in s.inputs.values())))
         for s in self.stages.values():
             for e in s.expr:
-                _logger.debug('stage.expr: %s' % e.GetCode(LoadPrinter, StorePrinter))
+                _logger.debug('stage.expr: %s' % e)
         for s in self.stages.values():
             for n, w in s.offset.items():
                 _logger.debug('stage.offset: %s@%d <- %s@[%s]' % (s.name, Serialize(s.output.idx, self.tile_size), n, ', '.join(map(str, w))))
