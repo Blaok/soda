@@ -60,7 +60,7 @@ HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTI
 
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
-CLCXX_OPT += -s -g --temp_dir $(TMP)
+CLCXX_OPT += -s -g --temp_dir $(TMP) -O3 -j8
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank0+' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
