@@ -129,14 +129,24 @@ class Expression(object):
                 str(operand)+' '+str(operator)+' ' for operand, operator
                     in zip(self.operand, self.operator)]), str(self.operand[-1]))
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
         last_operand = next(iter(self.operand))
-        last_var = last_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+        last_var = last_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
         last_type = last_operand.GetType(buffers)
         for this_operand, operator in zip(self.operand[1:], self.operator):
             this_type = GetResultType(last_type, this_operand.GetType(buffers), operator)
-            this_var = this_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
-            printer.PrintLine('%s %s = %s %s %s;' % (this_type, printer.NewVar(), last_var, operator, this_var))
+            this_var = this_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
+            if add_latency:
+                printer.PrintLine('%s %s[1];' % (this_type, printer.NewVar()))
+                new_var = printer.LastVar()
+                printer.PrintLine('#pragma HLS resource variable=%s latency=1 core=RAM_2P_LUTRAM' % new_var, 0)
+                printer.DoScope()
+                printer.PrintLine('#pragma HLS latency min=1', 0)
+                printer.PrintLine('%s[0] = %s %s %s;' % (new_var, last_var, operator, this_var))
+                printer.UnScope()
+                printer.PrintLine('%s %s = %s[0];' % (this_type, printer.NewVar(), new_var))
+            else:
+                printer.PrintLine('%s %s = %s %s %s;' % (this_type, printer.NewVar(), last_var, operator, this_var))
             last_operand = this_operand
             last_var = printer.LastVar()
             last_type = this_type
@@ -180,14 +190,24 @@ class Term(object):
                 str(operand)+' '+str(operator)+' ' for operand, operator
                     in zip(self.operand, self.operator)]), str(self.operand[-1]))
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
         last_operand = next(iter(self.operand))
-        last_var = last_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+        last_var = last_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
         last_type = last_operand.GetType(buffers)
         for this_operand, operator in zip(self.operand[1:], self.operator):
             this_type = GetResultType(last_type, this_operand.GetType(buffers), operator)
-            this_var = this_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
-            printer.PrintLine('%s %s = %s %s %s;' % (this_type, printer.NewVar(), last_var, operator, this_var))
+            this_var = this_operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
+            if add_latency:
+                printer.PrintLine('%s %s[1];' % (this_type, printer.NewVar()))
+                new_var = printer.LastVar()
+                printer.PrintLine('#pragma HLS resource variable=%s latency=1 core=RAM_2P_LUTRAM' % new_var, 0)
+                printer.DoScope()
+                printer.PrintLine('#pragma HLS latency min=1', 0)
+                printer.PrintLine('%s[0] = %s %s %s;' % (new_var, last_var, operator, this_var))
+                printer.UnScope()
+                printer.PrintLine('%s %s = %s[0];' % (this_type, printer.NewVar(), new_var))
+            else:
+                printer.PrintLine('%s %s = %s %s %s;' % (this_type, printer.NewVar(), last_var, operator, this_var))
             last_operand = this_operand
             last_var = printer.LastVar()
             last_type = this_type
@@ -228,8 +248,8 @@ class Factor(object):
     def __str__(self):
         return ('-%s' if self.sign=='-' else '%s') % str(self.operand)
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
-        this_var = self.operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
+        this_var = self.operand.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
         printer.PrintLine('%s %s = %s%s;' % (self.GetType(buffers), printer.NewVar(), '-' if self.sign=='-' else '', this_var))
         return printer.LastVar()
 
@@ -260,8 +280,8 @@ class Func(object):
     def __str__(self):
         return '%s(%s)' % (self.name, ', '.join(str(op) for op in self.operand))
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
-        return '%s(%s)' % (self.name, ', '.join(op.PrintCode(printer, buffers, LoadPrinter, StorePrinter) for op in self.operand))
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
+        return '%s(%s)' % (self.name, ', '.join(op.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency) for op in self.operand))
 
     def GetType(self, buffers):
         if self.name in ('sqrt',):   # TODO: complete function type mapping
@@ -304,15 +324,15 @@ class Operand(object):
         if self.expr:
             return '(%s)' % str(self.expr)
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
         if self.func:
-            return self.func.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+            return self.func.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
         if self.name:
             return LoadPrinter(self)
         if self.num:
             return str(self.num)
         if self.expr:
-            return '(%s)' % self.expr.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+            return '(%s)' % self.expr.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
 
     def GetType(self, buffers):
         if not hasattr(self, 'type'):
@@ -453,9 +473,9 @@ class Output(object):
         self.preserve_border = node_name
         self.border = ('preserve', node_name)
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
         for e in self.expr:
-            e.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+            e.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -520,9 +540,9 @@ class Intermediate(object):
         self.preserve_border = node_name
         self.border = ('preserve', node_name)
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
         for e in self.expr:
-            e.PrintCode(printer, buffers, LoadPrinter, StorePrinter)
+            e.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
@@ -564,8 +584,8 @@ class OutputExpr(object):
     def __repr__(self):
         return '%s(%s)' % (self.__class__.__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items() if k[0]!='_'))
 
-    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter):
-        printer.PrintLine('%s = %s;' % (StorePrinter(self), self.expr.PrintCode(printer, buffers, LoadPrinter, StorePrinter)))
+    def PrintCode(self, printer, buffers, LoadPrinter, StorePrinter, add_latency=False):
+        printer.PrintLine('%s = %s;' % (StorePrinter(self), self.expr.PrintCode(printer, buffers, LoadPrinter, StorePrinter, add_latency)))
 
     def GetLoads(self):
         if not hasattr(self, 'loads'):
