@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp
+.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp check-git-status
 
 APP ?= blur
 SDA_VER := 2017.1
@@ -8,27 +8,30 @@ UNROLL_FACTOR ?= 64
 HOST_ARGS ?= 8000 800
 HOST_SRCS ?= $(APP)_run.cpp
 DRAM_BANK ?= 1
+ITERATE ?= 1
 
-CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
-COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
-HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).xclbin
+CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE).xclbin
+COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE).xclbin
+HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE).xclbin
 
-KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated).cpp
+KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE).cpp
 KERNEL_NAME ?= $(APP)_kernel
-HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))
+HOST_XCLSRC ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-iterate$(ITERATE).cpp
+HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-iterate$(ITERATE)
 
 SHELL = /bin/bash
 SRC ?= src
-OBJ ?= obj/$(word 2,$(subst :, ,$(XDEVICE)))
-BIN ?= bin/$(word 2,$(subst :, ,$(XDEVICE)))
-BIT ?= bit/$(word 2,$(subst :, ,$(XDEVICE)))
-RPT ?= rpt/$(word 2,$(subst :, ,$(XDEVICE)))
-TMP ?= tmp/$(word 2,$(subst :, ,$(XDEVICE)))
+OBJ ?= obj/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+BIN ?= bin/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+BIT ?= bit/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+RPT ?= rpt/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+TMP ?= tmp/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
 
 AWS_AFI_DIR ?= afis
 AWS_AFI_LOG ?= logs
 CXX ?= g++
 CLCXX ?= xocc
+COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quiet || echo '-dirty')
 
 XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
@@ -57,7 +60,7 @@ HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTI
 
 CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
 CLCXX_OPT += --kernel $(KERNEL_NAME)
-CLCXX_OPT += -s -g --temp_dir $(TMP)
+CLCXX_OPT += -s -g --temp_dir $(TMP) -O3 -j8
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank0+' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
@@ -102,24 +105,24 @@ kernel: $(TMP)/$(KERNEL_SRCS)
 check-afi-status:
 	@echo -n 'AFI state: ';aws ec2 describe-fpga-images --fpga-image-ids $$(jq -r '.FpgaImageId' $(BIT)/$(HW_XCLBIN:.xclbin=.afi))|jq '.FpgaImages[0].State.Code' -r
 
-mktemp:
-	@TMP=$$(mktemp -d --suffix=-sdaccel-stencil-tmp);mkdir $${TMP}/src;cp -r $(SRC)/* $${TMP}/src;cp makefile generate-kernel.py $${TMP};echo -e "#!$${SHELL}\nrm \$$0;cd $${TMP}\n$${SHELL} \$$@ && rm -r $${TMP}" > mktemp.sh;chmod +x mktemp.sh
+check-git-status:
+	@echo $(COMMIT)
 
 ############################## generate source files ##############################
 $(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --kernel-file $@ $^
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --kernel-file $@ $^
 
-$(TMP)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).cpp: $(SRC)/$(APP).supo
+$(TMP)/$(HOST_XCLSRC): $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --source-file $@ $^
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --source-file $@ $^
 
 $(TMP)/$(APP).h: $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --header-file $@ $^
+	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --header-file $@ $^
 
 ############################## generate host binary ##############################
-$(BIN)/$(HOST_BIN): $(OBJ)/$(HOST_SRCS:.cpp=.o) $(OBJ)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).o
+$(BIN)/$(HOST_BIN): $(OBJ)/$(HOST_SRCS:.cpp=.o) $(OBJ)/$(HOST_XCLSRC:.cpp=.o)
 	@mkdir -p $(BIN)
 	$(WITH_SDACCEL) $(CXX) $(HOST_LFLAGS) $^ -o $@
 
@@ -134,9 +137,8 @@ $(OBJ)/%.o: $(TMP)/%.cpp
 	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
 	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -c $< -o $@
 
--include $(OBJ)/$(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1)).d
-
 -include $(OBJ)/$(HOST_SRCS:.cpp=.d)
+-include $(OBJ)/$(HOST_XCLSRC:.cpp=.d)
 
 ############################## generate bitstreams ##############################
 $(BIT)/$(CSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS)
@@ -160,7 +162,7 @@ $(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
 	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@ln -sf $(realpath $(TMP))/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/kernel_util_routed.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
 	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -l -o $@ $<
-	@cp --remove-destination $(TMP)/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/{*_timing_summary,kernel_util}_routed.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
+	@cp --remove-destination $(TMP)/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/{{*_timing_summary,kernel_util}_routed,*_util*_*}.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
 	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
 	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
 	src/fix-xclbin2-size $@

@@ -9,7 +9,7 @@ import operator
 import os
 import sys
 
-from supo.generator.utils import coords_in_tile, coords_in_orig, coords_tiled, type_width, max_dram_bank, Stencil, Printer, PrintDefine, PrintGuard, GetStencilDistance, GetStencilDim, GetOverallStencilWindow
+from supo.generator.utils import *
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -222,8 +222,8 @@ def PrintWrapped(p, stencil):
         p.PrintLine('cl_mem var_%s_cl;' % param.name)
     p.PrintLine()
 
-    p.PrintLine('uint64_t var_%s_buf_size = sizeof(%s)*%s*tile_size_linearized_i/dram_bank;' % (stencil.input.name, stencil.input.type, '*'.join(['tile_num_dim_%d'%x for x in range(stencil.dim-1)])))
-    p.PrintLine('uint64_t var_%s_buf_size = sizeof(%s)*%s*tile_size_linearized_o/dram_bank;' % (stencil.output.name, stencil.output.type, '*'.join(['tile_num_dim_%d'%x for x in range(stencil.dim-1)])))
+    p.PrintLine('uint64_t var_%s_buf_size = sizeof(%s)*(%s*tile_size_linearized_i/dram_bank+((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*(BURST_WIDTH/PIXEL_WIDTH_I));' % (stencil.input.name, stencil.input.type, '*'.join(['tile_num_dim_%d'%x for x in range(stencil.dim-1)])))
+    p.PrintLine('uint64_t var_%s_buf_size = sizeof(%s)*(%s*tile_size_linearized_o/dram_bank+((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank)+1)*(BURST_WIDTH/PIXEL_WIDTH_O));' % (stencil.output.name, stencil.output.type, '*'.join(['tile_num_dim_%d'%x for x in range(stencil.dim-1)])))
     p.PrintLine()
 
     p.PrintLine('unsigned char *kernel_binary;')
@@ -495,7 +495,7 @@ def PrintWrapped(p, stencil):
 
     p.PrintLine('int kernel_arg = 0;')
     p.PrintLine('int64_t tile_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*BURST_WIDTH/PIXEL_WIDTH_I*dram_bank/UNROLL_FACTOR;' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
-    p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*tile_num_dim_0;' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
+    p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s+STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*tile_num_dim_0;' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
     p.PrintLine('fprintf(*error_report, "INFO: tile_data_num = %ld, coalesced_data_num = %ld\\n", tile_data_num, coalesced_data_num);')
     p.PrintLine()
 
@@ -507,7 +507,7 @@ def PrintWrapped(p, stencil):
             p.PrintLine('if(dram_bank>%d) err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_%d_bank_%d_cl);' % (i, stencil.input.name, c, i))
     for param in stencil.extra_params.values():
         p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_cl);' % param.name)
-    for variable in ['coalesced_data_num', 'tile_data_num']+['tile_num_dim_%d'%x for x in range(stencil.dim-1)]+['%s_size_dim_%d' % (stencil.input.name, stencil.dim-1)]:
+    for variable in ['coalesced_data_num', 'tile_data_num']+['tile_num_dim_%d'%x for x in range(stencil.dim-1)]+['%s_size_dim_%d' % (stencil.input.name, d) for d in range(stencil.dim)]:
         p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(%s), &%s);' % ((variable,)*2))
     p.PrintLine('if(err != CL_SUCCESS)')
     p.DoScope()
@@ -558,18 +558,25 @@ def PrintWrapped(p, stencil):
         p.DoScope()
         p.PrintLine('int32_t actual_tile_size_dim_%d = (tile_index_dim_%d==tile_num_dim_%d-1) ? %s_size_dim_%d-(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)*tile_index_dim_%d : TILE_SIZE_DIM_%d;' % ((dim,)*3+(stencil.input.name,)+(dim,)*5))
 
-    p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, stencil.dim-1, coords_in_tile[stencil.dim-1]))
-    p.DoScope()
-    for dim in range(stencil.dim-2, -1, -1):
-        p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[dim], coords_in_tile[dim], dim, dim, coords_in_tile[dim]))
+    if stencil.iterate:
+        p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, coords_in_tile[stencil.dim-1]))
         p.DoScope()
+        for dim in range(stencil.dim-2, -1, -1):
+            p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d; ++%c)' % (coords_in_tile[dim], coords_in_tile[dim], dim, coords_in_tile[dim]))
+            p.DoScope()
+    else:
+        p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, stencil.dim-1, coords_in_tile[stencil.dim-1]))
+        p.DoScope()
+        for dim in range(stencil.dim-2, -1, -1):
+            p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[dim], coords_in_tile[dim], dim, dim, coords_in_tile[dim]))
+            p.DoScope()
 
     p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(coords_tiled))
     p.PrintLine('// (%s) is coordinates in original image' % ', '.join(coords_in_orig))
     p.PrintLine('// (%s) is coordinates in a tile' % ', '.join(coords_in_tile))
     offset_in_tile = '+'.join(['%c%s' % (coords_in_tile[x], ''.join(['*TILE_SIZE_DIM_%d'%xx for xx in range(x)])) for x in range(stencil.dim)])
-    p.PrintLine('int32_t burst_index = (%s+STENCIL_DISTANCE)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);' % offset_in_tile)
-    p.PrintLine('int32_t burst_residue = (%s+STENCIL_DISTANCE)%%(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);' % offset_in_tile)
+    p.PrintLine('int32_t burst_index = (%s+STENCIL_OFFSET)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);' % offset_in_tile)
+    p.PrintLine('int32_t burst_residue = (%s+STENCIL_OFFSET)%%(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);' % offset_in_tile)
     for dim in range(stencil.dim-1):
         p.PrintLine('int32_t %c = tile_index_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)+%c;' % (coords_in_orig[dim], dim, dim, dim, coords_in_tile[dim]))
     p.PrintLine('int32_t %c = %c;' % (coords_in_orig[stencil.dim-1], coords_in_tile[stencil.dim-1]))
@@ -706,7 +713,10 @@ def PrintTest(p, stencil):
         dim = stencil.dim-d-1
         p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, coords_in_orig[dim]))
         p.DoScope()
-    p.PrintLine('%s_img[%s] = %s;' % (stencil.input.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(input_dim)]), '+'.join(coords_in_orig[0:input_dim])))
+    init_val = '+'.join(coords_in_orig[0:input_dim])
+    if IsFloat(stencil.input.type):
+        init_val = '%s(%s)/%s(%s%s)' % (stencil.input.type, init_val, stencil.input.type, '%d+' % stencil.input.chan if stencil.input.chan>1 else '', '+'.join('dims[%d]' % d for d in range(stencil.dim)))
+    p.PrintLine('%s_img[%s] = %s;' % (stencil.input.name, '+'.join('%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(input_dim)), init_val))
     for d in range(0, input_dim):
         p.UnScope()
     p.PrintLine()
@@ -727,57 +737,79 @@ def PrintTest(p, stencil):
     p.PrintLine('int error_count = 0;')
     p.PrintLine()
 
-    LoadPrinter = lambda node: '%s_img%s' % (node.name, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['(%c%+d)*%s.stride[%d]' % (coords_in_orig[d], node.idx[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
+    LoadPrinter = lambda node: '%s_img%s' % (node.name, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['(%c%+d)*%s.stride[%d]' % (coords_in_orig[d], node.idx[d] - s.idx[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
     StorePrinter = lambda node: '%s result_chan_%d' % (stencil.output.type, node.chan) if node.name == stencil.output.name else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
 
+    for s in stencil.GetStagesChronologically():
+        logger.debug('emit code to produce %s_img' % s.output.name)
+        p.PrintLine('// produce %s, can be parallelized with -fopenmp' % s.output.name)
+        p.PrintLine('#pragma omp parallel for', 0)
+        stencil_window = GetOverallStencilWindow(stencil.input, s.output)
+        stencil_dim = GetStencilDim(stencil_window)
+        output_idx = GetStencilWindowOffset(stencil_window)
+        for d in range(0, stencil.dim):
+            dim = stencil.dim-d-1
+            p.PrintLine('for(int32_t %c = %d; %c<dims[%d]-%d; ++%c)' % (coords_in_orig[dim], output_idx[dim], coords_in_orig[dim], dim, stencil_dim[dim]-output_idx[dim]-1, coords_in_orig[dim]))
+            p.DoScope()
+        for e in s.expr:
+            e.PrintCode(p, stencil.buffers, LoadPrinter, StorePrinter)
+        p.PrintLine()
+        if len(s.output.children)==0:
+            for c in range(stencil.output.chan):
+                run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
+                p.PrintLine('%s val_fpga = %s;' % (stencil.output.type, run_result))
+                p.PrintLine('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
+                p.PrintLine('double threshold = 0.00001;')
+                p.PrintLine('if(nullptr!=getenv("THRESHOLD"))')
+                p.DoScope()
+                p.PrintLine('threshold = atof(getenv("THRESHOLD"));')
+                p.UnScope()
+                p.PrintLine('threshold *= threshold;')
+                p.PrintLine('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > threshold)')
+                p.DoScope()
+                params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
+                if stencil.output.type[-2:]=='_t':
+                    p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
+                else:
+                    p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
+                p.PrintLine('++error_count;')
+                p.UnScope()
+        for d in range(0, stencil.dim):
+            p.UnScope()
+        p.PrintLine()
 
-    #logger.info('calculate buffer offsets')
-    processing_queue = deque([stencil.input.name])
-    processed_buffers = {stencil.input.name}
-    while len(processing_queue)>0:
-        b = stencil.buffers[processing_queue.popleft()]
-        logger.debug('inspecting %s_img\'s children' % b.name)
-        for s in b.children:
-            if {x.name for x in s.inputs.values()} <= processed_buffers and s.output.name not in processed_buffers:
-                # good, all inputs are processed, can emit code to produce current buffer
-                logger.debug('input%s for %s_img (i.e. %s) %s produced' % ('' if len(s.inputs)==1 else 's', s.output.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
-
-                logger.debug('emit code to produce %s_img' % s.output.name)
-                p.PrintLine('// produce %s, can be parallelized with -fopenmp' % s.output.name)
-                p.PrintLine('#pragma omp parallel for', 0)
-                for d in range(0, stencil.dim):
-                    dim = stencil.dim-d-1
-                    stencil_dim = GetStencilDim(GetOverallStencilWindow(stencil.input, s.output))
-                    p.PrintLine('for(int32_t %c = 0; %c<dims[%d]-%d; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, stencil_dim[dim], coords_in_orig[dim]))
+        if s.PreserveBorderFrom():
+            p.PrintLine('// handle borders for iterative stencil')
+            p.PrintLine('#pragma omp parallel for', 0)
+            bb = s.PreserveBorderFrom()
+            stencil_window = GetOverallStencilWindow(bb, s.output)
+            stencil_dim = GetStencilDim(stencil_window)
+            output_idx = GetStencilWindowOffset(stencil_window)
+            for d in range(0, stencil.dim):
+                dim = stencil.dim-d-1
+                p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, coords_in_orig[dim]))
+                p.DoScope()
+            p.PrintLine('if(!(%s))' % ' && '.join('%c>=%d && %c<dims[%d]-%d' % (coords_in_orig[d], output_idx[d], coords_in_orig[d], d, stencil_dim[d]-output_idx[d]-1) for d in range(stencil.dim)))
+            p.DoScope()
+            GroudTruth = lambda c: '%s_img[%s+%d*%s.stride[%d]]' % (bb.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], bb.name, d) for d in range(stencil.dim)]), c, bb.name, stencil.dim)
+            for e in s.expr:
+                p.PrintLine('%s = %s;' % (StorePrinter(e), GroudTruth(e.chan)))
+            if len(s.output.children)==0:
+                for c in range(stencil.output.chan):
+                    run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
+                    p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
                     p.DoScope()
-                for e in s.expr:
-                    p.PrintLine(e.GetCode(LoadPrinter, StorePrinter))
-                p.PrintLine()
-                if len(s.output.children)==0:
-                    for c in range(stencil.output.chan):
-                        run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
-                        p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
-                        p.DoScope()
-                        params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
-                        if stencil.output.type[-2:]=='_t':
-                            p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
-                        else:
-                            p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
-                        p.PrintLine('++error_count;')
-                        p.UnScope()
-                for d in range(0, stencil.dim):
+                    params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
+                    if stencil.output.type[-2:]=='_t':
+                        p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
+                    else:
+                        p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
+                    p.PrintLine('++error_count;')
                     p.UnScope()
-                p.PrintLine()
-
-                processing_queue.append(s.output.name)
-                processed_buffers.add(s.output.name)
-            else:
-                for bb in s.inputs.values():
-                    if bb.name not in processed_buffers:
-                        logger.debug('%s_img requires %s_img as an input' % (s.output.name, bb.name))
-                        logger.debug('but %s_img isn\'t produced yet' % bb.name)
-                        logger.debug('add %s_img to scheduling queue' % bb.name)
-                        processing_queue.append(bb.name)
+            p.UnScope()
+            for d in range(0, stencil.dim):
+                p.UnScope()
+            p.PrintLine()
 
     p.PrintLine('if(error_count==0)')
     p.DoScope()
@@ -807,9 +839,11 @@ def PrintCode(stencil, host_file):
     PrintDefine(p, 'PIXEL_WIDTH_I', type_width[stencil.input.type])
     PrintDefine(p, 'PIXEL_WIDTH_O', type_width[stencil.output.type])
     overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
+    overall_stencil_distance = GetStencilDistance(overall_stencil_window, stencil.tile_size)
     for i, dim in enumerate(GetStencilDim(overall_stencil_window)):
         PrintDefine(p, 'STENCIL_DIM_%d' % i, dim)
-    PrintDefine(p, 'STENCIL_DISTANCE', GetStencilDistance(overall_stencil_window, stencil.tile_size))
+    PrintDefine(p, 'STENCIL_OFFSET', overall_stencil_distance - Serialize(GetStencilWindowOffset(overall_stencil_window), stencil.tile_size))
+    PrintDefine(p, 'STENCIL_DISTANCE', overall_stencil_distance)
     p.PrintLine()
 
     PrintLoadXCLBIN2(p)

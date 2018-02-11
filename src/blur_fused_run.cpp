@@ -3,7 +3,7 @@
 #include<string.h>
 #include<time.h>
 
-#include"gaussian.h"
+#include"blur_fused.h"
 
 int main(int argc, char **argv)
 {
@@ -18,8 +18,8 @@ int main(int argc, char **argv)
 
     const int32_t  input_width  = strtoul(argv[2], nullptr, 10);
     const int32_t  input_height = strtoul(argv[3], nullptr, 10);
-    const int32_t output_width  = input_width -4;
-    const int32_t output_height = input_height-4;
+    const int32_t output_width  = input_width -2;
+    const int32_t output_height = input_height-2;
 
     uint16_t*  input_img = new uint16_t[ input_width* input_height];
     uint16_t* output_img = new uint16_t[output_width*output_height];
@@ -48,12 +48,10 @@ int main(int argc, char **argv)
     timespec t1,t2;
     double elapsed_time = 0.;
     clock_gettime(CLOCK_REALTIME, &t1);
-    gaussian(&input, &output, argv[1]);
+    blur_fused(&input, &output, argv[1]);
     clock_gettime(CLOCK_REALTIME, &t2);
     elapsed_time += (double(t2.tv_sec-t1.tv_sec)+(t2.tv_nsec-t1.tv_nsec)/1e9)*1e6;
     printf("Kernel runtime: %lf us\n", elapsed_time);
-
-    return 0;
 
     // Print the output_img.
     int error_count = 0;
