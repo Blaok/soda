@@ -37,9 +37,9 @@ def PrintComputeStage(printer, stencil, stage):
         printer.PrintLine('// '+msg)
         printer.PrintLine('int32_t i = pe_id-%d;' % delay)
         for i in range(1, len(stencil.tile_size)):
-            printer.PrintLine('int32_t %c = 0;' % coords_in_tile[i])
+            printer.PrintLine('uint16_t %c = 0;' % coords_in_tile[i])
         for i in range(len(stencil.tile_size)-1):
-            printer.PrintLine('int32_t %c_base = 0;' % coords_in_orig[i])
+            printer.PrintLine('uint16_t %c_base = 0;' % coords_in_orig[i])
         printer.PrintLine()
 
     printer.PrintLine('compute_%s_epoch:' % stage.name, 0)
@@ -49,14 +49,14 @@ def PrintComputeStage(printer, stencil, stage):
 
     if stage.PreserveBorderFrom():
         for i in range(len(stencil.tile_size)-1):
-            printer.PrintLine('int32_t  %c = %c_base+%c;' % (coords_in_orig[i], coords_in_orig[i], coords_in_tile[i]))
-        printer.PrintLine('int32_t& %c = %c;' % (coords_in_orig[len(stencil.tile_size)-1], coords_in_tile[len(stencil.tile_size)-1]))
+            printer.PrintLine('uint16_t  %c = %c_base+%c;' % (coords_in_orig[i], coords_in_orig[i], coords_in_tile[i]))
+        printer.PrintLine('uint16_t& %c = %c;' % (coords_in_orig[len(stencil.tile_size)-1], coords_in_tile[len(stencil.tile_size)-1]))
 
         IndexTile = lambda d: '%c' % (coords_in_tile[d])
         IndexOrig = lambda d: '%c' % (coords_in_orig[d])
         output_idx = GetStencilWindowOffset(stencil_window)
         stencil_dim = GetStencilDim(stencil_window)
-        MarginCondition = lambda d: ('(0<=%s && %s<%d) || ' % (IndexOrig(d), IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
+        MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
         for d in range(stencil.dim):
             printer.PrintLine('bool margin_condition_dim_%d[1];' % d)
             printer.PrintLine('#pragma HLS resource variable=margin_condition_dim_%d latency=1 core=RAM_2P_LUTRAM' % d, 0)
@@ -77,7 +77,7 @@ def PrintComputeStage(printer, stencil, stage):
         printer.PrintLine()
 
     if stage.PreserveBorderFrom():
-        printer.PrintLine('if(%s>=0 && (%s))' % (IndexTile(0), ' || '.join('margin_condition_dim_%d[0]' % d for d in range(stencil.dim))))
+        printer.PrintLine('if(%s)' % (' || '.join('margin_condition_dim_%d[0]' % d for d in range(stencil.dim))))
         printer.DoScope()
         preserve_border_from = stage.PreserveBorderFrom()
         printer.PrintLine('%s_chan_%d<<load_%s_chan_%d_at_%s;' % (stage.name, c, preserve_border_from.name, c, GetIndicesId(stage.idx)))
@@ -1164,10 +1164,10 @@ def PrintStore(printer):
     printer.UnScope()
 
 def PrintForwarder(printer, forwarder):
-    printer.PrintFunc('template<typename T, uint64_t fifo_depth> void forward_%d' % forwarder, ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]+['hls::stream<T>& src']+['uint64_t data_num'])
+    printer.PrintFunc('template<typename T, uint32_t fifo_depth> void forward_%d' % forwarder, ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]+['hls::stream<T>& src']+['uint32_t data_num'])
     printer.DoScope()
     printer.PrintLine('forward_%d_epoch:' % forwarder, 0)
-    printer.PrintLine('for(uint64_t i = 0; i < data_num+fifo_depth; ++i)')
+    printer.PrintLine('for(uint32_t i = 0; i < data_num+fifo_depth; ++i)')
     printer.DoScope()
     printer.PrintLine('#pragma HLS pipeline II=1', 0)
     printer.PrintLine('if(i<fifo_depth)')
