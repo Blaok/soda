@@ -60,6 +60,12 @@ class Buffer(object):
     def PreserveBorderTo(self):
         return self.border[1] if self.border is not None and self.border[0] == 'preserve' else None
 
+    def IsOutput(self):
+        return len(self.children)==0
+
+    def IsInput(self):
+        return self.parent.IsInput()
+
 # Stage.window: {str: [(int, ...), ...], ...}
 # Stage.offset: {str: [int, ...], ...}
 # Stage.delay: {str: int, ...}
@@ -86,6 +92,12 @@ class Stage(object):
 
     def PreserveBorderFrom(self):
         return self.border[1] if self.border is not None and self.border[0] == 'preserve' else None
+
+    def IsOutput(self):
+        return self.output.IsOutput()
+
+    def IsInput(self):
+        return len(self.inputs)==0
 
 class Stencil(object):
     def __init__(self, **kwargs):
@@ -305,6 +317,87 @@ class Stencil(object):
             return node.expr
         raise SemanticError('cannot get expression for %s' % str(type(node)))
 
+    def GetReuseBuffers(self):
+        if not hasattr(self, 'reuse_buffers'):
+            self.reuse_buffer_lengths = {}
+            self.reuse_buffers = {}
+            for b in self.GetProducerBuffers():
+                self.reuse_buffers[b.name] = _GetBuffer(self.tile_size, b, self.unroll_factor)
+                self.reuse_buffer_lengths[b.name] = {}
+                for start, end in self.reuse_buffers[b.name][1:]:
+                    self.reuse_buffer_lengths[b.name][end] = (end-start)//self.unroll_factor
+        return self.reuse_buffers
+
+    def GetAllPoints(self):
+        if not hasattr(self, 'all_points'):
+            self.all_points = {}
+            for b in self.GetProducerBuffers():
+                self.all_points[b.name] = _GetPoints(self.tile_size, b, self.unroll_factor)
+        return self.all_points
+
+    def GetNextFIFO(self):
+        if not hasattr(self, 'next_fifo'):
+            self.next_fifo = {}
+            for name, reuse_buffer in self.GetReuseBuffers().items():
+                self.next_fifo[name] = {}
+                for start, end in reuse_buffer[1:]:
+                    if start<end:
+                        self.next_fifo[name][start] = end
+        return self.next_fifo
+
+    def GetForwarders(self):
+        if not hasattr(self, 'forwarders'):
+            all_points = self.GetAllPoints()
+            self.forwarders = set()
+            next_fifo = self.GetNextFIFO()
+            for src_name, dsts in all_points.items():
+                for dst_name, dst_point_dicts in dsts.items():
+                    for offset, points in sorted(dst_point_dicts.items()):
+                        self.forwarders |= {len(points) + (1 if offset in next_fifo[src_name] else 0)}
+        return self.forwarders
+
+    def GetReuseBufferLength(self, name, offset):
+        if not hasattr(self, 'reuse_buffer_lengths'):
+            self.GetReuseBuffers()
+        return self.reuse_buffer_lengths[name][offset]
+
+def _GetChains(tile_size, b, unroll_factor):
+    _logger.debug('get reuse chains of buffer %s' % b.name)
+    A_dag = set.union(*[(lambda offsets: set.union(*[{max(offsets)+i-x+s.delay[b.name] for x in offsets} for i in range(unroll_factor)]))(SerializeIterative(s.window[b.name], tile_size)) for s in b.children])
+    _logger.debug('A† of buffer %s: %s' % (b.name, A_dag))
+    chains = sum(reversed([tuple([tuple(sorted(x for x in A_dag if x%unroll_factor == i))]) for i in range(unroll_factor)]), ())
+    for idx, chain in enumerate(chains):
+        _logger.debug('reuse chain %d of buffer %s: %s' % (idx, b.name, chain))
+    return chains
+
+def _GetPoints(tile_size, b, unroll_factor):
+    all_points = {} # {name:{offset:{unroll_index:point_index}}}
+    for s in b.children:
+        all_points[s.name] = {}
+        offsets = SerializeIterative(s.window[b.name], tile_size)
+        max_offset = max(offsets)
+        for unroll_index in range(unroll_factor):
+            for idx, offset in enumerate(offsets):
+                all_points[s.name].setdefault(max_offset-offset+s.delay[b.name]+unroll_index, {})[unroll_factor-1-unroll_index] = idx
+    for s in b.children:
+        for offset, points in all_points[s.name].items():
+            for unroll_index, point in points.items():
+                _logger.debug('%s <- %s @ offset=%d <=> (%s) @ unroll_index=%d' % (s.name, b.name, offset, ', '.join(map(str, s.window[b.name][point])), unroll_index))
+    return all_points
+
+def _GetBuffer(tile_size, b, unroll_factor):
+    reuse_buffer = [None]  # [length, (start, end), (start, end), ...]
+    offsets = []
+    for chain in _GetChains(tile_size, b, unroll_factor):
+        reuse_buffer.append((chain[0], chain[0]))
+        offsets.append(chain[0])
+        for j in range(len(chain)-1):
+            reuse_buffer.append((chain[j], chain[j+1]))
+            offsets.append(chain[j+1])
+    reuse_buffer[0] = max(offsets)+1
+    _logger.debug('reuse chains of buffer %s: %s' % (b.name, reuse_buffer))
+    return reuse_buffer
+
 class Printer(object):
     def __init__(self, out):
         self.out = out
@@ -349,10 +442,30 @@ class Printer(object):
     def LastVar(self, offset=-1):
         return 'assign_%d' % (self.assign+offset)
 
+    def PrintFunc(self, name, params, suffix=''):
+        lines = [name+'(']
+        for param in params:
+            if (self.indent + min(1, len(lines)-1))*4+len(lines[-1])+len(param+', ') > 100020:
+                lines.append(param+', ')
+            else:
+                lines[-1] += param+', '
+        if lines[-1][-2:] == ', ':
+            lines[-1] = lines[-1][:-2]+')'+suffix
+        line = lines.pop(0)
+        self.PrintLine(line)
+        if lines:
+            self.DoIndent()
+            for line in lines:
+                self.PrintLine(line)
+            self.UnIndent()
+
 def GetCType(supo_type):
     if supo_type in {'uint8', 'uint16', 'uint32', 'uint64', 'int8', 'int16', 'int32', 'int64'}:
         return supo_type+'_t'
     return supo_type
+
+def GetSupoType(c_type):
+    return c_type[:-2] if c_type[-2:] == '_t' else c_type
 
 def IsFloat(supo_type):
     return supo_type in {'float', 'double'}
@@ -366,6 +479,9 @@ def PrintDefine(printer, var, val):
     printer.PrintLine('#ifndef %s' % var)
     printer.PrintLine('#define %s %d' % (var, val))
     printer.PrintLine('#endif//%s' % var)
+
+def GetIndicesId(indices):
+    return '_'.join(str(idx).replace('-', 'm') for idx in indices)
 
 def Serialize(vec, tile_size):
     return sum((vec[i]*reduce(operator.mul, tile_size[:i]) for i in range(1, len(tile_size))), next(iter(vec)))
