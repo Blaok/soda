@@ -1019,8 +1019,9 @@ def PrintInterface(p, stencil):
     PrintForwarding(p, stencil, stencil.input.name)
     p.PrintLine()
     for stage in stencil.GetStagesChronologically():
+        inputs = tuple(reversed(range(unroll_factor))) if stage.IsOutput() else [start for start, end in stencil.GetReuseBuffers()[stage.name][1:] if start==end]
         for unroll_index in range(unroll_factor):
-            params = ['%s_offset_%d_chan_%d' % (stage.name, unroll_factor-1-unroll_index, c) for c in range(stencil.buffers[stage.name].chan)]
+            params = ['%s_offset_%s_chan_%d' % (stage.name, inputs[unroll_index], c) for c in range(stage.output.chan)]
             params += ['from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, stage.name, i, c, unroll_index) for input_name, input_window in stage.window.items() for i in range(len(input_window)) for c in range(stencil.buffers[input_name].chan)]
             params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
             params.append('epoch_num')
