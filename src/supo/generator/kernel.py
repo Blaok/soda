@@ -841,10 +841,10 @@ def PrintInterface(p, stencil):
     p.DoIndent()
     for c in range(output_chan):
         for i in range(dram_bank):
-            p.PrintLine('ap_uint<BURST_WIDTH>* var_output_%d_%d,' % (c, i))
+            p.PrintLine('ap_uint<BURST_WIDTH>* var_output_chan_%d_bank_%d,' % (c, i))
     for c in range(input_chan):
         for i in range(dram_bank):
-            p.PrintLine('ap_uint<BURST_WIDTH>* var_input_%d_%d,' % (c, i))
+            p.PrintLine('ap_uint<BURST_WIDTH>* var_input_chan_%d_bank_%d,' % (c, i))
     if extra_params:
         for param in extra_params.values():
             p.PrintLine('%s* var_%s,' % (param.type, param.name))
@@ -861,13 +861,13 @@ def PrintInterface(p, stencil):
     bank = 0
     for i in range(dram_bank):
         for c in range(output_chan):
-            p.PrintLine('#pragma HLS interface m_axi port=var_output_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
+            p.PrintLine('#pragma HLS interface m_axi port=var_output_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
         bank += 1
     if not dram_separate:
         bank = 0
     for i in range(dram_bank):
         for c in range(input_chan):
-            p.PrintLine('#pragma HLS interface m_axi port=var_input_%d_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
+            p.PrintLine('#pragma HLS interface m_axi port=var_input_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
         bank += 1
     if extra_params:
         for idx, param in enumerate(extra_params.values()):
@@ -875,10 +875,10 @@ def PrintInterface(p, stencil):
     p.PrintLine()
     for c in range(output_chan):
         for i in range(dram_bank):
-            p.PrintLine('#pragma HLS interface s_axilite port=var_output_%d_%d bundle=control' % (c, i), 0)
+            p.PrintLine('#pragma HLS interface s_axilite port=var_output_chan_%d_bank_%d bundle=control' % (c, i), 0)
     for c in range(input_chan):
         for i in range(dram_bank):
-            p.PrintLine('#pragma HLS interface s_axilite port=var_input_%d_%d bundle=control' % (c, i), 0)
+            p.PrintLine('#pragma HLS interface s_axilite port=var_input_chan_%d_bank_%d bundle=control' % (c, i), 0)
     if extra_params:
         for param in extra_params.values():
             p.PrintLine('#pragma HLS interface s_axilite port=var_%s bundle=control' % param.name, 0)
@@ -893,16 +893,16 @@ def PrintInterface(p, stencil):
 
     for c in range(input_chan):
         for i in range(dram_bank):
-            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >  input_stream_%d_%d( "input_stream_%d_%d");' % ((c, i)*2))
+            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> >  input_stream_chan_%d_bank_%d( "input_stream_chan_%d_bank_%d");' % ((c, i)*2))
     for c in range(output_chan):
         for i in range(dram_bank):
-            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> > output_stream_%d_%d("output_stream_%d_%d");' % ((c, i)*2))
+            p.PrintLine('hls::stream<ap_uint<BURST_WIDTH> > output_stream_chan_%d_bank_%d("output_stream_chan_%d_bank_%d");' % ((c, i)*2))
     for c in range(input_chan):
         for i in range(dram_bank):
-            p.PrintLine('#pragma HLS stream variable=input_stream_%d_%d depth=32' % (c, i), 0)
+            p.PrintLine('#pragma HLS stream variable=input_stream_chan_%d_bank_%d depth=32' % (c, i), 0)
     for c in range(output_chan):
         for i in range(dram_bank):
-            p.PrintLine('#pragma HLS stream variable=output_stream_%d_%d depth=32' % (c, i), 0)
+            p.PrintLine('#pragma HLS stream variable=output_stream_chan_%d_bank_%d depth=32' % (c, i), 0)
     p.PrintLine()
 
     if extra_params:
@@ -997,23 +997,25 @@ def PrintInterface(p, stencil):
                 p.PrintLine('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
     p.PrintLine()
 
-    p.PrintLine('uint64_t epoch_num = coalesced_data_num*%d/%d;' % (stencil.burst_width/type_width[stencil.input.type], unroll_factor))
+    p.PrintLine('uint64_t epoch_num = coalesced_data_num*%d/%d;' % (stencil.burst_width*stencil.dram_bank/type_width[stencil.input.type], unroll_factor))
     p.PrintLine()
 
     p.PrintLine('#pragma HLS dataflow', 0)
     for c in range(input_chan):
         for i in range(dram_bank):
-            p.PrintLine('load(input_stream_%d_%d, var_input_%d_%d, coalesced_data_num);' % ((c, i)*2))
+            p.PrintLine('load(input_stream_chan_%d_bank_%d, var_input_chan_%d_bank_%d, coalesced_data_num);' % ((c, i)*2))
+    for c in range(input_chan):
+        for i in range(dram_bank):
             p.PrintLine('unpack_%s(' % GetSupoType(stencil.input.type))
             p.DoIndent()
-            for unroll_index in reversed(range(unroll_factor)):
+            for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
                 p.PrintLine('%s,' % GetTensorAt(stencil.input.name, stencil.input.offset+unroll_index, c))
-            p.PrintLine('input_stream_%d_%d, coalesced_data_num);' % (c, i))
+            p.PrintLine('input_stream_chan_%d_bank_%d, coalesced_data_num);' % (c, i))
             p.UnIndent()
     p.PrintLine()
 
-    output_stream = ', '.join(', '.join('output_stream_%d_%d' % (c, x) for x in range(dram_bank)) for c in range(output_chan))
-    input_stream = ', '.join(', '.join('input_stream_%d_%d' % (c, x) for x in range(dram_bank)) for c in range(input_chan))
+    output_stream = ', '.join(', '.join('output_stream_chan_%d_bank_%d' % (c, x) for x in range(dram_bank)) for c in range(output_chan))
+    input_stream = ', '.join(', '.join('input_stream_chan_%d_bank_%d' % (c, x) for x in range(dram_bank)) for c in range(input_chan))
     tile_num_dim = ', '.join('tile_num_dim_%d' % d for d in range(stencil.dim-1))
     input_size_dim = ', '.join('input_size_dim_%d' % d for d in range(stencil.dim))
     PrintForwarding(p, stencil, stencil.input.name)
@@ -1034,13 +1036,15 @@ def PrintInterface(p, stencil):
 
     for c in range(output_chan):
         for i in range(dram_bank):
-            p.PrintLine('pack_%s(output_stream_%d_%d,' % (GetSupoType(stencil.output.type), c, i))
+            p.PrintLine('pack_%s(output_stream_chan_%d_bank_%d,' % (GetSupoType(stencil.output.type), c, i))
             p.DoIndent()
-            for unroll_index in reversed(range(unroll_factor)):
+            for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
                 p.PrintLine('%s,' % GetTensorAt(stencil.output.name, unroll_index, c))
             p.PrintLine('coalesced_data_num);')
             p.UnIndent()
-            p.PrintLine('store(var_output_%d_%d, output_stream_%d_%d, coalesced_data_num);' % ((c, i)*2))
+    for c in range(input_chan):
+        for i in range(dram_bank):
+            p.PrintLine('store(var_output_chan_%d_bank_%d, output_stream_chan_%d_bank_%d, coalesced_data_num);' % ((c, i)*2))
 
     p.UnScope()
     p.PrintLine()
@@ -1068,7 +1072,7 @@ def PrintUnpack(printer, burst_width, data_type, unroll_factor):
     if coalesced_size > unroll_factor:
         ii = coalesced_size/unroll_factor
     GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
-    GetDstName = lambda i: ('to_chain_%0'+str(len(str(unroll_factor-1)))+'d') % i
+    GetDstName = lambda i: ('to_%0'+str(len(str(unroll_factor-1)))+'d') % i
     printer.PrintLine('void unpack_%s(' % GetSupoType(data_type))
     printer.DoIndent()
     for unroll_index in range(unroll_factor):
@@ -1113,7 +1117,7 @@ def PrintPack(printer, burst_width, data_type, unroll_factor):
     if coalesced_size > unroll_factor:
         ii = coalesced_size/unroll_factor
     GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
-    GetDstName = lambda i: ('from_chain_%0'+str(len(str(unroll_factor-1)))+'d') % i
+    GetDstName = lambda i: ('from_%0'+str(len(str(unroll_factor-1)))+'d') % i
     printer.PrintLine('void pack_%s(hls::stream<ap_uint<%d> >& to,' % (GetSupoType(data_type), burst_width))
     printer.DoIndent()
     for unroll_index in range(unroll_factor):
@@ -1232,10 +1236,10 @@ def PrintCode(stencil, output_file):
     PrintLoad(printer)
     printer.PrintLine()
     for data_type in {stencil.input.type}:
-        PrintUnpack(printer, stencil.burst_width, data_type, stencil.unroll_factor)
+        PrintUnpack(printer, stencil.burst_width, data_type, stencil.unroll_factor//stencil.dram_bank)
         printer.PrintLine()
     for data_type in {stencil.output.type}:
-        PrintPack(printer, stencil.burst_width, data_type, stencil.unroll_factor)
+        PrintPack(printer, stencil.burst_width, data_type, stencil.unroll_factor//stencil.dram_bank)
         printer.PrintLine()
     PrintStore(printer)
     printer.PrintLine()
