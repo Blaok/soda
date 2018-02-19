@@ -28,9 +28,14 @@ def PrintComputeStage(printer, stencil, stage):
     printer.UnIndent()
     printer.DoScope()
 
-    stencil_window = GetOverallStencilWindow(stencil.input, stage.output)
+    stencil_window = GetOverallStencilWindow(stage.PreserveBorderFrom() if stage.PreserveBorderFrom() else stencil.input, stage.output)
     overall_idx = GetStencilWindowOffset(stencil_window)
-    delay = GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size)
+    iteration = 1
+    parent_buffer = stage.PreserveBorderFrom()
+    while parent_buffer is not None and parent_buffer.parent is not None:
+        parent_buffer = parent_buffer.parent.PreserveBorderFrom()
+        iteration += 1
+    delay = (GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size))*iteration
     if stage.PreserveBorderFrom():
         msg = 'aux parameters for %s' % stage.name
         logger.debug('generate '+msg)
@@ -57,12 +62,13 @@ def PrintComputeStage(printer, stencil, stage):
         output_idx = GetStencilWindowOffset(stencil_window)
         stencil_dim = GetStencilDim(stencil_window)
         MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
+        printer.PrintLine('bool margin_conditions[%d];' % stencil.dim)
+        printer.PrintLine('#pragma HLS array_partition variable=margin_conditions complete', 0)
+        printer.PrintLine('#pragma HLS resource variable=margin_conditions latency=1 core=RAM_2P_LUTRAM', 0)
         for d in range(stencil.dim):
-            printer.PrintLine('bool margin_condition_dim_%d[1];' % d)
-            printer.PrintLine('#pragma HLS resource variable=margin_condition_dim_%d latency=1 core=RAM_2P_LUTRAM' % d, 0)
             printer.DoScope()
             printer.PrintLine('#pragma HLS latency min=1', 0)
-            printer.PrintLine('margin_condition_dim_%d[0] = %s;' % (d, MarginCondition(d)))
+            printer.PrintLine('margin_conditions[%d] = %s;' % (d, MarginCondition(d)))
             printer.UnScope()
         printer.PrintLine()
 
@@ -77,7 +83,7 @@ def PrintComputeStage(printer, stencil, stage):
         printer.PrintLine()
 
     if stage.PreserveBorderFrom():
-        printer.PrintLine('if(%s)' % (' || '.join('margin_condition_dim_%d[0]' % d for d in range(stencil.dim))))
+        printer.PrintLine('if(%s)' % (' || '.join('margin_conditions[%d]' % d for d in range(stencil.dim))))
         printer.DoScope()
         preserve_border_from = stage.PreserveBorderFrom()
         printer.PrintLine('%s_chan_%d<<load_%s_chan_%d_at_%s;' % (stage.name, c, preserve_border_from.name, c, GetIndicesId(stage.idx)))
@@ -96,9 +102,27 @@ def PrintComputeStage(printer, stencil, stage):
         #printer.PrintLine('printf("epoch%%d pe%%d %%d %s %%d\\n", epoch, pe_id, epoch*%d+pe_id-%d, %s, store_%s_chan_%d);' % (' '.join(['%d']*len(params)), stencil.unroll_factor, delay, ', '.join('load_%s'%p[1] for p in params), stage.name, c))
 
     if stage.PreserveBorderFrom():
+        printer.PrintLine()
+        for d in range(stencil.dim-1):
+            if stencil_dim[d] < 2:
+                continue
+            printer.PrintLine('if(margin_conditions[%d])' % d)
+            #printer.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
+            printer.DoScope()
+            printer.PrintLine('switch(%s)' % IndexTile(d))
+            printer.DoScope()
+            for i in itertools.chain(range(output_idx[d], stencil_dim[d]-1), range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1)):
+                printer.PrintLine('case %d:' % i)
+                printer.DoScope()
+                printer.PrintLine('// duplicate output to border buffer')
+                printer.PrintLine('break;')
+                printer.UnScope()
+            printer.UnScope()
+            printer.UnScope()
+    if stage.PreserveBorderFrom():
         printer.UnScope()
         printer.PrintLine()
-        overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
+        overall_stencil_window = GetOverallStencilWindow(*([stage.PreserveBorderFrom(), stage.output] if stencil.preserve_border else [stencil.input, stencil.output]))
         overall_stencil_dim = GetStencilDim(overall_stencil_window)
         PrintIfTile = lambda d: printer.PrintLine('if(%c>=TILE_SIZE_DIM_%d)' % (coords_in_tile[d], d))
         PrintIfTileLastDim = lambda d: printer.PrintLine('if(%c >= input_size_dim_%d)' % (coords_in_tile[d], d))
