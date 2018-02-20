@@ -495,7 +495,9 @@ def PrintWrapped(p, stencil):
 
     p.PrintLine('int kernel_arg = 0;')
     p.PrintLine('int64_t tile_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*BURST_WIDTH/PIXEL_WIDTH_I*dram_bank/UNROLL_FACTOR;' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
-    p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s+STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*tile_num_dim_0;' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
+    p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s*%s+STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1);' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)]), '*'.join('tile_num_dim_%d'%d for d in range(stencil.dim-1))))
+    for d in range(stencil.dim-1):
+        p.PrintLine('uint32_t input_bound_dim_%d = tile_num_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1);' % (d, d, d, d))
     p.PrintLine('fprintf(*error_report, "INFO: tile_data_num = %ld, coalesced_data_num = %ld\\n", tile_data_num, coalesced_data_num);')
     p.PrintLine()
 
@@ -507,7 +509,7 @@ def PrintWrapped(p, stencil):
             p.PrintLine('if(dram_bank>%d) err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_%d_bank_%d_cl);' % (i, stencil.input.name, c, i))
     for param in stencil.extra_params.values():
         p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_cl);' % param.name)
-    for variable in ['coalesced_data_num', 'tile_data_num']+['tile_num_dim_%d'%x for x in range(stencil.dim-1)]+['%s_size_dim_%d' % (stencil.input.name, d) for d in range(stencil.dim)]:
+    for variable in ['coalesced_data_num', 'tile_data_num']+['input_bound_dim_%d'%x for x in range(stencil.dim-1)]+['%s_size_dim_%d' % (stencil.input.name, d) for d in range(stencil.dim)]:
         p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(%s), &%s);' % ((variable,)*2))
     p.PrintLine('if(err != CL_SUCCESS)')
     p.DoScope()
@@ -558,17 +560,23 @@ def PrintWrapped(p, stencil):
         p.DoScope()
         p.PrintLine('int32_t actual_tile_size_dim_%d = (tile_index_dim_%d==tile_num_dim_%d-1) ? %s_size_dim_%d-(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)*tile_index_dim_%d : TILE_SIZE_DIM_%d;' % ((dim,)*3+(stencil.input.name,)+(dim,)*5))
 
-    if stencil.iterate:
+    if stencil.preserve_border:
+        overall_stencil_window = GetOverallStencilWindow(stencil.output.parent.PreserveBorderFrom(), stencil.output)
+        overall_stencil_offset = GetStencilWindowOffset(overall_stencil_window)
+        overall_stencil_dim = GetStencilDim(overall_stencil_window)
         p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, coords_in_tile[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
-            p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d; ++%c)' % (coords_in_tile[dim], coords_in_tile[dim], dim, coords_in_tile[dim]))
+            p.PrintLine('for(int32_t %c = tile_index_dim_%d==0 ? 0 : %d; %c < actual_tile_size_dim_%d-(tile_index_dim_%d==tile_num_dim_%d-1 ? 0 : %d); ++%c)' % (coords_in_tile[dim], dim, overall_stencil_offset[dim], coords_in_tile[dim], dim, dim, dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], coords_in_tile[dim]))
             p.DoScope()
     else:
-        p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, stencil.dim-1, coords_in_tile[stencil.dim-1]))
+        overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
+        overall_stencil_offset = GetStencilWindowOffset(overall_stencil_window)
+        overall_stencil_dim = GetStencilDim(overall_stencil_window)
+        p.PrintLine('for(int32_t %c = %d; %c < %s_size_dim_%d-%d; ++%c)' % (coords_in_tile[stencil.dim-1], overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.output.name, stencil.dim-1, overall_stencil_dim[stencil.dim-1]-1-overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
-            p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d-STENCIL_DIM_%d+1; ++%c)' % (coords_in_tile[dim], coords_in_tile[dim], dim, dim, coords_in_tile[dim]))
+            p.PrintLine('for(int32_t %c = %d; %c < actual_tile_size_dim_%d-%d; ++%c)' % (coords_in_tile[dim], overall_stencil_offset[dim-1], coords_in_tile[dim], dim, overall_stencil_dim[dim-1]-1-overall_stencil_offset[dim-1], coords_in_tile[dim]))
             p.DoScope()
 
     p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(coords_tiled))
@@ -744,7 +752,22 @@ def PrintTest(p, stencil):
         logger.debug('emit code to produce %s_img' % s.output.name)
         p.PrintLine('// produce %s, can be parallelized with -fopenmp' % s.output.name)
         p.PrintLine('#pragma omp parallel for', 0)
-        stencil_window = GetOverallStencilWindow(stencil.input, s.output)
+        if stencil.iterate:
+            stencil_window_input_queue = deque([s.output])
+            while len(stencil_window_input_queue)>0:
+                stencil_window_input = stencil_window_input_queue.popleft()
+                if stencil_window_input.parent is None:
+                    break
+                parent_buffers = stencil_window_input.parent.inputs
+                if len(parent_buffers)==1 and next(iter(parent_buffers.values())).parent is not None and next(iter(parent_buffers.values())).parent.PreserveBorderFrom() is not None:
+                    stencil_window_input = next(iter(parent_buffers.values()))
+                    break
+                stencil_window_input_queue += parent_buffers.values()
+                stencil_window_input = stencil_window_input.parent.output
+            logger.debug('preserving border from %s' % stencil_window_input.name)
+        else:
+            stencil_window_input = stencil.input
+        stencil_window = GetOverallStencilWindow(stencil_window_input, s.output)
         stencil_dim = GetStencilDim(stencil_window)
         output_idx = GetStencilWindowOffset(stencil_window)
         for d in range(0, stencil.dim):
@@ -759,19 +782,22 @@ def PrintTest(p, stencil):
                 run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
                 p.PrintLine('%s val_fpga = %s;' % (stencil.output.type, run_result))
                 p.PrintLine('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
-                p.PrintLine('double threshold = 0.00001;')
-                p.PrintLine('if(nullptr!=getenv("THRESHOLD"))')
-                p.DoScope()
-                p.PrintLine('threshold = atof(getenv("THRESHOLD"));')
-                p.UnScope()
-                p.PrintLine('threshold *= threshold;')
-                p.PrintLine('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > threshold)')
-                p.DoScope()
-                params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
-                if stencil.output.type[-2:]=='_t':
-                    p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
+                if IsFloat(stencil.output.type):
+                    p.PrintLine('double threshold = 0.00001;')
+                    p.PrintLine('if(nullptr!=getenv("THRESHOLD"))')
+                    p.DoScope()
+                    p.PrintLine('threshold = atof(getenv("THRESHOLD"));')
+                    p.UnScope()
+                    p.PrintLine('threshold *= threshold;')
+                    p.PrintLine('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > threshold)')
+                    p.DoScope()
+                    params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                    p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(val_fpga), double(val_cpu), %s);' % params)
                 else:
-                    p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
+                    p.PrintLine('if(val_fpga!=val_cpu)')
+                    p.DoScope()
+                    params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                    p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(val_fpga), int64_t(val_cpu), %s);' % params)
                 p.PrintLine('++error_count;')
                 p.UnScope()
         for d in range(0, stencil.dim):
@@ -797,13 +823,24 @@ def PrintTest(p, stencil):
             if len(s.output.children)==0:
                 for c in range(stencil.output.chan):
                     run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
-                    p.PrintLine('if(%s != result_chan_%d)' % (run_result, c))
-                    p.DoScope()
-                    params = (c, ', '.join(['%d']*stencil.dim), run_result, c, ', '.join(coords_in_orig[:stencil.dim]))
-                    if stencil.output.type[-2:]=='_t':
-                        p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(%s), int64_t(result_chan_%d), %s);' % params)
+                    p.PrintLine('%s val_fpga = %s;' % (stencil.output.type, run_result))
+                    p.PrintLine('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
+                    if IsFloat(stencil.output.type):
+                        p.PrintLine('double threshold = 0.00001;')
+                        p.PrintLine('if(nullptr!=getenv("THRESHOLD"))')
+                        p.DoScope()
+                        p.PrintLine('threshold = atof(getenv("THRESHOLD"));')
+                        p.UnScope()
+                        p.PrintLine('threshold *= threshold;')
+                        p.PrintLine('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > threshold)')
+                        p.DoScope()
+                        params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                        p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(val_fpga), double(val_cpu), %s);' % params)
                     else:
-                        p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(%s), double(result_chan_%d), %s);' % params)
+                        p.PrintLine('if(val_fpga!=val_cpu)')
+                        p.DoScope()
+                        params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                        p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(val_fpga), int64_t(val_cpu), %s);' % params)
                     p.PrintLine('++error_count;')
                     p.UnScope()
             p.UnScope()
@@ -838,12 +875,13 @@ def PrintCode(stencil, host_file):
     PrintDefine(p, 'BURST_WIDTH', stencil.burst_width)
     PrintDefine(p, 'PIXEL_WIDTH_I', type_width[stencil.input.type])
     PrintDefine(p, 'PIXEL_WIDTH_O', type_width[stencil.output.type])
-    overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
+    overall_stencil_window = GetOverallStencilWindow(stencil.output.parent.PreserveBorderFrom() if stencil.preserve_border else stencil.input, stencil.output)
     overall_stencil_distance = GetStencilDistance(overall_stencil_window, stencil.tile_size)
     for i, dim in enumerate(GetStencilDim(overall_stencil_window)):
         PrintDefine(p, 'STENCIL_DIM_%d' % i, dim)
-    PrintDefine(p, 'STENCIL_OFFSET', overall_stencil_distance - Serialize(GetStencilWindowOffset(overall_stencil_window), stencil.tile_size))
-    PrintDefine(p, 'STENCIL_DISTANCE', overall_stencil_distance)
+    stencil_offset = (overall_stencil_distance - Serialize(GetStencilWindowOffset(overall_stencil_window), stencil.tile_size))*stencil.iterate
+    PrintDefine(p, 'STENCIL_OFFSET', stencil_offset)
+    PrintDefine(p, 'STENCIL_DISTANCE', max(overall_stencil_distance, stencil_offset))
     p.PrintLine()
 
     PrintLoadXCLBIN2(p)

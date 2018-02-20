@@ -64,7 +64,7 @@ class Buffer(object):
         return len(self.children)==0
 
     def IsInput(self):
-        return self.parent.IsInput()
+        return self.parent is None or self.parent.IsInput()
 
 # Stage.window: {str: [(int, ...), ...], ...}
 # Stage.offset: {str: [int, ...], ...}
@@ -349,12 +349,23 @@ class Stencil(object):
         if not hasattr(self, 'forwarders'):
             all_points = self.GetAllPoints()
             self.forwarders = set()
+            self.forwarders_with_border = set()
             next_fifo = self.GetNextFIFO()
             for src_name, dsts in all_points.items():
                 for dst_name, dst_point_dicts in dsts.items():
                     for offset, points in sorted(dst_point_dicts.items()):
-                        self.forwarders |= {len(points) + (1 if offset in next_fifo[src_name] else 0)}
+                        if offset<self.unroll_factor and self.buffers[src_name].PreserveBorderTo() and not self.buffers[src_name].IsInput():
+                            self.forwarders_with_border |= {(src_name, len(points) + (1 if offset in next_fifo[src_name] else 0))}
+                        else:
+                            self.forwarders |= {len(points) + (1 if offset in next_fifo[src_name] else 0)}
+            self.forwarders = sorted(self.forwarders)
+            self.forwarders_with_border = sorted(self.forwarders_with_border)
         return self.forwarders
+
+    def GetForwardersWithBorder(self):
+        if not hasattr(self, 'forwarders_with_border'):
+            self.GetForwarders()
+        return self.forwarders_with_border
 
     def GetReuseBufferLength(self, name, offset):
         if not hasattr(self, 'reuse_buffer_lengths'):
