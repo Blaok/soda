@@ -36,6 +36,9 @@ def PrintComputeStage(printer, stencil, stage):
             for c in range(stage.output.chan):
                 printer.PrintLine('hls::stream<%s>& %s_left_chan_%d,' % (stage.output.type, param, c))
                 printer.PrintLine('hls::stream<%s>& %s_right_chan_%d,' % (stage.output.type, param, c))
+    if stage.PreserveBorderFrom():
+        for d in range(stencil.dim-1):
+            printer.PrintLine('uint32_t input_bound_dim_%d,' % d)
     for d in range(stencil.dim):
         printer.PrintLine('uint32_t input_size_dim_%d,' % d)
     printer.PrintLine('uint64_t epoch_num)')
@@ -159,6 +162,8 @@ def PrintIncrementCoordinates(printer, stencil, stage):
         PrintIncrementOrig = lambda d: printer.PrintLine('%c_base += TILE_SIZE_DIM_%d - %s + 1;' % (coords_in_orig[d], d, overall_stencil_dim[d]))
         PrintDecrementOrig = lambda d: printer.PrintLine('%c = 0;' % coords_in_orig[d])
         PrintDecrementTileLastDim = lambda d: printer.PrintLine('%c -= input_size_dim_%d;' % (coords_in_tile[d], d))
+        printer.PrintLine('if(%s)' % ' && '.join('%c_base<input_bound_dim_%d' % (coords_in_orig[d], d) for d in range(stencil.dim-1)))
+        printer.DoScope()
         printer.PrintLine('i+=%d;' % stencil.unroll_factor)
         if len(stencil.tile_size)>1:
             PrintIfTile(0)
@@ -229,6 +234,7 @@ def PrintIncrementCoordinates(printer, stencil, stage):
             printer.PrintLine('#pragma HLS latency min=1', 0)
             PrintDecrementTileLastDim(0)
             printer.UnScope()
+        printer.UnScope()
 
 
 def PrintCompute(p, stencil):
@@ -1092,6 +1098,8 @@ def PrintInterface(p, stencil):
                     for c in range(stage.output.chan):
                         param = (stage.name, d, c, unroll_index)
                         params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
+            if stage.PreserveBorderFrom():
+                params += ['input_bound_dim_%d' % d for d in range(stencil.dim-1)]
             params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
             params.append('epoch_num')
             p.PrintFunc('compute_%s<%d>' % (stage.name, unroll_index), params, ';')
@@ -1335,10 +1343,7 @@ def PrintForwarderWithBorder(printer, stencil, forwarder_with_border):
         printer.PrintLine('dst_%d<<tmp;' % dst)
     printer.PrintLine()
 
-    printer.PrintLine('if(%s)' % ' && '.join('%c_base<input_bound_dim_%d' % (coords_in_orig[d], d) for d in range(stencil.dim-1)))
-    printer.DoScope()
     PrintIncrementCoordinates(printer, stencil, stage)
-    printer.UnScope()
     printer.UnScope()
     printer.UnScope()
 
