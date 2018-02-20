@@ -897,7 +897,7 @@ def PrintInterface(p, stencil):
     p.PrintLine('uint64_t coalesced_data_num,')
     p.PrintLine('uint64_t tile_data_num,')
     for i in range(stencil.dim-1):
-        p.PrintLine('uint32_t tile_num_dim_%d,' % i)
+        p.PrintLine('uint32_t input_bound_dim_%d,' % i)
     for d in range(stencil.dim-1):
         p.PrintLine('uint32_t input_size_dim_%d,' % d)
     p.PrintLine('uint32_t input_size_dim_%d)' % (stencil.dim-1))
@@ -931,7 +931,7 @@ def PrintInterface(p, stencil):
     p.PrintLine('#pragma HLS interface s_axilite port=coalesced_data_num bundle=control', 0)
     p.PrintLine('#pragma HLS interface s_axilite port=tile_data_num bundle=control', 0)
     for d in range(stencil.dim-1):
-        p.PrintLine('#pragma HLS interface s_axilite port=tile_num_dim_%d bundle=control' % d, 0)
+        p.PrintLine('#pragma HLS interface s_axilite port=input_bound_dim_%d bundle=control' % d, 0)
     for d in range(stencil.dim):
         p.PrintLine('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % d, 0)
     p.PrintLine('#pragma HLS interface s_axilite port=return bundle=control', 0)
@@ -1269,6 +1269,7 @@ def PrintForwarderWithBorder(printer, stencil, forwarder_with_border):
     params = ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]+['hls::stream<T>& src']
     for param in ['border_dim_%d' % d for d in range(stencil.dim-1)]:
         params += ['hls::stream<T>& %s_left' % param, 'hls::stream<T>& %s_right' % param]
+    params += ['uint32_t input_bound_dim_%d' % d for d in range(stencil.dim-1)]
     params += ['uint32_t input_size_dim_%d' % d for d in range(stencil.dim)]
     params += ['uint32_t data_num']
     printer.PrintFunc('template<typename T, int32_t i_init> void forward_%s_%d' % forwarder_with_border, params)
@@ -1334,7 +1335,10 @@ def PrintForwarderWithBorder(printer, stencil, forwarder_with_border):
         printer.PrintLine('dst_%d<<tmp;' % dst)
     printer.PrintLine()
 
+    printer.PrintLine('if(%s)' % ' && '.join('%c_base<input_bound_dim_%d' % (coords_in_orig[d], d) for d in range(stencil.dim-1)))
+    printer.DoScope()
     PrintIncrementCoordinates(printer, stencil, stage)
+    printer.UnScope()
     printer.UnScope()
     printer.UnScope()
 
@@ -1363,6 +1367,7 @@ def PrintForwarding(printer, stencil, src_name):
                     stage = stencil.stages[src_name]
                     stencil_window = GetOverallStencilWindow(stage.PreserveBorderFrom() if stage.PreserveBorderFrom() else stencil.input, stage.output)
                     overall_idx = GetStencilWindowOffset(stencil_window)
+                    stencil_dim = GetStencilDim(stencil_window)
                     iteration = 1
                     parent_buffer = stage.PreserveBorderFrom()
                     while parent_buffer is not None and parent_buffer.parent is not None:
@@ -1373,8 +1378,12 @@ def PrintForwarding(printer, stencil, src_name):
                     func_name += '_'+src_name
                     temp_param = '%d-%d' % (unroll_index, delay)
                     for d in range(stencil.dim-1):
-                        param = (src_name, d, c, unroll_index)
-                        params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
+                        param = (src_name, d, c, (unroll_index+(stencil.tile_size[d]-stencil_dim[d]+1))%stencil.unroll_factor)
+                        params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param]
+                        param = (src_name, d, c, (unroll_index-(stencil.tile_size[d]-stencil_dim[d]+1))%stencil.unroll_factor)
+                        params += ['border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
+                    for d in range(stencil.dim-1):
+                        params.append('input_bound_dim_%d' % d)
                     for d in range(stencil.dim):
                         params.append('input_size_dim_%d' % d)
 

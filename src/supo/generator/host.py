@@ -496,6 +496,8 @@ def PrintWrapped(p, stencil):
     p.PrintLine('int kernel_arg = 0;')
     p.PrintLine('int64_t tile_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*BURST_WIDTH/PIXEL_WIDTH_I*dram_bank/UNROLL_FACTOR;' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
     p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s*%s+STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1);' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)]), '*'.join('tile_num_dim_%d'%d for d in range(stencil.dim-1))))
+    for d in range(stencil.dim-1):
+        p.PrintLine('uint32_t input_bound_dim_%d = tile_num_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1);' % (d, d, d, d))
     p.PrintLine('fprintf(*error_report, "INFO: tile_data_num = %ld, coalesced_data_num = %ld\\n", tile_data_num, coalesced_data_num);')
     p.PrintLine()
 
@@ -507,7 +509,7 @@ def PrintWrapped(p, stencil):
             p.PrintLine('if(dram_bank>%d) err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_%d_bank_%d_cl);' % (i, stencil.input.name, c, i))
     for param in stencil.extra_params.values():
         p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_cl);' % param.name)
-    for variable in ['coalesced_data_num', 'tile_data_num']+['tile_num_dim_%d'%x for x in range(stencil.dim-1)]+['%s_size_dim_%d' % (stencil.input.name, d) for d in range(stencil.dim)]:
+    for variable in ['coalesced_data_num', 'tile_data_num']+['input_bound_dim_%d'%x for x in range(stencil.dim-1)]+['%s_size_dim_%d' % (stencil.input.name, d) for d in range(stencil.dim)]:
         p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(%s), &%s);' % ((variable,)*2))
     p.PrintLine('if(err != CL_SUCCESS)')
     p.DoScope()
