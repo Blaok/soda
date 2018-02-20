@@ -116,7 +116,7 @@ def PrintComputeStage(printer, stencil, stage):
         for d in range(stencil.dim-1):
             if stencil_dim[d] < 2:
                 continue
-            printer.PrintLine('if(%s >= %d-1 && %s < input_size_dim_0-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), stencil_dim[d]))
+            printer.PrintLine('if(%s >= %d-1 && %s < input_size_dim_%d-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), d, stencil_dim[d]))
             printer.DoScope()
             printer.PrintLine('switch(%s)' % IndexTile(d))
             printer.DoScope()
@@ -160,7 +160,7 @@ def PrintIncrementCoordinates(printer, stencil, stage):
     PrintIncrementTile = lambda d: printer.PrintLine('++%c;' % (coords_in_tile[d]))
     PrintDecrementTile = lambda d: printer.PrintLine('%c -= TILE_SIZE_DIM_%d;' % (coords_in_tile[d], d))
     PrintIncrementOrig = lambda d: printer.PrintLine('%c_base += TILE_SIZE_DIM_%d - %s + 1;' % (coords_in_orig[d], d, overall_stencil_dim[d]))
-    PrintDecrementOrig = lambda d: printer.PrintLine('%c = 0;' % coords_in_orig[d])
+    PrintDecrementOrig = lambda d: printer.PrintLine('%c_base = 0;' % coords_in_orig[d])
     PrintDecrementTileLastDim = lambda d: printer.PrintLine('%c -= input_size_dim_%d;' % (coords_in_tile[d], d))
 
     printer.PrintLine('if(%s)' % ' && '.join('%c_base<input_bound_dim_%d' % (coords_in_orig[d], d) for d in range(stencil.dim-1)))
@@ -749,9 +749,10 @@ def PrintForwarding(printer, stencil, src_name):
                     func_name += '_'+src_name
                     temp_param = '%d-%d' % (unroll_index, delay)
                     for d in range(stencil.dim-1):
-                        param = (src_name, d, c, (unroll_index+(stencil.tile_size[d]-stencil_dim[d]+1))%stencil.unroll_factor)
+                        param_offset = (stencil.tile_size[d]-stencil_dim[d]+1)*reduce(operator.mul, [stencil.tile_size[dd] for dd in range(d)], 1)
+                        param = (src_name, d, c, (unroll_index+param_offset)%stencil.unroll_factor)
                         params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param]
-                        param = (src_name, d, c, (unroll_index-(stencil.tile_size[d]-stencil_dim[d]+1))%stencil.unroll_factor)
+                        param = (src_name, d, c, (unroll_index-param_offset)%stencil.unroll_factor)
                         params += ['border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
                     for d in range(stencil.dim-1):
                         params.append('input_bound_dim_%d' % d)
