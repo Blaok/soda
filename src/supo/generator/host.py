@@ -495,7 +495,7 @@ def PrintWrapped(p, stencil):
 
     p.PrintLine('int kernel_arg = 0;')
     p.PrintLine('int64_t tile_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1)*BURST_WIDTH/PIXEL_WIDTH_I*dram_bank/UNROLL_FACTOR;' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
-    p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s*tile_num_dim_0+STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1);' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)])))
+    p.PrintLine('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s*%s+STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1);' % (stencil.input.name, stencil.dim-1, ''.join(['*TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)]), '*'.join('tile_num_dim_%d'%d for d in range(stencil.dim-1))))
     p.PrintLine('fprintf(*error_report, "INFO: tile_data_num = %ld, coalesced_data_num = %ld\\n", tile_data_num, coalesced_data_num);')
     p.PrintLine()
 
@@ -558,17 +558,19 @@ def PrintWrapped(p, stencil):
         p.DoScope()
         p.PrintLine('int32_t actual_tile_size_dim_%d = (tile_index_dim_%d==tile_num_dim_%d-1) ? %s_size_dim_%d-(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)*tile_index_dim_%d : TILE_SIZE_DIM_%d;' % ((dim,)*3+(stencil.input.name,)+(dim,)*5))
 
-    overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
-    overall_stencil_offset = GetStencilWindowOffset(overall_stencil_window)
-    p.PrintLine('// %s' % str(overall_stencil_offset))
-    overall_stencil_dim = GetStencilDim(overall_stencil_window)
     if stencil.preserve_border:
+        overall_stencil_window = GetOverallStencilWindow(stencil.output.parent.PreserveBorderFrom(), stencil.output)
+        overall_stencil_offset = GetStencilWindowOffset(overall_stencil_window)
+        overall_stencil_dim = GetStencilDim(overall_stencil_window)
         p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, coords_in_tile[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
             p.PrintLine('for(int32_t %c = tile_index_dim_%d==0 ? 0 : %d; %c < actual_tile_size_dim_%d-(tile_index_dim_%d==tile_num_dim_%d-1 ? 0 : %d); ++%c)' % (coords_in_tile[dim], dim, overall_stencil_offset[dim], coords_in_tile[dim], dim, dim, dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], coords_in_tile[dim]))
             p.DoScope()
     else:
+        overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
+        overall_stencil_offset = GetStencilWindowOffset(overall_stencil_window)
+        overall_stencil_dim = GetStencilDim(overall_stencil_window)
         p.PrintLine('for(int32_t %c = %d; %c < %s_size_dim_%d-%d; ++%c)' % (coords_in_tile[stencil.dim-1], overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.output.name, stencil.dim-1, overall_stencil_dim[stencil.dim-1]-1-overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
@@ -875,8 +877,9 @@ def PrintCode(stencil, host_file):
     overall_stencil_distance = GetStencilDistance(overall_stencil_window, stencil.tile_size)
     for i, dim in enumerate(GetStencilDim(overall_stencil_window)):
         PrintDefine(p, 'STENCIL_DIM_%d' % i, dim)
-    PrintDefine(p, 'STENCIL_OFFSET', (overall_stencil_distance - Serialize(GetStencilWindowOffset(overall_stencil_window), stencil.tile_size))*stencil.iterate)
-    PrintDefine(p, 'STENCIL_DISTANCE', overall_stencil_distance)
+    stencil_offset = (overall_stencil_distance - Serialize(GetStencilWindowOffset(overall_stencil_window), stencil.tile_size))*stencil.iterate
+    PrintDefine(p, 'STENCIL_OFFSET', stencil_offset)
+    PrintDefine(p, 'STENCIL_DISTANCE', max(overall_stencil_distance, stencil_offset))
     p.PrintLine()
 
     PrintLoadXCLBIN2(p)
