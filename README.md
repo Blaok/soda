@@ -50,7 +50,7 @@
 + The input, output, or the intermediate buffer can have more than 1 channels, which is helpful when dealing with things like RGB images
 
 
-## Get Started
+## Getting Started
 
 ### Prerequisites
 
@@ -82,3 +82,71 @@
     
 ### Run Bitstream
     make hw # requires actual FPGA hardware and driver
+
+## Code Snippets
+
+### Configuration
+
++ 5-point 2D Jacobi
++ tile size is (2000,)
+
+### Without Unrolling
+
+    #pragma HLS dataflow
+        load(input_stream_chan_0_bank_0, var_input_chan_0_bank_0, coalesced_data_num);
+        unpack_float(
+            t1_offset_0_chan_0,
+            input_stream_chan_0_bank_0, coalesced_data_num);
+
+        forward_2<float, 0>(from_t1_to_t0_param_4_chan_0_pe_0, t1_offset_1999_chan_0, t1_offset_0_chan_0, epoch_num);
+        forward_2<float, 1999>(from_t1_to_t0_param_3_chan_0_pe_0, t1_offset_2000_chan_0, t1_offset_1999_chan_0, epoch_num);
+        forward_2<float, 1>(from_t1_to_t0_param_2_chan_0_pe_0, t1_offset_2001_chan_0, t1_offset_2000_chan_0, epoch_num);
+        forward_2<float, 1>(from_t1_to_t0_param_1_chan_0_pe_0, t1_offset_4000_chan_0, t1_offset_2001_chan_0, epoch_num);
+        forward_1<float, 1999>(from_t1_to_t0_param_0_chan_0_pe_0, t1_offset_4000_chan_0, epoch_num);
+
+        compute_t0<0>(t0_offset_0_chan_0, from_t1_to_t0_param_0_chan_0_pe_0, from_t1_to_t0_param_1_chan_0_pe_0, from_t1_to_t0_param_2_chan_0_pe_0, from_t1_to_t0_param_3_chan_0_pe_0, from_t1_to_t0_param_4_chan_0_pe_0, input_size_dim_0, input_
+    size_dim_1, epoch_num);
+
+        pack_float(output_stream_chan_0_bank_0,
+            t0_offset_0_chan_0,
+            coalesced_data_num);
+        store(var_output_chan_0_bank_0, output_stream_chan_0_bank_0, coalesced_data_num);
+
+### Unroll 2 Times
+
+    #pragma HLS dataflow
+        load(input_stream_chan_0_bank_0, var_input_chan_0_bank_0, coalesced_data_num);
+        unpack_float(
+            t1_offset_1_chan_0,
+            t1_offset_0_chan_0,
+            input_stream_chan_0_bank_0, coalesced_data_num);
+
+        forward_2<float, 0>(from_t1_to_t0_param_4_chan_0_pe_1, t1_offset_2000_chan_0, t1_offset_0_chan_0, epoch_num);
+        forward_2<float, 0>(from_t1_to_t0_param_4_chan_0_pe_0, t1_offset_1999_chan_0, t1_offset_1_chan_0, epoch_num);
+        forward_2<float, 999>(from_t1_to_t0_param_3_chan_0_pe_1, t1_offset_2001_chan_0, t1_offset_1999_chan_0, epoch_num);
+        forward_3<float, 1000>(from_t1_to_t0_param_2_chan_0_pe_1, from_t1_to_t0_param_3_chan_0_pe_0, t1_offset_2002_chan_0, t1_offset_2000_chan_0, epoch_num);
+        forward_3<float, 1>(from_t1_to_t0_param_1_chan_0_pe_1, from_t1_to_t0_param_2_chan_0_pe_0, t1_offset_4001_chan_0, t1_offset_2001_chan_0, epoch_num);
+        forward_2<float, 1>(from_t1_to_t0_param_1_chan_0_pe_0, t1_offset_4000_chan_0, t1_offset_2002_chan_0, epoch_num);
+        forward_1<float, 999>(from_t1_to_t0_param_0_chan_0_pe_1, t1_offset_4000_chan_0, epoch_num);
+        forward_1<float, 1000>(from_t1_to_t0_param_0_chan_0_pe_0, t1_offset_4001_chan_0, epoch_num);
+
+        compute_t0<0>(t0_offset_1_chan_0, from_t1_to_t0_param_0_chan_0_pe_0, from_t1_to_t0_param_1_chan_0_pe_0, from_t1_to_t0_param_2_chan_0_pe_0, from_t1_to_t0_param_3_chan_0_pe_0, from_t1_to_t0_param_4_chan_0_pe_0, input_size_dim_0, input_
+    size_dim_1, epoch_num);
+        compute_t0<1>(t0_offset_0_chan_0, from_t1_to_t0_param_0_chan_0_pe_1, from_t1_to_t0_param_1_chan_0_pe_1, from_t1_to_t0_param_2_chan_0_pe_1, from_t1_to_t0_param_3_chan_0_pe_1, from_t1_to_t0_param_4_chan_0_pe_1, input_size_dim_0, input_
+    size_dim_1, epoch_num);
+
+        pack_float(output_stream_chan_0_bank_0,
+            t0_offset_1_chan_0,
+            t0_offset_0_chan_0,
+            coalesced_data_num);
+        store(var_output_chan_0_bank_0, output_stream_chan_0_bank_0, coalesced_data_num);
+    
+### Functions Explained
+
++ `load`/`store` performs burst DRAM I/O
++ `unpack`/`pack` performs memory coalescing
++ `forward` forwards data from source to multiple destintaions, with a certain number of cycles' delay
+  - They form the reuse buffers
++ `compute` computes output using the inputs
+  - They are the PEs
+
