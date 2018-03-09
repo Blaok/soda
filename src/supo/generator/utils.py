@@ -60,6 +60,9 @@ class Buffer(object):
     def PreserveBorderTo(self):
         return self.border[1] if self.border is not None and self.border[0] == 'preserve' else None
 
+    def PreserveBorderFrom(self):
+        return self.parent is not None and self.parent.PreserveBorderFrom()
+
     def IsOutput(self):
         return len(self.children)==0
 
@@ -92,6 +95,9 @@ class Stage(object):
 
     def PreserveBorderFrom(self):
         return self.border[1] if self.border is not None and self.border[0] == 'preserve' else None
+
+    def PreserveBorderTo(self):
+        return self.output.PreserveBorderFrom()
 
     def IsOutput(self):
         return self.output.IsOutput()

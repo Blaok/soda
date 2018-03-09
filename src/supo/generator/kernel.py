@@ -484,70 +484,41 @@ def PrintInterface(p, stencil):
                 PrintForwarding(p, stencil, stage.name)
             p.PrintLine()
     elif stencil.cluster == 'fine':
-        for pe_id in range(unroll_factor):
-            p.PrintLine('compute_%s_pe_%d(' % (stencil.input.name, pe_id))
-            p.DoIndent()
-
-            # outputs
-            offset = unroll_factor-1-pe_id
-            while offset is not None:
-                for output_stage in stencil.input.children:
-                    points = all_points[stencil.input.name][output_stage.name][offset]
-                    for unroll_index, point in points.items():
-                        for c in range(stencil.buffers[stencil.input.name].chan):
-                            p.PrintLine('/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (stencil.input.name, output_stage.name, point, c, unroll_index))
-                offset = next_fifo[stencil.input.name].get(offset, None)
-
-            # inputs
-            for c in range(stencil.buffers[stencil.input.name].chan):
-                p.PrintLine('/*  input */ %s_offset_%s_chan_%d,' % (stencil.input.name, unroll_factor-1-pe_id, c))
-
-            params = []
-            if stage.output.PreserveBorderTo():
-                for d in range(stencil.dim-1):
-                    for c in range(stage.output.chan):
-                        param = (stage.name, d, c, pe_id)
-                        params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
-            if stage.PreserveBorderFrom():
-                params += ['input_bound_dim_%d' % d for d in range(stencil.dim-1)]
-            params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
-            for param in params:
-                p.PrintLine('/*  param */ %s,' % param)
-            p.PrintLine('/*  param */ epoch_num);')
-            p.UnIndent()
-        p.PrintLine()
-
-        for stage in stencil.GetStagesChronologically():
-            inputs = tuple(reversed(range(unroll_factor))) if stage.IsOutput() else [start for start, end in stencil.GetReuseBuffers()[stage.name][1:] if start==end]
+        for buffer in [stencil.input]+[stage.output for stage in stencil.GetStagesChronologically()]:
+            inputs = tuple(reversed(range(unroll_factor))) if buffer.IsOutput() else [start for start, end in stencil.GetReuseBuffers()[buffer.name][1:] if start==end]
             for pe_id in range(unroll_factor):
-                p.PrintLine('compute_%s_pe_%d(' % (stage.name, pe_id))
+                p.PrintLine('compute_%s_pe_%d(' % (buffer.name, pe_id))
                 p.DoIndent()
 
                 # outputs
                 offset = unroll_factor-1-pe_id
-                if stage.IsOutput():
-                    for c in range(stencil.buffers[stage.name].chan):
-                        p.PrintLine('/* output */ %s_offset_%s_chan_%d,' % (stage.name, offset, c))
+                if buffer.IsOutput():
+                    for c in range(stencil.buffers[buffer.name].chan):
+                        p.PrintLine('/* output */ %s_offset_%s_chan_%d,' % (buffer.name, offset, c))
                 else:
                     while offset is not None:
-                        for output_stage in stage.output.children:
-                            points = all_points[stage.name][output_stage.name][offset]
+                        for output_stage in buffer.children:
+                            points = all_points[buffer.name][output_stage.name][offset]
                             for unroll_index, point in points.items():
-                                for c in range(stencil.buffers[stage.name].chan):
-                                    p.PrintLine('/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (stage.name, output_stage.name, point, c, unroll_index))
-                        offset = next_fifo[stage.name].get(offset, None)
+                                for c in range(stencil.buffers[buffer.name].chan):
+                                    p.PrintLine('/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (buffer.name, output_stage.name, point, c, unroll_index))
+                        offset = next_fifo[buffer.name].get(offset, None)
 
                 # inputs
-                for param in ['from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, stage.name, i, c, pe_id) for input_name, input_window in stage.window.items() for i in range(len(input_window)) for c in range(stencil.buffers[input_name].chan)]:
-                    p.PrintLine('/*  input */ %s,' % param)
+                if buffer.IsInput():
+                    for c in range(stencil.buffers[stencil.input.name].chan):
+                        p.PrintLine('/*  input */ %s_offset_%s_chan_%d,' % (stencil.input.name, unroll_factor-1-pe_id, c))
+                else:
+                    for param in ['from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, buffer.name, i, c, pe_id) for input_name, input_window in buffer.parent.window.items() for i in range(len(input_window)) for c in range(stencil.buffers[input_name].chan)]:
+                        p.PrintLine('/*  input */ %s,' % param)
 
                 params = []
-                if stage.output.PreserveBorderTo():
+                if buffer.PreserveBorderTo():
                     for d in range(stencil.dim-1):
-                        for c in range(stage.output.chan):
-                            param = (stage.name, d, c, pe_id)
+                        for c in range(buffer.chan):
+                            param = (buffer.name, d, c, pe_id)
                             params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
-                if stage.PreserveBorderFrom():
+                if buffer.PreserveBorderFrom():
                     params += ['input_bound_dim_%d' % d for d in range(stencil.dim-1)]
                 params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
                 for param in params:
