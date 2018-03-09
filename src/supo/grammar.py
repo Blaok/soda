@@ -21,6 +21,7 @@ SupoProgram:
     ('kernel' ':' app_name=ID)
     ('border' ':' border=BorderStrategies)
     ('iterate' ':' iterate=INT)
+    ('cluster' ':' cluster=ClusterStrategies)
     input=Input
     output=Output
     (extra_params=ExtraParam)*
@@ -29,6 +30,7 @@ SupoProgram:
 )#;
 Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 BorderStrategies: 'ignore'|'preserve';
+ClusterStrategies: 'none'|'fine'|'coarse'|'full';
 Comment: /\s*#.*$/;
 Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
@@ -102,6 +104,7 @@ class SupoProgram(object):
         self.dram_separate = kwargs.pop('dram_separate')=='yes'
         self.iterate = kwargs.pop('iterate')
         self.border = kwargs.pop('border')
+        self.cluster = kwargs.pop('cluster')
 
         # normalize
         self.output.Normalize(self.extra_params)

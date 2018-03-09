@@ -106,6 +106,7 @@ class Stencil(object):
             raise SemanticError('cannot iterate %d times' % self.iterate)
         self.border = kwargs.pop('border')
         self.preserve_border = self.border == 'preserve'
+        self.cluster = kwargs.pop('cluster')
         # platform determined
         self.burst_width = kwargs.pop('burst_width')
         self.dram_bank = kwargs.pop('dram_bank')

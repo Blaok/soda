@@ -59,6 +59,11 @@ def main():
                         metavar='(ignore|preserve)',
                         dest='border',
                         help='override border handling strategy')
+    parser.add_argument('--cluster',
+                        type=str,
+                        metavar='(none|fine|coarse|full)',
+                        dest='cluster',
+                        help='module clustering level, `none` generates standalone compute / forward modules, `fine` fuses forwarders into compute modules, `coarse` fuses each stage together, `full` fuses everything together')
     parser.add_argument(type=str,
                         dest='supo_src',
                         metavar='file',
@@ -121,6 +126,7 @@ def main():
             dram_bank = args.dram_bank if args.dram_bank is not None else supo_model.dram_bank,
             border = args.border if args.border is not None else supo_model.border,
             iterate = args.iterate if args.iterate is not None else supo_model.iterate,
+            cluster = args.cluster if args.cluster is not None else supo_model.cluster,
             app_name = supo_model.app_name,
             input = supo_model.input,
             output = supo_model.output,
