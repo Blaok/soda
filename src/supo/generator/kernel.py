@@ -15,140 +15,315 @@ from supo.grammar import ExtraParam
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
+def PrintComputeInput(printer, stencil):
+    unroll_factor = stencil.unroll_factor
+    all_points = stencil.GetAllPoints()
+    next_fifo = stencil.GetNextFIFO()
+
+    for tensor in [stencil.input]:
+        for pe_id in range(unroll_factor):
+            printer.PrintLine('void compute_%s_pe_%d(' % (tensor.name, pe_id))
+            printer.DoIndent()
+
+            # outputs
+            intermediate_offsets = []
+            offset = unroll_factor-1-pe_id
+            while offset is not None:
+                intermediate_offsets.append(offset)
+                for output_stage in tensor.children:
+                    points = all_points[tensor.name][output_stage.name][offset]
+                    for unroll_index, point in points.items():
+                        for c in range(stencil.buffers[tensor.name].chan):
+                            printer.PrintLine('/* output */ hls::stream<%s>& from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (tensor.type, tensor.name, output_stage.name, point, c, unroll_index))
+                offset = next_fifo[tensor.name].get(offset, None)
+
+            # inputs
+            for c in range(stencil.buffers[tensor.name].chan):
+                printer.PrintLine('/*  input */ hls::stream<%s>& %s_offset_%s_chan_%d,' % (tensor.type, tensor.name, unroll_factor-1-pe_id, c))
+
+            params = []
+            if tensor.PreserveBorderTo():
+                for d in range(stencil.dim-1):
+                    for c in range(tensor.chan):
+                        param = (tensor.name, d, c, pe_id)
+                        params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
+            params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
+            for param in params:
+                printer.PrintLine('/*  param */ uint32_t %s,' % param)
+            printer.PrintLine('/*  param */ uint64_t epoch_num)')
+            printer.UnIndent()
+            printer.DoScope()
+
+            PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, pe_id)
+
+            printer.PrintLine('compute_%s_pe_%d_epoch:' % (tensor.name, pe_id), 0)
+            printer.PrintLine('for(uint64_t epoch = 0; epoch < epoch_num+%d; ++epoch)' %
+                ((intermediate_offsets[-1]-intermediate_offsets[0])//unroll_factor))
+            printer.DoScope()
+            printer.PrintLine('#pragma HLS pipeline II=1', 0)
+            PrintBuffers(printer, stencil, tensor, pe_id)
+            printer.UnScope()
+
+            printer.UnScope()
+            printer.PrintLine()
+
+def PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, pe_id):
+            pragmas = []
+            for begin, end in zip(intermediate_offsets[:-1], intermediate_offsets[1:]):
+                for c in range(tensor.chan):
+                    param = '%s_offset_%s_chan_%d' % (tensor.name, end, c)
+                    printer.PrintLine('hls::stream<%s> %s("%s");' % (tensor.type, param, param))
+                    pragmas.append('#pragma HLS stream variable=%s depth=%d' % (param, (end-begin)/unroll_factor))
+            for pragma in pragmas:
+                printer.PrintLine(pragma, 0)
+
+def PrintBuffers(printer, stencil, tensor, pe_id):
+    unroll_factor = stencil.unroll_factor
+    all_points = stencil.GetAllPoints()
+    next_fifo = stencil.GetNextFIFO()
+
+    offset = unroll_factor-1-pe_id
+    depth = 0
+    last_depth = depth
+    while offset is not None:
+        printer.DoScope()
+        printer.PrintLine('%s tmp;' % tensor.type)
+        if depth != 0:
+            printer.PrintLine(
+                'if(epoch < %d or !(epoch < epoch_num+%d))' % (depth, depth))
+        else:
+            printer.PrintLine(
+                'if(!(epoch < epoch_num))')
+        printer.DoScope()
+        printer.PrintLine('tmp = 0;')
+        printer.UnScope()
+        printer.PrintLine('else')
+        printer.DoScope()
+        for c in range(stencil.buffers[tensor.name].chan):
+            printer.PrintLine(
+                'tmp = %s_offset_%d_chan_%d.read();' %
+                (tensor.name, offset, c))
+        printer.UnScope()
+        if last_depth != 0:
+            printer.PrintLine(
+                'if(!(epoch < %d) and epoch < epoch_num+%d)' %
+                (last_depth, last_depth))
+        else:
+            printer.PrintLine(
+                'if(epoch < epoch_num)')
+        printer.DoScope()
+        for output_stage in tensor.children:
+            points = all_points[tensor.name][output_stage.name][offset]
+            for unroll_index, point in points.items():
+                for c in range(stencil.buffers[tensor.name].chan):
+                    printer.PrintLine(
+                        'from_%s_to_%s_param_%d_chan_%d_pe_%d<<tmp;' %
+                        (tensor.name, output_stage.name,
+                            point, c, unroll_index))
+        next_offset = next_fifo[tensor.name].get(offset, None)
+        if next_offset is not None:
+            for c in range(stencil.buffers[tensor.name].chan):
+                printer.PrintLine(
+                    '%s_offset_%d_chan_%d<<tmp;' %
+                    (tensor.name, next_offset, c))
+            last_depth = depth
+            depth += (next_offset-offset)//unroll_factor
+        offset = next_offset
+        printer.UnScope()
+        printer.UnScope()
+
 def PrintComputeStage(printer, stencil, stage):
+    unroll_factor = stencil.unroll_factor
+    all_points = stencil.GetAllPoints()
+    next_fifo = stencil.GetNextFIFO()
     reuse_buffers = stencil.GetReuseBuffers()
     stencil_window = GetOverallStencilWindow(stage.PreserveBorderFrom() if stage.PreserveBorderFrom() else stencil.input, stage.output)
     overall_idx = GetStencilWindowOffset(stencil_window)
     iteration = 1
-    parent_buffer = stage.PreserveBorderFrom()
-    while parent_buffer is not None and parent_buffer.parent is not None:
-        parent_buffer = parent_buffer.parent.PreserveBorderFrom()
+    parent_tensor = stage.PreserveBorderFrom()
+    tensor = stage.output
+    while parent_tensor is not None and parent_tensor.parent is not None:
+        parent_tensor = parent_tensor.parent.PreserveBorderFrom()
         iteration += 1
     delay = (GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size))*iteration
 
-    printer.PrintLine('template<uint32_t pe_id>')
-    printer.PrintLine('void compute_%s(%s,' % (stage.name, ', '.join('hls::stream<%s>& %s_chan_%d' % (stage.output.type, stage.name, c) for c in range(stencil.buffers[stage.name].chan))))
-    printer.DoIndent()
-    for param in [(stencil.buffers[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))) for input_name, input_window in stage.window.items() for indices in input_window for c in range(stencil.buffers[input_name].chan)]:
-        printer.PrintLine('hls::stream<%s>& %s,' % param)
-    if stage.output.PreserveBorderTo():
-        for param in ['border_from_%s_dim_%d' % (stage.name, d) for d in range(stencil.dim-1)]:
-            for c in range(stage.output.chan):
-                printer.PrintLine('hls::stream<%s>& %s_left_chan_%d,' % (stage.output.type, param, c))
-                printer.PrintLine('hls::stream<%s>& %s_right_chan_%d,' % (stage.output.type, param, c))
-    if stage.PreserveBorderFrom():
-        for d in range(stencil.dim-1):
-            printer.PrintLine('uint32_t input_bound_dim_%d,' % d)
-    for d in range(stencil.dim):
-        printer.PrintLine('uint32_t input_size_dim_%d,' % d)
-    printer.PrintLine('uint64_t epoch_num)')
-    printer.UnIndent()
-    printer.DoScope()
+    for pe_id in range(1 if stencil.cluster == 'none' else unroll_factor):
+        if stencil.cluster == 'none':
+            printer.PrintLine('template<uint32_t pe_id>')
+            func_name = stage.name
+        else:
+            func_name = stage.name + '_pe_%d' % pe_id
+        printer.PrintLine('void compute_%s(' % func_name)
+        printer.DoIndent()
 
-    if stage.PreserveBorderFrom():
-        msg = 'aux parameters for %s' % stage.name
-        logger.debug('generate '+msg)
-        printer.PrintLine('// '+msg)
-        printer.PrintLine('int32_t i = pe_id-%d;' % delay)
-        for i in range(1, len(stencil.tile_size)):
-            printer.PrintLine('uint16_t %c = 0;' % coords_in_tile[i])
-        for i in range(len(stencil.tile_size)-1):
-            printer.PrintLine('uint16_t %c_base = 0;' % coords_in_orig[i])
-        printer.PrintLine()
+        # outputs
+        intermediate_offsets = []
+        if stencil.cluster == 'none':
+            for c in range(stencil.buffers[stage.name].chan):
+                printer.PrintLine('/* output */ hls::stream<%s>& %s_chan_%d,' % (stage.output.type, stage.name, c))
+        elif stage.IsOutput():
+            for c in range(stencil.buffers[stage.name].chan):
+                printer.PrintLine('/* output */ hls::stream<%s>& %s_offset_%d_chan_%d,' % (stage.output.type, stage.name, unroll_factor-1-pe_id, c))
+        else:
+            offset = unroll_factor-1-pe_id
+            while offset is not None:
+                intermediate_offsets.append(offset)
+                for output_stage in tensor.children:
+                    points = all_points[tensor.name][output_stage.name][offset]
+                    for unroll_index, point in points.items():
+                        for c in range(stencil.buffers[tensor.name].chan):
+                            printer.PrintLine('/* output */ hls::stream<%s>& from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (tensor.type, tensor.name, output_stage.name, point, c, unroll_index))
+                offset = next_fifo[tensor.name].get(offset, None)
 
-    printer.PrintLine('compute_%s_epoch:' % stage.name, 0)
-    printer.PrintLine('for(uint64_t epoch = 0; epoch < epoch_num; ++epoch)')
-    printer.DoScope()
-    printer.PrintLine('#pragma HLS pipeline II=1', 0)
 
-    if stage.PreserveBorderFrom():
-        for i in range(len(stencil.tile_size)-1):
-            printer.PrintLine('uint16_t  %c = %c_base+%c;' % (coords_in_orig[i], coords_in_orig[i], coords_in_tile[i]))
-        printer.PrintLine('uint16_t& %c = %c;' % (coords_in_orig[len(stencil.tile_size)-1], coords_in_tile[len(stencil.tile_size)-1]))
+        # inputs
+        for param in [(stencil.buffers[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))) for input_name, input_window in stage.window.items() for indices in input_window for c in range(stencil.buffers[input_name].chan)]:
+            printer.PrintLine('/*  input */ hls::stream<%s>& %s,' % param)
 
-        IndexTile = lambda d: '%c' % (coords_in_tile[d])
-        IndexOrig = lambda d: '%c' % (coords_in_orig[d])
-        output_idx = GetStencilWindowOffset(stencil_window)
-        stencil_dim = GetStencilDim(stencil_window)
-        MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
-        printer.PrintLine('bool margin_conditions[%d];' % stencil.dim)
-        #printer.PrintLine('#pragma HLS array_partition variable=margin_conditions complete', 0)
-        printer.PrintLine('#pragma HLS resource variable=margin_conditions latency=1 core=RAM_2P_LUTRAM', 0)
+        # forwarded inputs
+        if stage.output.PreserveBorderTo():
+            for param in ['border_from_%s_dim_%d' % (stage.name, d) for d in range(stencil.dim-1)]:
+                for c in range(stage.output.chan):
+                    printer.PrintLine('/*  input */ hls::stream<%s>& %s_left_chan_%d,' % (stage.output.type, param, c))
+                    printer.PrintLine('/*  input */ hls::stream<%s>& %s_right_chan_%d,' % (stage.output.type, param, c))
+
+        # params
+        if stage.PreserveBorderFrom():
+            for d in range(stencil.dim-1):
+                printer.PrintLine('/*  param */ uint32_t input_bound_dim_%d,' % d)
         for d in range(stencil.dim):
-            printer.DoScope()
-            printer.PrintLine('#pragma HLS latency min=1', 0)
-            printer.PrintLine('margin_conditions[%d] = %s;' % (d, MarginCondition(d)))
-            printer.UnScope()
-        printer.PrintLine()
-
-    for input_name, input_window in stage.window.items():
-        params = []
-        for indices in input_window:
-            for c in range(stencil.buffers[input_name].chan):
-                params.append((stencil.buffers[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))))
-
-        for param in params:
-            printer.PrintLine('%s load_%s = %s.read();' % (param[0], param[1], param[1]))
-        printer.PrintLine()
-
-    if stage.PreserveBorderFrom():
-        printer.PrintLine('if(%s)' % (' || '.join('margin_conditions[%d]' % d for d in range(stencil.dim))))
-        printer.DoScope()
-        preserve_border_from = stage.PreserveBorderFrom()
-        printer.PrintLine('%s_chan_%d<<load_%s_chan_%d_at_%s;' % (stage.name, c, preserve_border_from.name, c, GetIndicesId(stage.idx)))
-        #printer.PrintLine('printf("bypass: epoch%%d pe%%d %s %s val=%%d\\n", epoch, pe_id, %s, %s load_%s_chan_%d_at_%s);' % (' '.join('%c=%%d' % coords_in_tile[d] for d in range(stencil.dim)), ' '.join('%c=%%d' % coords_in_orig[d] for d in range(stencil.dim)), ', '.join(coords_in_tile[:stencil.dim]), ', '.join(coords_in_orig[:stencil.dim]), preserve_border_from.name, c, GetIndicesId(stage.idx)))
-        printer.UnScope()
-        printer.PrintLine('else')
+            printer.PrintLine('/*  param */ uint32_t input_size_dim_%d,' % d)
+        printer.PrintLine('/*  param */ uint64_t epoch_num)')
+        printer.UnIndent()
         printer.DoScope()
 
-    LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if stencil.extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else 'load_%s_chan_%d_at_%s' % (node.name, node.chan, GetIndicesId(node.idx))
-    StorePrinter = lambda node: '%s store_%s_chan_%d' % (stage.output.type, node.name, node.chan)
+        if stage.PreserveBorderFrom():
+            msg = 'aux parameters for %s' % stage.name
+            logger.debug('generate '+msg)
+            printer.PrintLine('// '+msg)
+            printer.PrintLine('int32_t i = pe_id-%d;' % delay)
+            for i in range(1, len(stencil.tile_size)):
+                printer.PrintLine('uint16_t %c = 0;' % coords_in_tile[i])
+            for i in range(len(stencil.tile_size)-1):
+                printer.PrintLine('uint16_t %c_base = 0;' % coords_in_orig[i])
+            printer.PrintLine()
 
-    for expr in stage.expr:
-        expr.PrintCode(printer, stencil.buffers, LoadPrinter, StorePrinter, add_latency=True)
+        bound = ''
+        if stencil.cluster != 'none' and not stage.IsOutput():
+            bound = '+%d' % ((intermediate_offsets[-1]-intermediate_offsets[0])//unroll_factor)
+            PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, pe_id)
+            printer.PrintLine()
+            for c in range(tensor.chan):
+                param = '%s_offset_%d_chan_%d' % (tensor.name, unroll_factor-1-pe_id, c)
+                printer.PrintLine('hls::stream<%s> %s("%s");' % (tensor.type, param, param))
+                printer.PrintLine('#pragma HLS stream variable=%s depth=1' % param, 0)
+            printer.PrintLine()
 
-    for c in range(stage.output.chan):
-        printer.PrintLine('%s_chan_%d<<store_%s_chan_%d;' % ((stage.name, c)*2))
-        #printer.PrintLine('printf("calc: epoch%%d pe%%d %%d inputs=%s val=%%d\\n", epoch, pe_id, epoch*%d+pe_id-%d, %s, store_%s_chan_%d);' % (' '.join(['%d']*len(params)), stencil.unroll_factor, delay, ', '.join('load_%s'%p[1] for p in params), stage.name, c))
+        printer.PrintLine('compute_%s_epoch:' % func_name, 0)
+        printer.PrintLine(
+            'for(uint64_t epoch = 0; epoch < epoch_num%s; ++epoch)' % bound)
+        printer.DoScope()
+        printer.PrintLine('#pragma HLS pipeline II=1', 0)
 
-    if stage.output.PreserveBorderTo():
-        printer.PrintLine()
-        for d in range(stencil.dim-1):
-            if stencil_dim[d] < 2:
-                continue
-            printer.PrintLine('if(%s >= %d-1 && %s < input_size_dim_%d-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), d, stencil_dim[d]))
+        if stencil.cluster != 'none' and not stage.IsOutput():
+            printer.PrintLine('if(epoch < epoch_num)')
             printer.DoScope()
-            printer.PrintLine('switch(%s)' % IndexTile(d))
+
+        if stage.PreserveBorderFrom():
+            for i in range(len(stencil.tile_size)-1):
+                printer.PrintLine('uint16_t  %c = %c_base+%c;' % (coords_in_orig[i], coords_in_orig[i], coords_in_tile[i]))
+            printer.PrintLine('uint16_t& %c = %c;' % (coords_in_orig[len(stencil.tile_size)-1], coords_in_tile[len(stencil.tile_size)-1]))
+
+            IndexTile = lambda d: '%c' % (coords_in_tile[d])
+            IndexOrig = lambda d: '%c' % (coords_in_orig[d])
+            output_idx = GetStencilWindowOffset(stencil_window)
+            stencil_dim = GetStencilDim(stencil_window)
+            MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
+            printer.PrintLine('bool margin_conditions[%d];' % stencil.dim)
+            #printer.PrintLine('#pragma HLS array_partition variable=margin_conditions complete', 0)
+            printer.PrintLine('#pragma HLS resource variable=margin_conditions latency=1 core=RAM_2P_LUTRAM', 0)
+            for d in range(stencil.dim):
+                printer.DoScope()
+                printer.PrintLine('#pragma HLS latency min=1', 0)
+                printer.PrintLine('margin_conditions[%d] = %s;' % (d, MarginCondition(d)))
+                printer.UnScope()
+            printer.PrintLine()
+
+        for input_name, input_window in stage.window.items():
+            params = []
+            for indices in input_window:
+                for c in range(stencil.buffers[input_name].chan):
+                    params.append((stencil.buffers[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))))
+
+            for param in params:
+                printer.PrintLine('%s load_%s = %s.read();' % (param[0], param[1], param[1]))
+            printer.PrintLine()
+
+        if stage.PreserveBorderFrom():
+            printer.PrintLine('if(%s)' % (' || '.join('margin_conditions[%d]' % d for d in range(stencil.dim))))
+            printer.DoScope()
+            preserve_border_from = stage.PreserveBorderFrom()
+            printer.PrintLine('%s_chan_%d<<load_%s_chan_%d_at_%s;' % (stage.name, c, preserve_border_from.name, c, GetIndicesId(stage.idx)))
+            #printer.PrintLine('printf("bypass: epoch%%d pe%%d %s %s val=%%d\\n", epoch, pe_id, %s, %s load_%s_chan_%d_at_%s);' % (' '.join('%c=%%d' % coords_in_tile[d] for d in range(stencil.dim)), ' '.join('%c=%%d' % coords_in_orig[d] for d in range(stencil.dim)), ', '.join(coords_in_tile[:stencil.dim]), ', '.join(coords_in_orig[:stencil.dim]), preserve_border_from.name, c, GetIndicesId(stage.idx)))
+            printer.UnScope()
+            printer.PrintLine('else')
             printer.DoScope()
 
-            for i in range(output_idx[d], stencil_dim[d]-1):
-                printer.PrintLine('case %d:' % i)
-            printer.DoScope()
-            printer.PrintLine('// duplicate output to border buffer')
-            for c in range(stage.output.chan):
-                printer.PrintLine('border_from_%s_dim_%d_right_chan_%d<<store_%s_chan_%d;' % (stage.name, d, c, stage.name, c))
-            printer.PrintLine('break;')
-            printer.UnScope()
+        LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if stencil.extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else 'load_%s_chan_%d_at_%s' % (node.name, node.chan, GetIndicesId(node.idx))
+        StorePrinter = lambda node: '%s store_%s_chan_%d' % (stage.output.type, node.name, node.chan)
 
-            for i in range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1):
-                printer.PrintLine('case %d:' % i)
-            printer.DoScope()
-            printer.PrintLine('// duplicate output to border buffer')
-            for c in range(stage.output.chan):
-                printer.PrintLine('border_from_%s_dim_%d_left_chan_%d<<store_%s_chan_%d;' % (stage.name, d, c, stage.name, c))
-            printer.PrintLine('break;')
-            printer.UnScope()
+        for expr in stage.expr:
+            expr.PrintCode(printer, stencil.buffers, LoadPrinter, StorePrinter, add_latency=True)
 
+        for c in range(stage.output.chan):
+            if stencil.cluster == 'none':
+                printer.PrintLine('%s_chan_%d<<store_%s_chan_%d;' % ((stage.name, c)*2))
+            else:
+                printer.PrintLine('%s_offset_%d_chan_%d<<store_%s_chan_%d;' % ((stage.name, unroll_factor-1-pe_id, c, stage.name, c)))
+            #printer.PrintLine('printf("calc: epoch%%d pe%%d %%d inputs=%s val=%%d\\n", epoch, pe_id, epoch*%d+pe_id-%d, %s, store_%s_chan_%d);' % (' '.join(['%d']*len(params)), stencil.unroll_factor, delay, ', '.join('load_%s'%p[1] for p in params), stage.name, c))
+
+        if stage.output.PreserveBorderTo():
+            printer.PrintLine()
+            for d in range(stencil.dim-1):
+                if stencil_dim[d] < 2:
+                    continue
+                printer.PrintLine('if(%s >= %d-1 && %s < input_size_dim_%d-%d+1)' % (IndexOrig(d), stencil_dim[d], IndexOrig(d), d, stencil_dim[d]))
+                printer.DoScope()
+                printer.PrintLine('switch(%s)' % IndexTile(d))
+                printer.DoScope()
+
+                for i in range(output_idx[d], stencil_dim[d]-1):
+                    printer.PrintLine('case %d:' % i)
+                printer.DoScope()
+                printer.PrintLine('// duplicate output to border buffer')
+                for c in range(stage.output.chan):
+                    printer.PrintLine('border_from_%s_dim_%d_right_chan_%d<<store_%s_chan_%d;' % (stage.name, d, c, stage.name, c))
+                printer.PrintLine('break;')
+                printer.UnScope()
+
+                for i in range(stencil.tile_size[d]-stencil_dim[d]+1, stencil.tile_size[d]-stencil_dim[d]+output_idx[d]+1):
+                    printer.PrintLine('case %d:' % i)
+                printer.DoScope()
+                printer.PrintLine('// duplicate output to border buffer')
+                for c in range(stage.output.chan):
+                    printer.PrintLine('border_from_%s_dim_%d_left_chan_%d<<store_%s_chan_%d;' % (stage.name, d, c, stage.name, c))
+                printer.PrintLine('break;')
+                printer.UnScope()
+
+                printer.UnScope()
+                printer.UnScope()
+        if stage.PreserveBorderFrom():
             printer.UnScope()
+            printer.PrintLine()
+            PrintIncrementCoordinates(printer, stencil, stage)
+
+        if stencil.cluster == 'fine' and not stage.IsOutput():
             printer.UnScope()
-    if stage.PreserveBorderFrom():
+            printer.PrintLine()
+            PrintBuffers(printer, stencil, stage.output, pe_id)
+        printer.UnScope()
         printer.UnScope()
         printer.PrintLine()
-        PrintIncrementCoordinates(printer, stencil, stage)
-
-    printer.UnScope()
-    printer.UnScope()
-    printer.PrintLine()
 
 def PrintIncrementCoordinates(printer, stencil, stage):
     overall_stencil_window = GetOverallStencilWindow(*([stage.PreserveBorderFrom(), stage.output] if stencil.preserve_border else [stencil.input, stencil.output]))
@@ -790,9 +965,9 @@ def PrintForwarding(printer, stencil, src_name):
                     overall_idx = GetStencilWindowOffset(stencil_window)
                     stencil_dim = GetStencilDim(stencil_window)
                     iteration = 1
-                    parent_buffer = stage.PreserveBorderFrom()
-                    while parent_buffer is not None and parent_buffer.parent is not None:
-                        parent_buffer = parent_buffer.parent.PreserveBorderFrom()
+                    parent_tensor = stage.PreserveBorderFrom()
+                    while parent_tensor is not None and parent_tensor.parent is not None:
+                        parent_tensor = parent_tensor.parent.PreserveBorderFrom()
                         iteration += 1
                     delay = (GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size))*iteration
 
@@ -855,6 +1030,10 @@ def PrintCode(stencil, output_file):
         for stage in stencil.stages.values():
             PrintComputeStage(printer, stencil, stage)
             printer.PrintLine()
+    elif stencil.cluster == 'fine':
+        PrintComputeInput(printer, stencil)
+        for stage in stencil.GetStagesChronologically():
+            PrintComputeStage(printer, stencil, stage)
 
     PrintInterface(printer, stencil)
 
