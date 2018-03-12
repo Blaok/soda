@@ -576,7 +576,7 @@ def PrintWrapped(p, stencil):
         p.PrintLine('for(int32_t %c = %d; %c < %s_size_dim_%d-%d; ++%c)' % (coords_in_tile[stencil.dim-1], overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.output.name, stencil.dim-1, overall_stencil_dim[stencil.dim-1]-1-overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
-            p.PrintLine('for(int32_t %c = %d; %c < actual_tile_size_dim_%d-%d; ++%c)' % (coords_in_tile[dim], overall_stencil_offset[dim-1], coords_in_tile[dim], dim, overall_stencil_dim[dim-1]-1-overall_stencil_offset[dim-1], coords_in_tile[dim]))
+            p.PrintLine('for(int32_t %c = %d; %c < actual_tile_size_dim_%d-%d; ++%c)' % (coords_in_tile[dim], overall_stencil_offset[dim], coords_in_tile[dim], dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], coords_in_tile[dim]))
             p.DoScope()
 
     p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(coords_tiled))
