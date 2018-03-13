@@ -460,10 +460,11 @@ class Printer(object):
     def LastVar(self, offset=-1):
         return 'assign_%d' % (self.assign+offset)
 
-    def PrintFunc(self, name, params, suffix=''):
+    def PrintFunc(self, name, params, suffix='', align=80):
         lines = [name+'(']
         for param in params:
-            if (self.indent + min(1, len(lines)-1))*4+len(lines[-1])+len(param+', ') > 100020:
+            if ((self.indent + min(1, len(lines)-1))*4+
+                    len(lines[-1])+len(param+', ')) > align:
                 lines.append(param+', ')
             else:
                 lines[-1] += param+', '

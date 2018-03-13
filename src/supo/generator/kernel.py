@@ -222,17 +222,21 @@ def PrintComputeStage(printer, stencil, stage):
                             printer.PrintLine('/* output */ hls::stream<%s>& from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (tensor.type, tensor.name, output_stage.name, point, c, unroll_index))
                 offset = next_fifo[tensor.name].get(offset, None)
 
+        # forwarded
+        if stage.output.PreserveBorderTo():
+            for d in range(stencil.dim-1):
+                param = 'border_from_%s_dim_%d' % (stage.name, d)
+                for c in range(stage.output.chan):
+                    printer.PrintLine(
+                        '/* output */ hls::stream<%s>& %s_left_chan_%d,' %
+                            (stage.output.type, param, c))
+                    printer.PrintLine(
+                        '/* output */ hls::stream<%s>& %s_right_chan_%d,' %
+                            (stage.output.type, param, c))
 
         # inputs
         for param in [(stencil.buffers[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))) for input_name, input_window in stage.window.items() for indices in input_window for c in range(stencil.buffers[input_name].chan)]:
             printer.PrintLine('/*  input */ hls::stream<%s>& %s,' % param)
-
-        # forwarded inputs
-        if stage.output.PreserveBorderTo():
-            for param in ['border_from_%s_dim_%d' % (stage.name, d) for d in range(stencil.dim-1)]:
-                for c in range(stage.output.chan):
-                    printer.PrintLine('/*  input */ hls::stream<%s>& %s_left_chan_%d,' % (stage.output.type, param, c))
-                    printer.PrintLine('/*  input */ hls::stream<%s>& %s_right_chan_%d,' % (stage.output.type, param, c))
 
         # params
         if stage.PreserveBorderFrom():
@@ -688,18 +692,31 @@ def PrintInterface(p, stencil):
         for stage in stencil.GetStagesChronologically():
             inputs = tuple(reversed(range(unroll_factor))) if stage.IsOutput() else [start for start, end in stencil.GetReuseBuffers()[stage.name][1:] if start==end]
             for unroll_index in range(unroll_factor):
-                params = ['%s_offset_%s_chan_%d' % (stage.name, inputs[unroll_index], c) for c in range(stage.output.chan)]
-                params += ['from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, stage.name, i, c, unroll_index) for input_name, input_window in stage.window.items() for i in range(len(input_window)) for c in range(stencil.buffers[input_name].chan)]
+                params = []
+                for c in range(stage.output.chan):
+                    params.append('/* output */ %s_offset_%s_chan_%d' %
+                        (stage.name, inputs[unroll_index], c))
                 if stage.output.PreserveBorderTo():
                     for d in range(stencil.dim-1):
                         for c in range(stage.output.chan):
                             param = (stage.name, d, c, unroll_index)
-                            params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
+                            params += [
+            '/* output */ border_from_%s_dim_%d_left_chan_%d_pe_%d'  % param,
+            '/* output */ border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
+                for input_name, input_window in stage.window.items():
+                    for i in range(len(input_window)):
+                        for c in range(stencil.buffers[input_name].chan):
+                            params += [
+                        '/*  input */ from_%s_to_%s_param_%d_chan_%d_pe_%d'
+                        % (input_name, stage.name, i, c, unroll_index)]
                 if stage.PreserveBorderFrom():
-                    params += ['input_bound_dim_%d' % d for d in range(stencil.dim-1)]
-                params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
-                params.append('epoch_num')
-                p.PrintFunc('compute_%s<%d>' % (stage.name, unroll_index), params, ';')
+                    for d in range(stencil.dim-1):
+                        params.append('/*  param */ input_bound_dim_%d' % d)
+                for d in range(stencil.dim):
+                    params.append('/*  param */ input_size_dim_%d' % d)
+                params.append('/*  param */ epoch_num')
+                p.PrintFunc('compute_%s<%d>' % (stage.name, unroll_index),
+                    params, ';', 0)
 
             if not stage.IsOutput():
                 p.PrintLine()
@@ -912,7 +929,8 @@ def PrintForwarderWithBorder(printer, stencil, forwarder_with_border):
     stage = stencil.stages[src_name]
     stencil_window = GetOverallStencilWindow(stage.PreserveBorderFrom(), stage.output)
 
-    params = ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]+['hls::stream<T>& src']
+    params = ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]
+    params += ['hls::stream<T>& src']
     for param in ['border_dim_%d' % d for d in range(stencil.dim-1)]:
         params += ['hls::stream<T>& %s_left' % param, 'hls::stream<T>& %s_right' % param]
     params += ['uint32_t input_bound_dim_%d' % d for d in range(stencil.dim-1)]
@@ -999,10 +1017,16 @@ def PrintForwarding(printer, stencil, src_name):
             for c in range(stencil.buffers[src_name].chan):
                 params = []
                 for unroll_index, point_index in points.items():
-                    params.append('from_%s_to_%s_param_%d_chan_%d_pe_%d' % (src_name, dst_name, point_index, c, unroll_index))
+                    params.append(
+                        '/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d' %
+                        (src_name, dst_name, point_index, c, unroll_index))
                 if offset in next_fifo[src_name]:
-                    params.append('%s_offset_%d_chan_%d' % (src_name, next_fifo[src_name][offset], c))
-                params.append('%s_offset_%d_chan_%d' % (src_name, offset, c))
+                    params.append(
+                        '/* output */ %s_offset_%d_chan_%d' %
+                        (src_name, next_fifo[src_name][offset], c))
+                params.append(
+                    '/*  input */ %s_offset_%d_chan_%d' %
+                    (src_name, offset, c))
                 func_name = 'forward'
                 temp_param = stencil.GetReuseBufferLength(src_name, offset)
                 forward_num = len(params)-1
@@ -1023,17 +1047,19 @@ def PrintForwarding(printer, stencil, src_name):
                     for d in range(stencil.dim-1):
                         param_offset = (stencil.tile_size[d]-stencil_dim[d]+1)*reduce(operator.mul, [stencil.tile_size[dd] for dd in range(d)], 1)
                         param = (src_name, d, c, (unroll_index+param_offset)%stencil.unroll_factor)
-                        params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param]
+                        params.append(
+            '/*  input */ border_from_%s_dim_%d_left_chan_%d_pe_%d' % param)
                         param = (src_name, d, c, (unroll_index-param_offset)%stencil.unroll_factor)
-                        params += ['border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
+                        params.append(
+            '/*  input */ border_from_%s_dim_%d_right_chan_%d_pe_%d' % param)
                     for d in range(stencil.dim-1):
-                        params.append('input_bound_dim_%d' % d)
+                        params.append('/*  param */ input_bound_dim_%d' % d)
                     for d in range(stencil.dim):
-                        params.append('input_size_dim_%d' % d)
+                        params.append('/*  param */ input_size_dim_%d' % d)
 
-                params.append('epoch_num')
+                params.append('/*  param */ epoch_num')
                 func_name += '_%d<%s, %s>' % (forward_num, stencil.buffers[src_name].type, temp_param)
-                forwardings[offset] += [[func_name, params, ';']]
+                forwardings[offset] += [[func_name, params, ';', 0]]
     for offset, arg_lists in sorted(forwardings.items()):
         for args in arg_lists:
             printer.PrintFunc(*args)
