@@ -85,51 +85,98 @@ def PrintBuffers(printer, stencil, tensor, pe_id):
     offset = unroll_factor-1-pe_id
     depth = 0
     last_depth = depth
+    reads = {}
+    writes = {}
+    bounds = set()
     while offset is not None:
-        printer.DoScope()
-        printer.PrintLine('%s tmp;' % tensor.type)
         if depth != 0:
-            printer.PrintLine(
-                'if(epoch < %d or !(epoch < epoch_num+%d))' % (depth, depth))
+            read_lower = 'epoch < %d' % depth
+            read_upper = 'epoch < epoch_num+%d' % depth
         else:
-            printer.PrintLine(
-                'if(!(epoch < epoch_num))')
-        printer.DoScope()
-        printer.PrintLine('tmp = 0;')
-        printer.UnScope()
-        printer.PrintLine('else')
-        printer.DoScope()
-        for c in range(stencil.buffers[tensor.name].chan):
-            printer.PrintLine(
-                'tmp = %s_offset_%d_chan_%d.read();' %
-                (tensor.name, offset, c))
-        printer.UnScope()
+            read_lower = 'false'
+            read_upper = 'epoch < epoch_num'
         if last_depth != 0:
-            printer.PrintLine(
-                'if(!(epoch < %d) and epoch < epoch_num+%d)' %
-                (last_depth, last_depth))
+            write_lower = 'epoch < %d' % last_depth
+            write_upper = 'epoch < epoch_num+%d' % last_depth
         else:
-            printer.PrintLine(
-                'if(epoch < epoch_num)')
-        printer.DoScope()
+            write_lower = 'false'
+            write_upper = 'epoch < epoch_num'
+
+        if depth not in bounds:
+            printer.PrintLine('bool lower_bound_%d = %s;' % (depth, read_lower))
+            printer.PrintLine('bool upper_bound_%d = %s;' % (depth, read_upper))
+            bounds.add(depth)
+        if last_depth not in bounds:
+            printer.PrintLine('bool lower_bound_%d = %s;' % (last_depth, read_lower))
+            printer.PrintLine('bool upper_bound_%d = %s;' % (last_depth, read_upper))
+            bounds.add(last_depth)
+
+        read_depth = depth
+        write_depth = last_depth
+        reads[read_depth] = '%s_offset_%d_chan_%%d' % (tensor.name, offset)
         for output_stage in tensor.children:
             points = all_points[tensor.name][output_stage.name][offset]
             for unroll_index, point in points.items():
-                for c in range(stencil.buffers[tensor.name].chan):
-                    printer.PrintLine(
-                        'from_%s_to_%s_param_%d_chan_%d_pe_%d<<tmp;' %
-                        (tensor.name, output_stage.name,
-                            point, c, unroll_index))
+                writes.setdefault(write_depth, []).append((
+                    'from_%s_to_%s_param_%d_chan_%%d_pe_%d' %
+                    (tensor.name, output_stage.name, point, unroll_index),
+                    reads[read_depth]))
         next_offset = next_fifo[tensor.name].get(offset, None)
         if next_offset is not None:
-            for c in range(stencil.buffers[tensor.name].chan):
-                printer.PrintLine(
-                    '%s_offset_%d_chan_%d<<tmp;' %
-                    (tensor.name, next_offset, c))
+            writes.setdefault(write_depth, []).append((
+                '%s_offset_%d_chan_%%d' % (tensor.name, next_offset),
+                reads[read_depth]))
             last_depth = depth
             depth += (next_offset-offset)//unroll_factor
         offset = next_offset
-        printer.UnScope()
+
+    depths = sorted(set(reads.keys())|set(writes.keys()))
+    first = 'else '
+    printer.PrintLine('if(lower_bound_%d) {}' % depths[0])
+    for lower_depth, upper_depth, lower_bound, upper_bound in zip(
+            depths+depths[:-1], depths[1:]+depths,
+            ['lower']*len(depths)+['upper']*(len(depths)-1),
+            ['lower']*(len(depths)-1)+['upper']*len(depths)):
+        printer.PrintLine(
+            '%sif(%s_bound_%d)' % (first,
+                upper_bound, upper_depth))
+        printer.DoScope()
+        #printer.PrintLine('#pragma HLS latency min=1 max=1', 0)
+        read_set = set()
+        def PrintIntervalReads():
+            read = reads[depth]
+            read_set.add(read)
+            for c in range(stencil.buffers[tensor.name].chan):
+                printer.PrintLine('%s tmp_%s = %s.read();' % (tensor.type, read%c, read%c))
+        def PrintIntervalWrites():
+            for c in range(stencil.buffers[tensor.name].chan):
+                for write, read in writes.get(depth, []):
+                    if read in read_set:
+                        printer.PrintLine('%s << tmp_%s;' % (write%c, read%c))
+                    else:
+                        printer.PrintLine('%s << 0;' % write%c)
+        for depth in depths:
+            if lower_bound == 'lower' and upper_bound == 'lower':
+                if lower_depth >= depth:
+                    PrintIntervalReads()
+            elif lower_bound == 'lower' and upper_bound == 'upper':
+                if lower_depth >= depth and upper_depth <= depth:
+                    PrintIntervalReads()
+            elif lower_bound == 'upper' and upper_bound == 'upper':
+                if upper_depth <= depth:
+                    PrintIntervalReads()
+        for depth in depths:
+            if lower_bound == 'lower' and upper_bound == 'lower':
+                if lower_depth >= depth:
+                    PrintIntervalWrites()
+            elif lower_bound == 'lower' and upper_bound == 'upper':
+                if lower_depth >= depth and upper_depth <= depth:
+                    PrintIntervalWrites()
+            elif lower_bound == 'upper' and upper_bound == 'upper':
+                if upper_depth <= depth:
+                    PrintIntervalWrites()
+        if not first:
+            first = 'else '
         printer.UnScope()
 
 def PrintComputeStage(printer, stencil, stage):
