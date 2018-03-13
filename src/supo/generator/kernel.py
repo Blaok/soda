@@ -50,14 +50,14 @@ def PrintComputeInput(printer, stencil):
             params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
             for param in params:
                 printer.PrintLine('/*  param */ uint32_t %s,' % param)
-            printer.PrintLine('/*  param */ uint64_t epoch_num)')
+            printer.PrintLine('/*  param */ uint32_t epoch_num)')
             printer.UnIndent()
             printer.DoScope()
 
             PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, pe_id)
 
             printer.PrintLine('compute_%s_pe_%d_epoch:' % (tensor.name, pe_id), 0)
-            printer.PrintLine('for(uint64_t epoch = 0; epoch < epoch_num+%d; ++epoch)' %
+            printer.PrintLine('for(uint32_t epoch = 0; epoch < epoch_num+%d; ++epoch)' %
                 ((intermediate_offsets[-1]-intermediate_offsets[0])//unroll_factor))
             printer.DoScope()
             printer.PrintLine('#pragma HLS pipeline II=1', 0)
@@ -193,7 +193,7 @@ def PrintComputeStage(printer, stencil, stage):
                 printer.PrintLine('/*  param */ uint32_t input_bound_dim_%d,' % d)
         for d in range(stencil.dim):
             printer.PrintLine('/*  param */ uint32_t input_size_dim_%d,' % d)
-        printer.PrintLine('/*  param */ uint64_t epoch_num)')
+        printer.PrintLine('/*  param */ uint32_t epoch_num)')
         printer.UnIndent()
         printer.DoScope()
 
@@ -221,7 +221,7 @@ def PrintComputeStage(printer, stencil, stage):
 
         printer.PrintLine('compute_%s_epoch:' % func_name, 0)
         printer.PrintLine(
-            'for(uint64_t epoch = 0; epoch < epoch_num%s; ++epoch)' % bound)
+            'for(uint32_t epoch = 0; epoch < epoch_num%s; ++epoch)' % bound)
         printer.DoScope()
         printer.PrintLine('#pragma HLS pipeline II=1', 0)
 
