@@ -774,7 +774,7 @@ def PrintInterface(p, stencil):
                 p.PrintLine('%s,' % GetTensorAt(stencil.output.name, unroll_index, c))
             p.PrintLine('coalesced_data_num);')
             p.UnIndent()
-    for c in range(input_chan):
+    for c in range(output_chan):
         for i in range(dram_bank):
             p.PrintLine('store(var_output_chan_%d_bank_%d, output_stream_chan_%d_bank_%d, coalesced_data_num);' % ((c, i)*2))
 
