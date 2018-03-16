@@ -24,6 +24,12 @@ _logger = logging.getLogger('__main__').getChild(__name__)
 class InternalError(Exception):
     pass
 
+class SemanticError(Exception):
+    pass
+
+class SemanticWarn(Exception):
+    pass
+
 # Buffer.name: str
 # Buffer.type: str
 # Buffer.chan: int

@@ -8,6 +8,7 @@ import os
 import sys
 
 import supo.generator.utils
+from supo.generator.utils import SemanticError, SemanticWarn
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -73,12 +74,6 @@ def StringToInteger(s, none_val=None):
     if s[0] == '0':
         return int(s, 8)
     return int(s)
-
-class SemanticError(Exception):
-    pass
-
-class SemanticWarn(Exception):
-    pass
 
 Load = namedtuple('Load', ['name', 'chan', 'idx'])
 

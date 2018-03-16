@@ -112,15 +112,7 @@ def main():
                 supo_model = supo_mm.model_from_str(supo_file.read())
                 supo_file_name = supo_file.name
         logger.info('%s parsed as supo file' % supo_file_name)
-    except TextXSyntaxError as e:
-        logger.error(e)
-        sys.exit(1)
-    except SemanticError as e:
-        logger.error(e)
-        sys.exit(1)
-    except SemanticWarn as w:
-        logger.warn(w)
-    else:
+
         stencil = supo.generator.utils.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
             dram_bank = args.dram_bank if args.dram_bank is not None else supo_model.dram_bank,
@@ -184,6 +176,14 @@ def main():
             if args.header_file is None:
                 with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.h' % supo_model.app_name), 'w') as header_file:
                     supo.generator.header.PrintCode(stencil, header_file)
+    except TextXSyntaxError as e:
+        logger.error(e)
+        sys.exit(1)
+    except SemanticError as e:
+        logger.error(e)
+        sys.exit(1)
+    except SemanticWarn as w:
+        logger.warn(w)
 
 if __name__ == '__main__':
     main()
