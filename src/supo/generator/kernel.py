@@ -686,7 +686,7 @@ def PrintInterface(p, stencil):
     input_size_dim = ', '.join('input_size_dim_%d' % d for d in range(stencil.dim))
     next_fifo = stencil.GetNextFIFO()
     if stencil.cluster == 'none':
-        PrintForwarding(p, stencil, stencil.input.name)
+        PrintForwardCall(p, stencil, stencil.input.name)
         p.PrintLine()
 
         for stage in stencil.GetStagesChronologically():
@@ -720,7 +720,7 @@ def PrintInterface(p, stencil):
 
             if not stage.IsOutput():
                 p.PrintLine()
-                PrintForwarding(p, stencil, stage.name)
+                PrintForwardCall(p, stencil, stage.name)
             p.PrintLine()
     elif stencil.cluster == 'fine':
         for buffer in [stencil.input]+[stage.output for stage in stencil.GetStagesChronologically()]:
@@ -899,7 +899,7 @@ def PrintStore(printer):
     printer.UnScope()
     printer.UnScope()
 
-def PrintForwarder(printer, forwarder):
+def PrintForwardFunc(printer, forwarder):
     printer.PrintFunc('template<typename T, uint32_t fifo_depth> void forward_%d' % forwarder, ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]+['hls::stream<T>& src']+['uint32_t data_num'])
     printer.DoScope()
     printer.PrintLine('forward_%d_epoch:' % forwarder, 0)
@@ -923,7 +923,7 @@ def PrintForwarder(printer, forwarder):
     printer.UnScope()
     printer.UnScope()
 
-def PrintForwarderWithBorder(printer, stencil, forwarder_with_border):
+def PrintForwardFuncWithBorder(printer, stencil, forwarder_with_border):
     src_name = forwarder_with_border[0]
     forwarder = forwarder_with_border[1]
     stage = stencil.stages[src_name]
@@ -1003,66 +1003,14 @@ def PrintForwarderWithBorder(printer, stencil, forwarder_with_border):
     printer.UnScope()
     printer.UnScope()
 
-def PrintForwarding(printer, stencil, src_name):
-    next_fifo = stencil.GetNextFIFO()
-    logger.debug(next_fifo)
-    unroll_factor = stencil.unroll_factor
-    dsts = stencil.GetAllPoints()[src_name]
-    reuse_buffer = stencil.GetReuseBuffers()[src_name]
-    forwardings = {}
-
-    for dst_name, dst_point_dicts in dsts.items():
-        for offset, points in dst_point_dicts.items():
-            forwardings[offset] = []
-            for c in range(stencil.buffers[src_name].chan):
-                params = []
-                for unroll_index, point_index in points.items():
-                    params.append(
-                        '/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d' %
-                        (src_name, dst_name, point_index, c, unroll_index))
-                if offset in next_fifo[src_name]:
-                    params.append(
-                        '/* output */ %s_offset_%d_chan_%d' %
-                        (src_name, next_fifo[src_name][offset], c))
-                params.append(
-                    '/*  input */ %s_offset_%d_chan_%d' %
-                    (src_name, offset, c))
-                func_name = 'forward'
-                temp_param = stencil.GetReuseBufferLength(src_name, offset)
-                forward_num = len(params)-1
-                if offset<stencil.unroll_factor and stencil.buffers[src_name].PreserveBorderTo() and not stencil.buffers[src_name].IsInput():
-                    stage = stencil.stages[src_name]
-                    stencil_window = GetOverallStencilWindow(stage.PreserveBorderFrom() if stage.PreserveBorderFrom() else stencil.input, stage.output)
-                    overall_idx = GetStencilWindowOffset(stencil_window)
-                    stencil_dim = GetStencilDim(stencil_window)
-                    iteration = 1
-                    parent_tensor = stage.PreserveBorderFrom()
-                    while parent_tensor is not None and parent_tensor.parent is not None:
-                        parent_tensor = parent_tensor.parent.PreserveBorderFrom()
-                        iteration += 1
-                    delay = (GetStencilDistance(stencil_window, stencil.tile_size) - Serialize(overall_idx, stencil.tile_size))*iteration
-
-                    func_name += '_'+src_name
-                    temp_param = '%d-%d' % (unroll_index, delay)
-                    for d in range(stencil.dim-1):
-                        param_offset = (stencil.tile_size[d]-stencil_dim[d]+1)*reduce(operator.mul, [stencil.tile_size[dd] for dd in range(d)], 1)
-                        param = (src_name, d, c, (unroll_index+param_offset)%stencil.unroll_factor)
-                        params.append(
-            '/*  input */ border_from_%s_dim_%d_left_chan_%d_pe_%d' % param)
-                        param = (src_name, d, c, (unroll_index-param_offset)%stencil.unroll_factor)
-                        params.append(
-            '/*  input */ border_from_%s_dim_%d_right_chan_%d_pe_%d' % param)
-                    for d in range(stencil.dim-1):
-                        params.append('/*  param */ input_bound_dim_%d' % d)
-                    for d in range(stencil.dim):
-                        params.append('/*  param */ input_size_dim_%d' % d)
-
-                params.append('/*  param */ epoch_num')
-                func_name += '_%d<%s, %s>' % (forward_num, stencil.buffers[src_name].type, temp_param)
-                forwardings[offset] += [[func_name, params, ';', 0]]
-    for offset, arg_lists in sorted(forwardings.items()):
-        for args in arg_lists:
-            printer.PrintFunc(*args)
+def PrintForwardCall(printer, stencil, src_name):
+    forwardings = stencil.GetForwardings(src_name)
+    for offset, args in sorted(forwardings.items()):
+        forward_num = len(args[1])
+        temp_param = forwardings[offset][4]
+        func_name = '%s_%d<%s, %s>' % (args[0], forward_num,
+            stencil.buffers[src_name].type, temp_param)
+        printer.PrintFunc(func_name, args[1]+args[2]+args[3], ';', 0)
 
 def PrintCode(stencil, output_file):
     logger.info('generate kernel code as %s' % output_file.name)
@@ -1094,11 +1042,11 @@ def PrintCode(stencil, output_file):
 
     if stencil.cluster == 'none':
         for forwarder in stencil.GetForwarders():
-            PrintForwarder(printer, forwarder)
+            PrintForwardFunc(printer, forwarder)
             printer.PrintLine()
 
         for forwarder in stencil.GetForwardersWithBorder():
-            PrintForwarderWithBorder(printer, stencil, forwarder)
+            PrintForwardFuncWithBorder(printer, stencil, forwarder)
             printer.PrintLine()
         for stage in stencil.stages.values():
             PrintComputeStage(printer, stencil, stage)

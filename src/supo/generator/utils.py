@@ -361,10 +361,16 @@ class Stencil(object):
             for src_name, dsts in all_points.items():
                 for dst_name, dst_point_dicts in dsts.items():
                     for offset, points in sorted(dst_point_dicts.items()):
-                        if offset<self.unroll_factor and self.buffers[src_name].PreserveBorderTo() and not self.buffers[src_name].IsInput():
-                            self.forwarders_with_border |= {(src_name, len(points) + (1 if offset in next_fifo[src_name] else 0))}
+                        if (
+                            offset<self.unroll_factor and
+                            self.buffers[src_name].PreserveBorderTo() and
+                            not self.buffers[src_name].IsInput()):
+                            self.forwarders_with_border |= {(
+                                src_name,
+                                len(self.GetForwardings(src_name)[offset][1]))}
                         else:
-                            self.forwarders |= {len(points) + (1 if offset in next_fifo[src_name] else 0)}
+                            self.forwarders |= {
+                                len(self.GetForwardings(src_name)[offset][1])}
             self.forwarders = sorted(self.forwarders)
             self.forwarders_with_border = sorted(self.forwarders_with_border)
         return self.forwarders
@@ -378,6 +384,104 @@ class Stencil(object):
         if not hasattr(self, 'reuse_buffer_lengths'):
             self.GetReuseBuffers()
         return self.reuse_buffer_lengths[name][offset]
+
+    def GetForwardings(self, src_name):
+        if hasattr(self, 'forwardings'):
+            if src_name in self.forwardings:
+                return self.forwardings[src_name]
+        else:
+            self.forwardings = {}
+        next_fifo = self.GetNextFIFO()
+        _logger.debug(next_fifo)
+        unroll_factor = self.unroll_factor
+        dsts = self.GetAllPoints()[src_name]
+        reuse_buffer = self.GetReuseBuffers()[src_name]
+
+        # {offset: [func_name, outputs, inputs, params, temp_param]}
+        forwardings = {}
+
+        for dst_name, dst_point_dicts in dsts.items():
+            for offset, points in dst_point_dicts.items():
+                forwardings.setdefault(offset, ['', [], [], [], None])
+                func_name = forwardings[offset][0]
+                outputs = forwardings[offset][1]
+                inputs = forwardings[offset][2]
+                params = forwardings[offset][3]
+                for c in range(self.buffers[src_name].chan):
+                    for unroll_index, point_index in points.items():
+                        outputs.insert(
+                            0,
+                            '/* output */ '
+                            'from_%s_to_%s_param_%d_chan_%d_pe_%d' %
+                            (src_name, dst_name, point_index, c, unroll_index))
+
+                    if func_name:
+                        continue
+                    if offset in next_fifo[src_name]:
+                        outputs.append(
+                            '/* output */ %s_offset_%d_chan_%d' %
+                            (src_name, next_fifo[src_name][offset], c))
+                    inputs.append(
+                        '/*  input */ %s_offset_%d_chan_%d' %
+                        (src_name, offset, c))
+                    func_name = 'forward'
+                    temp_param = self.GetReuseBufferLength(src_name, offset)
+                    forward_num = len(params)-1
+                    if (
+                        offset<self.unroll_factor and
+                        self.buffers[src_name].PreserveBorderTo() and
+                        not self.buffers[src_name].IsInput()):
+                        stage = self.stages[src_name]
+                        if stage.PreserveBorderFrom():
+                            self_window_input = stage.PreserveBorderFrom()
+                        else:
+                            self_window_input = self.input
+                        self_window = GetOverallStencilWindow(
+                            self_window_input, stage.output)
+                        overall_idx = GetStencilWindowOffset(self_window)
+                        self_dim = GetStencilDim(self_window)
+                        iteration = 1
+                        parent = stage.PreserveBorderFrom()
+                        while (
+                            parent is not None and
+                            parent.parent is not None):
+                            parent = parent.parent.PreserveBorderFrom()
+                            iteration += 1
+                        delay = (
+                            GetStencilDistance(self_window, self.tile_size)-
+                            Serialize(overall_idx, self.tile_size))*iteration
+
+                        func_name += '_'+src_name
+                        temp_param = '%d-%d' % (unroll_index, delay)
+                        for d in range(self.dim-1):
+                            param_offset = (
+                                (self.tile_size[d]-self_dim[d]+1)*
+                                reduce(
+                                    operator.mul,
+                                    [self.tile_size[dd] for dd in range(d)],
+                                    1))
+                            param = (
+                                src_name, d, c,
+                                (unroll_index+param_offset)%self.unroll_factor)
+                            inputs.append(
+                                '/*  input */ border_from_%s_dim_%d_'
+                                'left_chan_%d_pe_%d' % param)
+                            param = (
+                                src_name, d, c,
+                                (unroll_index-param_offset)%self.unroll_factor)
+                            inputs.append(
+                                '/*  input */ border_from_%s_dim_%d_'
+                                'right_chan_%d_pe_%d' % param)
+                        for d in range(self.dim-1):
+                            params.append('/*  param */ input_bound_dim_%d' % d)
+                        for d in range(self.dim):
+                            params.append('/*  param */ input_size_dim_%d' % d)
+
+                    params.append('/*  param */ epoch_num')
+                    forwardings[offset][0] = func_name
+                    forwardings[offset][4] = temp_param
+        self.forwardings[src_name] = forwardings
+        return forwardings
 
 def _GetChains(tile_size, b, unroll_factor):
     _logger.debug('get reuse chains of buffer %s' % b.name)
