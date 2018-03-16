@@ -1,7 +1,7 @@
 .PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp check-git-status
 
 APP ?= blur
-SDA_VER := 2017.1
+SDA_VER ?= 2017.1
 TILE_SIZE_DIM_0 ?= 8000
 #TILE_SIZE_DIM_1 ?= 1024
 UNROLL_FACTOR ?= 64
