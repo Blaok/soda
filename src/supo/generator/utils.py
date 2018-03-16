@@ -413,23 +413,24 @@ class Stencil(object):
                 outputs = forwardings[offset][1]
                 inputs = forwardings[offset][2]
                 params = forwardings[offset][3]
-                for c in range(self.buffers[src_name].chan):
+                #for c in range(self.buffers[src_name].chan):
+                if True:
                     for unroll_index, point_index in points.items():
                         outputs.insert(
                             0,
                             '/* output */ '
-                            'from_%s_to_%s_param_%d_chan_%d_pe_%d' %
-                            (src_name, dst_name, point_index, c, unroll_index))
+                            'from_%s_to_%s_param_%d_chan_%%d_pe_%d' %
+                            (src_name, dst_name, point_index, unroll_index))
 
                     if func_name:
                         continue
                     if offset in next_fifo[src_name]:
                         outputs.append(
-                            '/* output */ %s_offset_%d_chan_%d' %
-                            (src_name, next_fifo[src_name][offset], c))
+                            '/* output */ %s_offset_%d_chan_%%d' %
+                            (src_name, next_fifo[src_name][offset]))
                     inputs.append(
-                        '/*  input */ %s_offset_%d_chan_%d' %
-                        (src_name, offset, c))
+                        '/*  input */ %s_offset_%d_chan_%%d' %
+                        (src_name, offset))
                     func_name = 'forward'
                     temp_param = self.GetReuseBufferLength(src_name, offset)
                     forward_num = len(params)-1
@@ -467,17 +468,17 @@ class Stencil(object):
                                     [self.tile_size[dd] for dd in range(d)],
                                     1))
                             param = (
-                                src_name, d, c,
+                                src_name, d,
                                 (unroll_index+param_offset)%self.unroll_factor)
                             inputs.append(
                                 '/*  input */ border_from_%s_dim_%d_'
-                                'left_chan_%d_pe_%d' % param)
+                                'left_chan_%%d_pe_%d' % param)
                             param = (
-                                src_name, d, c,
+                                src_name, d,
                                 (unroll_index-param_offset)%self.unroll_factor)
                             inputs.append(
                                 '/*  input */ border_from_%s_dim_%d_'
-                                'right_chan_%d_pe_%d' % param)
+                                'right_chan_%%d_pe_%d' % param)
                         for d in range(self.dim-1):
                             params.append('/*  param */ input_bound_dim_%d' % d)
                         for d in range(self.dim):

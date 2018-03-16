@@ -1010,7 +1010,12 @@ def PrintForwardCall(printer, stencil, src_name):
         temp_param = forwardings[offset][4]
         func_name = '%s_%d<%s, %s>' % (args[0], forward_num,
             stencil.buffers[src_name].type, temp_param)
-        printer.PrintFunc(func_name, args[1]+args[2]+args[3], ';', 0)
+        for c in range(stencil.buffers[src_name].chan):
+            printer.PrintFunc(
+                func_name,
+                [s%c for s in args[1]]+
+                [s%c for s in args[2]]+
+                args[3], ';', 0)
 
 def PrintCode(stencil, output_file):
     logger.info('generate kernel code as %s' % output_file.name)
