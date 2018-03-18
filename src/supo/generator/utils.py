@@ -178,8 +178,23 @@ class Stencil(object):
         intermediates += new_intermediates
 
         _logger.debug(input_node)
-        _logger.debug(intermediates)
-        _logger.debug(output_node)
+        for intermediate in intermediates:
+            _logger.debug('Intermediate(')
+            _logger.debug('    name: %s,' % intermediate.name)
+            _logger.debug('    type: %s,' % intermediate.type)
+            _logger.debug('    chan: %s,' % intermediate.chan)
+            _logger.debug('    border: %s,' % intermediate.border)
+            for e in intermediate.expr:
+                _logger.debug('    expr  : [')
+                _logger.debug('        %s%s' % (e, '])' if e is intermediate.expr[-1] else ''))
+        _logger.debug('Output(')
+        _logger.debug('    name: %s,' % output_node.name)
+        _logger.debug('    type: %s,' % output_node.type)
+        _logger.debug('    chan: %s,' % output_node.chan)
+        _logger.debug('    border: %s,' % output_node.border)
+        for e in output_node.expr:
+            _logger.debug('    expr  : [')
+            _logger.debug('        %s%s' % (e, '])' if e is output_node.expr[-1] else ','))
 
         self.buffers = {i.name: Buffer(i) for i in intermediates}
         if input_node.name in intermediate_names:
@@ -276,7 +291,7 @@ class Stencil(object):
                 windows.setdefault(node.preserve_border, list(set(windows.get(node.preserve_border, set()))|{next(iter(node.expr)).idx}))
                 stencil_window = GetOverallStencilWindow(self.buffers[node.preserve_border], self.buffers[node.name])
                 self.stages[node.name].delay.setdefault(node.preserve_border, GetStencilDistance(stencil_window, self.tile_size)-Serialize(GetStencilWindowOffset(stencil_window), self.tile_size))
-                _logger.debug('window for %s is %s' % (node.name, windows))
+                _logger.debug('window for %s@%s is %s' % (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
                 self.stages[node.name].inputs.setdefault(node.preserve_border, self.buffers[node.preserve_border])
                 self.buffers[node.preserve_border].children.add(self.stages[node.name])
 
@@ -319,7 +334,7 @@ class Stencil(object):
         loads = node.GetLoads() # [Load, ...]
         load_names = {l.name for l in loads if l.name not in self.extra_params}
         windows = {name: sorted({l.idx for l in loads if l.name == name}, key=lambda x: Serialize(x, self.tile_size)) for name in load_names}
-        _logger.debug('window for %s is %s' % (node.name, windows))
+        _logger.debug('window for %s@(%s) is %s' % (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
         return windows
 
     # return [OutputExpr, ...]
@@ -356,6 +371,7 @@ class Stencil(object):
                 for start, end in reuse_buffer[1:]:
                     if start<end:
                         self.next_fifo[name][start] = end
+            _logger.debug('next_fifo: %s' % self.next_fifo)
         return self.next_fifo
 
     def GetForwarders(self):
@@ -398,7 +414,6 @@ class Stencil(object):
         else:
             self.forwardings = {}
         next_fifo = self.GetNextFIFO()
-        _logger.debug(next_fifo)
         unroll_factor = self.unroll_factor
         dsts = self.GetAllPoints()[src_name]
         reuse_buffer = self.GetReuseBuffers()[src_name]
