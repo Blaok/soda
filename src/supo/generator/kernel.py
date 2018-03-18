@@ -47,7 +47,7 @@ def PrintComputeInput(printer, stencil):
                     for c in range(tensor.chan):
                         param = (tensor.name, d, c, pe_id)
                         params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
-            params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
+                params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
             for param in params:
                 printer.PrintLine('/*  param */ uint32_t %s,' % param)
             printer.PrintLine('/*  param */ uint32_t epoch_num)')
@@ -242,8 +242,8 @@ def PrintComputeStage(printer, stencil, stage):
         if stage.PreserveBorderFrom():
             for d in range(stencil.dim-1):
                 printer.PrintLine('/*  param */ uint32_t input_bound_dim_%d,' % d)
-        for d in range(stencil.dim):
-            printer.PrintLine('/*  param */ uint32_t input_size_dim_%d,' % d)
+            for d in range(stencil.dim):
+                printer.PrintLine('/*  param */ uint32_t input_size_dim_%d,' % d)
         printer.PrintLine('/*  param */ uint32_t epoch_num)')
         printer.UnIndent()
         printer.DoScope()
@@ -712,8 +712,8 @@ def PrintInterface(p, stencil):
                 if stage.PreserveBorderFrom():
                     for d in range(stencil.dim-1):
                         params.append('/*  param */ input_bound_dim_%d' % d)
-                for d in range(stencil.dim):
-                    params.append('/*  param */ input_size_dim_%d' % d)
+                    for d in range(stencil.dim):
+                        params.append('/*  param */ input_size_dim_%d' % d)
                 params.append('/*  param */ epoch_num')
                 p.PrintFunc('compute_%s<%d>' % (stage.name, unroll_index),
                     params, ';', 0)
@@ -759,7 +759,7 @@ def PrintInterface(p, stencil):
                             params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
                 if buffer.PreserveBorderFrom():
                     params += ['input_bound_dim_%d' % d for d in range(stencil.dim-1)]
-                params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
+                    params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
                 for param in params:
                     p.PrintLine('/*  param */ %s,' % param)
                 p.PrintLine('/*  param */ epoch_num);')
