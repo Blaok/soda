@@ -428,80 +428,78 @@ class Stencil(object):
                 outputs = forwardings[offset][1]
                 inputs = forwardings[offset][2]
                 params = forwardings[offset][3]
-                #for c in range(self.buffers[src_name].chan):
-                if True:
-                    for unroll_index, point_index in points.items():
-                        outputs.insert(
-                            0,
-                            '/* output */ '
-                            'from_%s_to_%s_param_%d_chan_%%d_pe_%d' %
-                            (src_name, dst_name, point_index, unroll_index))
+                for unroll_index, point_index in points.items():
+                    outputs.insert(
+                        0,
+                        '/* output */ '
+                        'from_%s_to_%s_param_%d_chan_%%d_pe_%d' %
+                        (src_name, dst_name, point_index, unroll_index))
 
-                    if func_name:
-                        continue
-                    if offset in next_fifo[src_name]:
-                        outputs.append(
-                            '/* output */ %s_offset_%d_chan_%%d' %
-                            (src_name, next_fifo[src_name][offset]))
-                    inputs.append(
-                        '/*  input */ %s_offset_%d_chan_%%d' %
-                        (src_name, offset))
-                    func_name = 'forward'
-                    temp_param = self.GetReuseBufferLength(src_name, offset)
-                    forward_num = len(params)-1
-                    if (
-                        offset<self.unroll_factor and
-                        self.buffers[src_name].PreserveBorderTo() and
-                        not self.buffers[src_name].IsInput()):
-                        stage = self.stages[src_name]
-                        if stage.PreserveBorderFrom():
-                            self_window_input = stage.PreserveBorderFrom()
-                        else:
-                            self_window_input = self.input
-                        self_window = GetOverallStencilWindow(
-                            self_window_input, stage.output)
-                        overall_idx = GetStencilWindowOffset(self_window)
-                        self_dim = GetStencilDim(self_window)
-                        iteration = 1
-                        parent = stage.PreserveBorderFrom()
-                        while (
-                            parent is not None and
-                            parent.parent is not None):
-                            parent = parent.parent.PreserveBorderFrom()
-                            iteration += 1
-                        delay = (
-                            GetStencilDistance(self_window, self.tile_size)-
-                            Serialize(overall_idx, self.tile_size))*iteration
+                if func_name:
+                    continue
+                if offset in next_fifo[src_name]:
+                    outputs.append(
+                        '/* output */ %s_offset_%d_chan_%%d' %
+                        (src_name, next_fifo[src_name][offset]))
+                inputs.append(
+                    '/*  input */ %s_offset_%d_chan_%%d' %
+                    (src_name, offset))
+                func_name = 'forward'
+                temp_param = self.GetReuseBufferLength(src_name, offset)
+                forward_num = len(params)-1
+                if (
+                    offset<self.unroll_factor and
+                    self.buffers[src_name].PreserveBorderTo() and
+                    not self.buffers[src_name].IsInput()):
+                    stage = self.stages[src_name]
+                    if stage.PreserveBorderFrom():
+                        self_window_input = stage.PreserveBorderFrom()
+                    else:
+                        self_window_input = self.input
+                    self_window = GetOverallStencilWindow(
+                        self_window_input, stage.output)
+                    overall_idx = GetStencilWindowOffset(self_window)
+                    self_dim = GetStencilDim(self_window)
+                    iteration = 1
+                    parent = stage.PreserveBorderFrom()
+                    while (
+                        parent is not None and
+                        parent.parent is not None):
+                        parent = parent.parent.PreserveBorderFrom()
+                        iteration += 1
+                    delay = (
+                        GetStencilDistance(self_window, self.tile_size)-
+                        Serialize(overall_idx, self.tile_size))*iteration
 
-                        func_name += '_'+src_name
-                        temp_param = '%d-%d' % (unroll_index, delay)
-                        for d in range(self.dim-1):
-                            param_offset = (
-                                (self.tile_size[d]-self_dim[d]+1)*
-                                reduce(
-                                    operator.mul,
-                                    [self.tile_size[dd] for dd in range(d)],
-                                    1))
-                            param = (
-                                src_name, d,
-                                (unroll_index+param_offset)%self.unroll_factor)
-                            inputs.append(
-                                '/*  input */ border_from_%s_dim_%d_'
-                                'left_chan_%%d_pe_%d' % param)
-                            param = (
-                                src_name, d,
-                                (unroll_index-param_offset)%self.unroll_factor)
-                            inputs.append(
-                                '/*  input */ border_from_%s_dim_%d_'
-                                'right_chan_%%d_pe_%d' % param)
-                        for d in range(self.dim-1):
-                            params.append('/*  param */ input_bound_dim_%d' % d)
-                        for d in range(self.dim):
-                            params.append('/*  param */ input_size_dim_%d' % d)
+                    func_name += '_'+src_name
+                    temp_param = '%d-%d' % (unroll_index, delay)
+                    for d in range(self.dim-1):
+                        param_offset = (
+                            (self.tile_size[d]-self_dim[d]+1)*
+                            reduce(
+                                operator.mul,
+                                [self.tile_size[dd] for dd in range(d)],
+                                1))
+                        param = (
+                            src_name, d,
+                            (unroll_index+param_offset)%self.unroll_factor)
+                        inputs.append(
+                            '/*  input */ border_from_%s_dim_%d_'
+                            'left_chan_%%d_pe_%d' % param)
+                        param = (
+                            src_name, d,
+                            (unroll_index-param_offset)%self.unroll_factor)
+                        inputs.append(
+                            '/*  input */ border_from_%s_dim_%d_'
+                            'right_chan_%%d_pe_%d' % param)
+                    for d in range(self.dim-1):
+                        params.append('/*  param */ input_bound_dim_%d' % d)
+                    for d in range(self.dim):
+                        params.append('/*  param */ input_size_dim_%d' % d)
 
-                    params.append('/*  param */ epoch_num')
-                    forwardings[offset][0] = func_name
-                    forwardings[offset][4] = temp_param
+                params.append('/*  param */ epoch_num')
+                forwardings[offset][0] = func_name
+                forwardings[offset][4] = temp_param
         self.forwardings[src_name] = forwardings
         return forwardings
 
