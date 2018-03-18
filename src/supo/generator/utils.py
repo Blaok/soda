@@ -259,28 +259,103 @@ class Stencil(object):
             b = self.buffers[processing_queue.popleft()]
             _logger.debug('inspecting buffer %s\'s children' % b.name)
             for s in b.children:
-                if {x.name for x in s.inputs.values()} <= processed_buffers and s.name not in processed_buffers:
-                    # good, all inputs are processed, can determine offset of current buffer
-                    _logger.debug('input%s for buffer %s (i.e. %s) %s processed' % ('' if len(s.inputs)==1 else 's', s.name, ', '.join([x.name for x in s.inputs.values()]), 'is' if len(s.inputs)==1 else 'are'))
-                    s.output.offset = max([s.output.offset] + [x.offset+s.offset[x.name][-1] for x in s.inputs.values()])
-                    _logger.debug('buffer %s is at offset %d' % (s.name, s.output.offset))
+                if ({x.name for x in s.inputs.values()} <= processed_buffers
+                    and s.name not in processed_buffers):
+                    # good, all inputs are processed
+                    # can determine offset of current buffer
+                    _logger.debug(
+                        'input%s for buffer %s (i.e. %s) %s processed' % (
+                            '' if len(s.inputs)==1 else 's',
+                            s.name,
+                            ', '.join([x.name for x in s.inputs.values()]),
+                            'is' if len(s.inputs)==1 else 'are'))
+                    stage_offset = Serialize(s.expr[0].idx, self.tile_size)
+
+                    # synchronization check
+                    def Sync(stage, offset):
+                        if stage is None:
+                            return offset
+                        stage_offset = Serialize(stage.expr[0].idx,
+                                                 self.tile_size)
+                        loads = {}
+                        for e in stage.expr:
+                            for l in e.loads:
+                                loads.setdefault(l.name, []).append(l.idx)
+                        for n in loads:
+                            loads[n] = SerializeIterative(loads[n],
+                                                          self.tile_size)
+                        for l in loads.values():
+                            l[0], l[-1] = (stage_offset - max(l),
+                                           stage_offset - min(l))
+                            del l[1:-1]
+                        _logger.debug(
+                            'loads in tensor %s: %s' % (stage.name, loads))
+                        for tensor in stage.inputs.values():
+                            stage_distance = stage.offset[tensor.name][-1]
+                            _logger.debug(
+                                'want to access tensor %s at offset [%d, %d] '
+                                'to generate tensor %s at offset %d' % (
+                                    tensor.name, offset+loads[tensor.name][0],
+                                    offset+loads[tensor.name][-1], stage.name,
+                                    offset))
+                            tensor_offset = (tensor.offset +
+                                             stage_distance -
+                                             stage_offset)
+                            if offset < tensor_offset:
+                                _logger.debug(
+                                    'but tensor %s won\'t be available until '
+                                    'offset %d' % (stage.name, tensor_offset))
+                                offset = tensor_offset
+                                _logger.debug(
+                                    'need to access tensor %s at offset '
+                                    '[%d, %d] to generate tensor %s at offset '
+                                    '%d' % (tensor.name,
+                                            offset+loads[tensor.name][0],
+                                            offset+loads[tensor.name][-1],
+                                            stage.name, offset))
+                        return offset
+                    _logger.debug('intend to generate tensor %s at offset %d'
+                            % (s.name, s.output.offset))
+                    s.output.offset = Sync(s, s.output.offset)
+                    _logger.debug('decide to generate tensor %s at offset %d'
+                            % (s.name, s.output.offset))
+
+                    # add delay
                     for x in s.inputs.values():
-                        delay = s.output.offset - (x.offset+s.offset[x.name][-1])
+                        delay = s.output.offset - (x.offset +
+                                                   s.offset[x.name][-1] -
+                                                   stage_offset)
                         if delay>0:
-                            _logger.debug('buffer %s arrives at buffer %s at offset %d < %d; add %d delay' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset, delay))
+                            _logger.debug(
+                                'buffer %s arrives at buffer %s '
+                                'at offset %d < %d; add %d delay' % (
+                                    x.name, s.name,
+                                    x.offset+s.offset[x.name][-1]-stage_offset,
+                                    s.output.offset, delay))
                         else:
-                            _logger.debug('buffer %s arrives at buffer %s at offset %d = %d; good' % (x.name, s.name, x.offset+s.offset[x.name][-1], s.output.offset))
+                            _logger.debug(
+                                'buffer %s arrives at buffer %s '
+                                'at offset %d = %d; good' % (
+                                    x.name, s.name,
+                                    x.offset+s.offset[x.name][-1]-stage_offset,
+                                    s.output.offset))
                         s.delay[x.name] = max(delay, 0)
-                        _logger.debug('set delay of %s <- %s to %d' % (s.name, x.name, s.delay[x.name]))
+                        _logger.debug('set delay of %s <- %s to %d' %
+                            (s.name, x.name, s.delay[x.name]))
+
                     processing_queue.append(s.name)
                     processed_buffers.add(s.name)
                     self.chronological_buffers.append(s.output)
                 else:
                     for bb in s.inputs.values():
                         if bb.name not in processed_buffers:
-                            _logger.debug('buffer %s requires buffer %s as an input' % (s.name, bb.name))
-                            _logger.debug('but buffer %s isn\'t processed yet' % bb.name)
-                            _logger.debug('add %s to scheduling queue' % bb.name)
+                            _logger.debug(
+                                'buffer %s requires buffer %s as an input' %
+                                (s.name, bb.name))
+                            _logger.debug(
+                                'but buffer %s isn\'t processed yet' % bb.name)
+                            _logger.debug(
+                                'add %s to scheduling queue' % bb.name)
                             processing_queue.append(bb.name)
 
         # setup preserving borders, has to be done here because overall window cannot be generated before dependency graph is created
@@ -352,8 +427,16 @@ class Stencil(object):
             for b in self.GetProducerBuffers():
                 self.reuse_buffers[b.name] = _GetBuffer(self.tile_size, b, self.unroll_factor)
                 self.reuse_buffer_lengths[b.name] = {}
+                first = [True]*self.unroll_factor
                 for start, end in self.reuse_buffers[b.name][1:]:
-                    self.reuse_buffer_lengths[b.name][end] = (end-start)//self.unroll_factor
+                    if first[start%self.unroll_factor]:
+                        first[start%self.unroll_factor] = False
+                        if start >= self.unroll_factor:
+                            self.reuse_buffer_lengths[
+                                b.name][end] = end//self.unroll_factor
+                            continue
+                    self.reuse_buffer_lengths[
+                                b.name][end] = (end-start)//self.unroll_factor
         return self.reuse_buffers
 
     def GetAllPoints(self):

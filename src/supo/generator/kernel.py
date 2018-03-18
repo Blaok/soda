@@ -619,8 +619,10 @@ def PrintInterface(p, stencil):
             for start, end in reuse_buffer[1:]:
                 for c in range(stencil.buffers[name].chan):
                     p.PrintLine('hls::stream<%s> %s("%s");' % ((stencil.buffers[name].type,)+(GetTensorAt(name, end, c),)*2))
-                    if (end-start)//unroll_factor > 1:
-                        pragmas.append((GetTensorAt(name, end, c), (end-start)//unroll_factor))
+                    buffer_length = stencil.GetReuseBufferLength(name, end)
+                    tensor_name = GetTensorAt(name, end, c)
+                    if buffer_length > 1:
+                        pragmas.append((tensor_name, buffer_length))
             for pragma in pragmas:
                 p.PrintLine('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
             p.PrintLine()
