@@ -271,10 +271,21 @@ def PrintComputeStage(printer, stencil, stage):
             printer.PrintLine()
 
         printer.PrintLine('compute_%s_epoch:' % func_name, 0)
-        printer.PrintLine(
-            'for(uint32_t epoch = 0; epoch < epoch_num%s; ++epoch)' % bound)
+        printer.PrintLine('uint32_t epoch = 0;')
+        printer.PrintLine('while(epoch < epoch_num)')
         printer.DoScope()
         printer.PrintLine('#pragma HLS pipeline II=1', 0)
+
+        # empty test
+        params = []
+        for input_name, input_window in stage.window.items():
+            for indices in input_window:
+                for c in range(stencil.buffers[input_name].chan):
+                    params.append('%s_chan_%d_at_%s' %
+                        (input_name, c, GetIndicesId(indices)))
+        printer.PrintLine('if(not (%s))' % ' or '.join(
+            '%s.empty()' % param for param in params))
+        printer.DoScope()
 
         if stencil.cluster != 'none' and not stage.IsOutput():
             printer.PrintLine('if(epoch < epoch_num)')
@@ -372,6 +383,8 @@ def PrintComputeStage(printer, stencil, stage):
             printer.UnScope()
             printer.PrintLine()
             PrintBuffers(printer, stencil, stage.output, pe_id)
+        printer.PrintLine('++epoch;')
+        printer.UnScope()
         printer.UnScope()
         printer.UnScope()
         printer.PrintLine()
