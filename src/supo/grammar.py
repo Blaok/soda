@@ -50,15 +50,15 @@ FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
 Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Input: 'input' type=Type ':' name=ID ('[' chan=Integer ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
 Integer: ('+'|'-')?(Hex|Bin|Oct|Dec);
-Intermediate: 'buffer' type=Type ':' (expr=OutputExpr)+;
+Intermediate: 'buffer' type=Type ':' (expr=StageExpr)+;
 MulOrDiv: '*'|'/'|'%';
 Number: Float|Integer;
 Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Operand: func=Func | name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
-Output: 'output' type=Type ':' (expr=OutputExpr)+;
-OutputExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
+Output: 'output' type=Type ':' (expr=StageExpr)+;
 Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
 PlusOrMinus: '+'|'-';
+StageExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
 Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
 Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|'double';
 YesOrNo: 'yes'|'no';
@@ -582,7 +582,7 @@ class Intermediate(object):
         if hasattr(self, 'loads'):
             del self.loads
 
-class OutputExpr(object):
+class StageExpr(object):
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
         self.chan = StringToInteger(kwargs.pop('chan'), 0)
@@ -615,5 +615,5 @@ class OutputExpr(object):
         if hasattr(self, 'loads'):
             del self.loads
 
-supo_grammar_classes = [SupoProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, OutputExpr, Intermediate]
+supo_grammar_classes = [SupoProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, StageExpr, Intermediate]
 

@@ -78,7 +78,7 @@ class Buffer(object):
 # Stage.window: {str: [(int, ...), ...], ...}
 # Stage.offset: {str: [int, ...], ...}
 # Stage.delay: {str: int, ...}
-# Stage.expr: [OutputExpr, ...]
+# Stage.expr: [StageExpr, ...]
 # Stage.inputs: {str: Buffer, ...}
 # Stage.output: Buffer
 # Stage.border: ('preserve', Buffer)
@@ -412,7 +412,7 @@ class Stencil(object):
         _logger.debug('window for %s@(%s) is %s' % (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
         return windows
 
-    # return [OutputExpr, ...]
+    # return [StageExpr, ...]
     def GetExprFor(self, node):
         if isinstance(node, supo.grammar.Output):
             return node.expr
