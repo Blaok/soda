@@ -270,8 +270,8 @@ def PrintComputeStage(printer, stencil, stage):
                 printer.PrintLine('#pragma HLS stream variable=%s depth=1' % param, 0)
             printer.PrintLine()
 
-        printer.PrintLine('compute_%s_epoch:' % func_name, 0)
         printer.PrintLine('uint32_t epoch = 0;')
+        printer.PrintLine('compute_%s_epoch:' % func_name, 0)
         printer.PrintLine('while(epoch < epoch_num)')
         printer.DoScope()
         printer.PrintLine('#pragma HLS pipeline II=1', 0)
