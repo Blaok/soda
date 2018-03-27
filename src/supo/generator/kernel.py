@@ -663,19 +663,19 @@ def PrintInterface(p, stencil):
         for pe_id in range(unroll_factor):
             for input_name, input_window in stage.window.items():
                 for i in range(len(input_window)):
+                    offset = next(offset for offset, points in
+                        all_points[input_name][stage.name].items()
+                        if pe_id in points and points[pe_id] == i)
+                    fwd_node = super_source.fwd_nodes[(input_name, offset)]
+                    cpt_node = super_source.cpt_nodes[(stage.name, pe_id)]
+                    extra_depth = super_source.get_extra_depth(
+                        (fwd_node, cpt_node))
                     for c in range(stencil.buffers[input_name].chan):
                         var_type = stencil.buffers[input_name].type
                         var_name = 'from_%s_to_%s_param_%d_chan_%d_pe_%d' % (
                             input_name, stage.name, i, c, pe_id)
                         p.PrintLine('hls::stream<%s> %s("%s");' % (
                             var_type, var_name, var_name))
-                        offset = next(offset for offset, points in
-                            all_points[input_name][stage.name].items()
-                            if pe_id in points and points[pe_id] == i)
-                        fwd_node = super_source.fwd_nodes[(input_name, offset)]
-                        cpt_node = super_source.cpt_nodes[(stage.name, pe_id)]
-                        extra_depth = super_source.get_extra_depth(
-                            (fwd_node, cpt_node))
                         if extra_depth > 0:
                             pragmas.append((var_name, extra_depth+1))
     for pragma in pragmas:
