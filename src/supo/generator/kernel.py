@@ -1,4 +1,3 @@
-#!/usr/bin/python3.6
 from collections import deque
 from fractions import Fraction
 from functools import reduce
