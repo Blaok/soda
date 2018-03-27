@@ -9,6 +9,7 @@ import operator
 import os
 import sys
 
+from supo.generator.dataflow import *
 from supo.generator.utils import *
 from supo.grammar import ExtraParam
 
@@ -485,6 +486,8 @@ def PrintInterface(p, stencil):
     input_chan = stencil.input.chan
     output_chan = stencil.output.chan
 
+    super_source = create_dataflow_graph(stencil)
+
     logger.info('generate reuse buffers')
     reuse_buffers = stencil.GetReuseBuffers()
     all_points = stencil.GetAllPoints()
@@ -655,10 +658,28 @@ def PrintInterface(p, stencil):
     msg = 'params'
     logger.debug('generate %s' % msg)
     p.PrintLine('// %s' % msg)
+    pragmas = []
     for stage in stencil.GetStagesChronologically():
-        for unroll_index in range(unroll_factor):
-            for param in [(stencil.buffers[input_name].type, 'from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, stage.name, i, c, unroll_index)) for input_name, input_window in stage.window.items() for i in range(len(input_window)) for c in range(stencil.buffers[input_name].chan)]:
-                p.PrintLine('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
+        for pe_id in range(unroll_factor):
+            for input_name, input_window in stage.window.items():
+                for i in range(len(input_window)):
+                    for c in range(stencil.buffers[input_name].chan):
+                        var_type = stencil.buffers[input_name].type
+                        var_name = 'from_%s_to_%s_param_%d_chan_%d_pe_%d' % (
+                            input_name, stage.name, i, c, pe_id)
+                        p.PrintLine('hls::stream<%s> %s("%s");' % (
+                            var_type, var_name, var_name))
+                        offset = next(offset for offset, points in
+                            all_points[input_name][stage.name].items()
+                            if pe_id in points and points[pe_id] == i)
+                        fwd_node = super_source.fwd_nodes[(input_name, offset)]
+                        cpt_node = super_source.cpt_nodes[(stage.name, pe_id)]
+                        extra_depth = super_source.get_extra_depth(
+                            (fwd_node, cpt_node))
+                        if extra_depth > 0:
+                            pragmas.append((var_name, extra_depth+1))
+    for pragma in pragmas:
+        p.PrintLine('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
     p.PrintLine()
 
     # border buffers

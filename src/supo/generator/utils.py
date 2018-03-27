@@ -390,6 +390,9 @@ class Stencil(object):
         self.input_partition  = self.burst_width/self.pixel_width_i*self.dram_bank/2 if self.burst_width/self.pixel_width_i*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
         self.output_partition = self.burst_width/self.pixel_width_o*self.dram_bank/2 if self.burst_width/self.pixel_width_o*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
 
+        # compatiblity
+        self.tensors = self.buffers
+
     def GetProducerBuffers(self):
         return [b for b in self.buffers.values() if len(b.children)>0]
 

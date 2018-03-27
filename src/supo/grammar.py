@@ -57,7 +57,8 @@ Operand: func=Func | name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* 
 Output: 'output' type=Type ':' (expr=StageExpr)+;
 Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
 PlusOrMinus: '+'|'-';
-StageExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
+StageExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')'
+    ('~' depth=Integer)? '=' expr=Expression;
 Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
 Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|'double';
 YesOrNo: 'yes'|'no';
@@ -587,7 +588,10 @@ class StageExpr(object):
         self.chan = StringToInteger(kwargs.pop('chan'), 0)
         self.idx = tuple(kwargs.pop('idx'))
         self.expr = kwargs.pop('expr')
-        logger.debug('store at %s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx))))
+        self.depth = StringToInteger(kwargs.pop('depth'))
+        logger.debug('store at %s[%d](%s)%s' % (self.name, self.chan,
+            ', '.join(map(str, self.idx)),
+            '' if self.depth is None else ' with depth %d' % self.depth))
 
     def __str__(self):
         return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join(map(str, self.idx)), self.expr))
