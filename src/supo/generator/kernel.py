@@ -678,6 +678,8 @@ def PrintInterface(p, stencil):
                             var_type, var_name, var_name))
                         if extra_depth > 0:
                             pragmas.append((var_name, extra_depth+1))
+                        else:
+                            pragmas.append((var_name, 2))
     for pragma in pragmas:
         p.PrintLine('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
     p.PrintLine()

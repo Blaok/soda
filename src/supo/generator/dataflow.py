@@ -53,6 +53,17 @@ class _Node(object):
                     node_stack.append(child)
                     seen_nodes.add(child)
 
+    def tpo_node_generator(self):
+        nodes = {}
+        for node in self.bfs_node_generator():
+            nodes[node] = len(node.parents)
+        while len(nodes) > 0:
+            node = next(node for node in nodes if nodes[node]==0)
+            yield node
+            for child in node.children:
+                nodes[child] -= 1
+            del nodes[node]
+
     def bfs_edge_generator(self):
         node_queue = deque([self])
         seen_nodes = {self}
@@ -93,6 +104,9 @@ class SuperSourceNode(_Node):
         _paths: {node: [(src, ... dst), ... ]}
         _extra_depths: {(src_node, dst_node): extra_depth)}
     """
+    def get_latency(self):
+        return 0
+
     def find_paths(self, node):
         if not hasattr(self, 'paths'):
             self._paths = {self: [(self,)]}
@@ -101,34 +115,21 @@ class SuperSourceNode(_Node):
                     path+(dst_node,) for path in self._paths[src_node])
         return self._paths[node]
 
-    def _multipath_node_generator(self):
-        for node in self.bfs_node_generator():
-            paths = self.find_paths(node)
-            if len(paths)>2:
-                yield node, paths
-
     def get_extra_depth(self, edge):
         if not hasattr(self, '_extra_depths'):
-            def get_path_latency(path):
-                return sum(map(lambda x: x.get_latency(), path[1:-1]))
             self._extra_depths = {}
-            for node, paths in self._multipath_node_generator():
-                common_prefix_len = -1
-                for nodes in zip(*paths):
-                    if len(set(nodes))==1:
-                        common_prefix_len += 1
-                    else:
-                        break
-                paths = [path[common_prefix_len:] for path in paths]
-                max_latency = max(map(get_path_latency, paths))
-                for path in paths:
-                    extra_depth = (max_latency - get_path_latency(path)
-                                   - len(path) + 1)
+            node_heights = {}
+            for node in self.tpo_node_generator():
+                node_heights[node] = max(
+                    (node_heights[p] + p.get_latency() for p in node.parents),
+                    default=0)
+                for parent in node.parents:
+                    extra_depth = node_heights[node] - (
+                        node_heights[parent] + parent.get_latency())
                     if extra_depth > 0:
-                        self._extra_depths[path[-2:]] = max(extra_depth,
-                            self._extra_depths.get(path[-2:], 0))
+                        self._extra_depths[(parent, node)] = extra_depth
                         _logger.debug('\033[31moops\033[0m, need to add %d to '
-                            '%s' % (self._extra_depths[path[-2:]], path[-2:]))
+                            '%s' % (extra_depth, (parent, node)))
         return self._extra_depths.get(edge, 0)
 
 class SuperSinkNode(_Node):
@@ -181,13 +182,14 @@ def create_dataflow_graph(stencil):
     super_sink = SuperSinkNode()
     next_fifo = stencil.GetNextFIFO()
     all_points = stencil.GetAllPoints()
+    reuse_buffers = stencil.GetReuseBuffers()
 
     super_source.fwd_nodes = {}  # {(tensor_name, offset): node}
     super_source.cpt_nodes = {}  # {(stage_name, pe_id): node}
 
     def add_fwd_nodes(src_name):
-        dsts = stencil.GetAllPoints()[src_name]
-        reuse_buffer = stencil.GetReuseBuffers()[src_name]
+        dsts = all_points[src_name]
+        reuse_buffer = reuse_buffers[src_name][1:]
         nodes_to_add = []
         for dst_point_dicts in dsts.values():
             for offset in dst_point_dicts:
@@ -198,12 +200,15 @@ def create_dataflow_graph(stencil):
                     offset = offset,
                     depth = stencil.GetReuseBufferLength(src_name, offset))
                 _logger.debug('create %s' % repr(fwd_node))
-                if offset < stencil.unroll_factor:
+                init_offsets = [start
+                    for start, end in reuse_buffer if start == end]
+                if offset in init_offsets:
                     if src_name in [stencil.input.name]:
                         super_source.add_child(fwd_node)
                     else:
-                        (super_source.cpt_nodes[(src_name,
-                            stencil.unroll_factor-1-offset)]
+                        (super_source.cpt_nodes[(src_name, next(i
+                            for i in range(stencil.unroll_factor)
+                            if init_offsets[i] == offset))]
                             .add_child(fwd_node))
                 super_source.fwd_nodes[(src_name, offset)] = fwd_node
                 if offset in next_fifo[src_name]:
