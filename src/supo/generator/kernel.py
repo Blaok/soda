@@ -521,13 +521,13 @@ def PrintInterface(p, stencil):
     bank = 0
     for i in range(dram_bank):
         for c in range(output_chan):
-            p.PrintLine('#pragma HLS interface m_axi port=var_output_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
+            p.PrintLine('#pragma HLS interface m_axi port=var_output_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%do latency=120' % (c, i, c, bank), 0)
         bank += 1
     if not dram_separate:
         bank = 0
     for i in range(dram_bank):
         for c in range(input_chan):
-            p.PrintLine('#pragma HLS interface m_axi port=var_input_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%d latency=120' % (c, i, c, bank), 0)
+            p.PrintLine('#pragma HLS interface m_axi port=var_input_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%di latency=120' % (c, i, c, bank), 0)
         bank += 1
     if extra_params:
         for idx, param in enumerate(extra_params.values()):
