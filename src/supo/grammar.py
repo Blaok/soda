@@ -1,4 +1,3 @@
-#!/usr/bin/python3.6
 from collections import deque, namedtuple
 import copy
 import logging
@@ -8,6 +7,7 @@ import os
 import sys
 
 import supo.generator.utils
+from supo.generator.utils import SemanticError, SemanticWarn
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -21,6 +21,7 @@ SupoProgram:
     ('kernel' ':' app_name=ID)
     ('border' ':' border=BorderStrategies)
     ('iterate' ':' iterate=INT)
+    ('cluster' ':' cluster=ClusterStrategies)
     input=Input
     output=Output
     (extra_params=ExtraParam)*
@@ -29,6 +30,7 @@ SupoProgram:
 )#;
 Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 BorderStrategies: 'ignore'|'preserve';
+ClusterStrategies: 'none'|'fine'|'coarse'|'full';
 Comment: /\s*#.*$/;
 Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
@@ -47,15 +49,16 @@ FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
 Hex: /0[Xx][0-9a-fA-F]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Input: 'input' type=Type ':' name=ID ('[' chan=Integer ']')? '(' tile_size=INT ',' (tile_size=INT ',')* ')';
 Integer: ('+'|'-')?(Hex|Bin|Oct|Dec);
-Intermediate: 'buffer' type=Type ':' (expr=OutputExpr)+;
+Intermediate: 'buffer' type=Type ':' (expr=StageExpr)+;
 MulOrDiv: '*'|'/'|'%';
 Number: Float|Integer;
 Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Operand: func=Func | name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
-Output: 'output' type=Type ':' (expr=OutputExpr)+;
-OutputExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' '=' expr=Expression;
+Output: 'output' type=Type ':' (expr=StageExpr)+;
 Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
 PlusOrMinus: '+'|'-';
+StageExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')'
+    ('~' depth=Integer)? '=' expr=Expression;
 Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
 Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|'double';
 YesOrNo: 'yes'|'no';
@@ -71,12 +74,6 @@ def StringToInteger(s, none_val=None):
     if s[0] == '0':
         return int(s, 8)
     return int(s)
-
-class SemanticError(Exception):
-    pass
-
-class SemanticWarn(Exception):
-    pass
 
 Load = namedtuple('Load', ['name', 'chan', 'idx'])
 
@@ -102,6 +99,7 @@ class SupoProgram(object):
         self.dram_separate = kwargs.pop('dram_separate')=='yes'
         self.iterate = kwargs.pop('iterate')
         self.border = kwargs.pop('border')
+        self.cluster = kwargs.pop('cluster')
 
         # normalize
         self.output.Normalize(self.extra_params)
@@ -584,13 +582,16 @@ class Intermediate(object):
         if hasattr(self, 'loads'):
             del self.loads
 
-class OutputExpr(object):
+class StageExpr(object):
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
         self.chan = StringToInteger(kwargs.pop('chan'), 0)
         self.idx = tuple(kwargs.pop('idx'))
         self.expr = kwargs.pop('expr')
-        logger.debug('store at %s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx))))
+        self.depth = StringToInteger(kwargs.pop('depth'))
+        logger.debug('store at %s[%d](%s)%s' % (self.name, self.chan,
+            ', '.join(map(str, self.idx)),
+            '' if self.depth is None else ' with depth %d' % self.depth))
 
     def __str__(self):
         return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join(map(str, self.idx)), self.expr))
@@ -617,5 +618,5 @@ class OutputExpr(object):
         if hasattr(self, 'loads'):
             del self.loads
 
-supo_grammar_classes = [SupoProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, OutputExpr, Intermediate]
+supo_grammar_classes = [SupoProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, StageExpr, Intermediate]
 

@@ -1,4 +1,3 @@
-#!/usr/bin/python3.6
 from collections import deque
 from fractions import Fraction
 from functools import reduce
@@ -576,7 +575,7 @@ def PrintWrapped(p, stencil):
         p.PrintLine('for(int32_t %c = %d; %c < %s_size_dim_%d-%d; ++%c)' % (coords_in_tile[stencil.dim-1], overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.output.name, stencil.dim-1, overall_stencil_dim[stencil.dim-1]-1-overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
-            p.PrintLine('for(int32_t %c = %d; %c < actual_tile_size_dim_%d-%d; ++%c)' % (coords_in_tile[dim], overall_stencil_offset[dim-1], coords_in_tile[dim], dim, overall_stencil_dim[dim-1]-1-overall_stencil_offset[dim-1], coords_in_tile[dim]))
+            p.PrintLine('for(int32_t %c = %d; %c < actual_tile_size_dim_%d-%d; ++%c)' % (coords_in_tile[dim], overall_stencil_offset[dim], coords_in_tile[dim], dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], coords_in_tile[dim]))
             p.DoScope()
 
     p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(coords_tiled))
@@ -875,13 +874,28 @@ def PrintCode(stencil, host_file):
     PrintDefine(p, 'BURST_WIDTH', stencil.burst_width)
     PrintDefine(p, 'PIXEL_WIDTH_I', type_width[stencil.input.type])
     PrintDefine(p, 'PIXEL_WIDTH_O', type_width[stencil.output.type])
-    overall_stencil_window = GetOverallStencilWindow(stencil.output.parent.PreserveBorderFrom() if stencil.preserve_border else stencil.input, stencil.output)
-    overall_stencil_distance = GetStencilDistance(overall_stencil_window, stencil.tile_size)
+
+    if stencil.preserve_border:
+        overall_stencil_window = GetOverallStencilWindow(
+            stencil.output.parent.PreserveBorderFrom(), stencil.output)
+    else:
+        overall_stencil_window = GetOverallStencilWindow(
+            stencil.input, stencil.output)
+
+    overall_stencil_distance = GetStencilDistance(overall_stencil_window,
+        stencil.tile_size)
+
     for i, dim in enumerate(GetStencilDim(overall_stencil_window)):
         PrintDefine(p, 'STENCIL_DIM_%d' % i, dim)
-    stencil_offset = (overall_stencil_distance - Serialize(GetStencilWindowOffset(overall_stencil_window), stencil.tile_size))*stencil.iterate
+    stencil_offset = overall_stencil_distance - Serialize(
+        GetStencilWindowOffset(overall_stencil_window), stencil.tile_size)
+    if stencil.preserve_border:
+        stencil_offset *= stencil.iterate
+
+    overall_stencil_distance = max(overall_stencil_distance, stencil_offset)
+
     PrintDefine(p, 'STENCIL_OFFSET', stencil_offset)
-    PrintDefine(p, 'STENCIL_DISTANCE', max(overall_stencil_distance, stencil_offset))
+    PrintDefine(p, 'STENCIL_DISTANCE', overall_stencil_distance)
     p.PrintLine()
 
     PrintLoadXCLBIN2(p)
