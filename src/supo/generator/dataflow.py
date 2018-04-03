@@ -209,9 +209,7 @@ def create_dataflow_graph(stencil):
                         if src_name in [stencil.input.name]:
                             super_source.add_child(fwd_node)
                         else:
-                            (super_source.cpt_nodes[(src_name, next(i
-                                for i in range(stencil.unroll_factor)
-                                if init_offsets[i] == offset))]
+                            (super_source.cpt_nodes[(src_name, 0)]
                                 .add_child(fwd_node))
                     super_source.fwd_nodes[(src_name, offset)] = fwd_node
                     if offset in replicated_next_fifo[src_name]:
@@ -224,22 +222,18 @@ def create_dataflow_graph(stencil):
         add_fwd_nodes(stencil.input.name)
 
         for stage in stencil.GetStagesChronologically():
-            for unroll_index in range(1):
-                pe_id = stencil.unroll_factor-1-unroll_index
-                cpt_node = ComputeNode(
-                    stage = stage,
-                    pe_id = 0)
-                _logger.debug('create %s' % repr(cpt_node))
-                super_source.cpt_nodes[(stage.name, 0)] = cpt_node
-                for input_name, input_window in stage.window.items():
-                    for i in range(len(input_window)):
-                        offset = next(offset for offset, points in
-                            (replicated_all_points[input_name][stage.name]
-                                .items())
-                            if points == i)
-                        fwd_node = super_source.fwd_nodes[(input_name, offset)]
-                        _logger.debug('  access %s' % repr(fwd_node))
-                        fwd_node.add_child(cpt_node)
+            cpt_node = ComputeNode(stage = stage, pe_id = 0)
+            _logger.debug('create %s' % repr(cpt_node))
+            super_source.cpt_nodes[(stage.name, 0)] = cpt_node
+            for input_name, input_window in stage.window.items():
+                for i in range(len(input_window)):
+                    offset = next(offset for offset, points in
+                        (replicated_all_points[input_name][stage.name]
+                            .items())
+                        if points == i)
+                    fwd_node = super_source.fwd_nodes[(input_name, offset)]
+                    _logger.debug('  access %s' % repr(fwd_node))
+                    fwd_node.add_child(cpt_node)
             if stage.IsOutput():
                 super_source.cpt_nodes[stage.name, 0].add_child(super_sink)
             else:
@@ -285,9 +279,7 @@ def create_dataflow_graph(stencil):
         for stage in stencil.GetStagesChronologically():
             for unroll_index in range(stencil.unroll_factor):
                 pe_id = stencil.unroll_factor-1-unroll_index
-                cpt_node = ComputeNode(
-                    stage = stage,
-                    pe_id = pe_id)
+                cpt_node = ComputeNode(stage = stage, pe_id = pe_id)
                 _logger.debug('create %s' % repr(cpt_node))
                 super_source.cpt_nodes[(stage.name, pe_id)] = cpt_node
                 for input_name, input_window in stage.window.items():
