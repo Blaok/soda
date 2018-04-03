@@ -1113,12 +1113,12 @@ def PrintCode(stencil, output_file):
         super_source = create_dataflow_graph(stencil)
         def add_inputs(tensor):
             rf = stencil.replication_factor
-            offsets = [(rf-start%rf)%rf for start, end
+            dst_ids = [(rf+start-1)%rf for start, end
                 in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
                 if start == end]
-            offsets = tuple(replica_id if replica_id in offsets else None
-                for replica_id in reversed(range(stencil.replication_factor)))
-            inputs.add(offsets)
+            dst_ids = tuple(dst_id if dst_id in dst_ids else None
+                for dst_id in range(stencil.replication_factor))
+            inputs.add(dst_ids)
         for node in super_source.tpo_node_generator():
             if isinstance(node, SuperSourceNode):
                 add_inputs(stencil.input)
