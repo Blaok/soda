@@ -630,7 +630,7 @@ class Stencil(object):
                         first[start%replication_factor] = False
                         if start >= replication_factor:
                             self.replicated_reuse_buffer_lengths[tensor.name][
-                                end] = (replication_factor-end%replication_factor+end)//replication_factor
+                                end] = end//replication_factor
                             continue
                     self.replicated_reuse_buffer_lengths[tensor.name][end] = (
                         end-start)//replication_factor

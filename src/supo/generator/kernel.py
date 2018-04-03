@@ -1113,7 +1113,7 @@ def PrintCode(stencil, output_file):
         super_source = create_dataflow_graph(stencil)
         def add_inputs(tensor):
             rf = stencil.replication_factor
-            dst_ids = [(rf+start-1)%rf for start, end
+            dst_ids = [start%rf for start, end
                 in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
                 if start == end]
             dst_ids = tuple(dst_id if dst_id in dst_ids else None
@@ -1211,7 +1211,7 @@ def _generate_code(printer, stencil):
             params = []
             for replica_id in range(rf):
                 for offset in sorted(offsets,
-                        key = lambda offset: (rf+offset-1)%rf):
+                        key = lambda offset: offset%rf):
                     params.append(
                         '/* output */ forward_%s_offset_%d_chan_%d_replica_%d' %
                         (tensor.name, offset, chan, replica_id))
@@ -1336,10 +1336,11 @@ def _print_reconnect_func(printer, inputs):
     printer.PrintFunc('template<typename T> void reconnect', params, align=0)
     printer.DoScope()
     for replica_id in range(rf):
-        printer.PrintLine('T buf_%d = src_replica_%d.read();' %
-            (replica_id, replica_id))
+        printer.PrintLine('T buf_%d = 0;' % replica_id)
+
+    printer.PrintLine('uint32_t epoch = 0;')
     printer.PrintLine('reconnect:', 0)
-    printer.PrintLine('for(uint32_t epoch = 0; epoch < epoch_num-1; ++epoch)')
+    printer.PrintLine('while(epoch < epoch_num)')
     printer.DoScope()
     printer.PrintLine('if(not (%s))' % ' or '.join(
         'src_replica_%d.empty()' % replica_id for replica_id
@@ -1348,27 +1349,20 @@ def _print_reconnect_func(printer, inputs):
     for replica_id in range(rf):
         printer.PrintLine('T val_%d = src_replica_%d.read();' %
             (replica_id, replica_id))
+
     for replica_id in range(rf):
-        for idx, dst in enumerate(inputs):
-            if dst is not None:
-                if idx-replica_id < 0:
+        for dst_id in inputs:
+            if dst_id is not None:
+                if replica_id-dst_id >= 0:
                     printer.PrintLine('dst_%d_replica_%d << val_%d;' %
-                        (idx, replica_id, replica_id-idx-1))
+                        (dst_id, replica_id, replica_id-dst_id))
                 else:
                     printer.PrintLine('dst_%d_replica_%d << buf_%d;' %
-                        (idx, replica_id, rf-1-idx+replica_id))
+                        (dst_id, replica_id, rf+replica_id-dst_id))
     for replica_id in range(rf):
         printer.PrintLine('buf_%d = val_%d;' % (replica_id, replica_id))
+    printer.PrintLine('++epoch;')
     printer.UnScope()
     printer.UnScope()
-    for replica_id in range(rf):
-        for idx, dst in enumerate(inputs):
-            if dst is not None:
-                if idx-replica_id < 0:
-                    printer.PrintLine('dst_%d_replica_%d << 0;' %
-                        (idx, replica_id))
-                else:
-                    printer.PrintLine('dst_%d_replica_%d << buf_%d;' %
-                        (idx, replica_id, rf-1-idx+replica_id))
     printer.UnScope()
 
