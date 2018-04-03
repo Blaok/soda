@@ -1136,6 +1136,7 @@ def _generate_code(printer, stencil):
 
     if stencil.replication_factor > 1:
         pragmas = []
+        hls_streams = set()
         for chan in range(stencil.input.chan):
             for replica_id in range(stencil.replication_factor):
                 var_type = stencil.input.type
@@ -1144,6 +1145,7 @@ def _generate_code(printer, stencil):
                 printer.PrintLine('hls::stream<%s> %s("%s");' %
                     (var_type, var_name, var_name))
                 pragmas.append((var_name, 2))
+                hls_streams.add(var_name)
         for src_node, dst_node in super_source.bfs_edge_generator():
             logger.debug('%s -> %s' % (repr(src_node), repr(dst_node)))
             if isinstance(dst_node, ForwardNode):
@@ -1153,17 +1155,23 @@ def _generate_code(printer, stencil):
                             var_type = dst_node.tensor.type
                             var_name = ('compute_%s_chan_%d_replica_%d' %
                                 (dst_node.tensor.name, chan, replica_id))
+                            if var_name in hls_streams:
+                                continue
                             printer.PrintLine('hls::stream<%s> %s("%s");' %
                                     (var_type, var_name, var_name))
                             pragmas.append((var_name, 2))
+                            hls_streams.add(var_name)
                     for replica_id in range(stencil.replication_factor):
                         var_type = dst_node.tensor.type
                         var_name = 'forward_%s_offset_%d_chan_%d_replica_%d' % (
                             dst_node.tensor.name, dst_node.offset,
                             chan, replica_id)
+                        if var_name in hls_streams:
+                            continue
                         printer.PrintLine('hls::stream<%s> %s("%s");' %
                             (var_type, var_name, var_name))
                         pragmas.append((var_name, max(1, dst_node.depth)))
+                        hls_streams.add(var_name)
             elif (isinstance(src_node, ForwardNode) and
                   isinstance(dst_node, ComputeNode)):
                 for replica_id in range(stencil.replication_factor):
@@ -1173,11 +1181,14 @@ def _generate_code(printer, stencil):
                             'replica_%d' % (src_node.tensor.name,
                                 src_node.offset, dst_node.stage.name,
                                 chan, replica_id))
+                        if var_name in hls_streams:
+                            continue
                         printer.PrintLine('hls::stream<%s> %s("%s");' %
                             (var_type, var_name, var_name))
                         pragmas.append((var_name, max(2,
                             super_source.get_extra_depth((src_node, dst_node))
                             +1)))
+                        hls_streams.add(var_name)
             elif (isinstance(src_node, ComputeNode) and
                   isinstance(dst_node, SuperSinkNode)):
                 for replica_id in range(stencil.replication_factor):
@@ -1185,9 +1196,12 @@ def _generate_code(printer, stencil):
                         var_type = src_node.stage.output.type
                         var_name = ('compute_%s_chan_%d_replica_%d' %
                             (src_node.stage.name, chan, replica_id))
+                        if var_name in hls_streams:
+                            continue
                         printer.PrintLine('hls::stream<%s> %s("%s");' %
                             (var_type, var_name, var_name))
                         pragmas.append((var_name, 2))
+                        hls_streams.add(var_name)
             else:
                 raise SemanticError('unknown dataflow edge: %s -> %s' %
                         (repr(src_node), repr(dst_node)))
@@ -1208,19 +1222,22 @@ def _generate_code(printer, stencil):
             offsets = [start for start, end
                 in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
                 if start == end]
-            params = []
-            for replica_id in range(rf):
-                for offset in sorted(offsets,
-                        key = lambda offset: offset%rf):
+            for chan in range(tensor.chan):
+                params = []
+                for replica_id in range(rf):
+                    for offset in sorted(offsets,
+                            key = lambda offset: offset%rf):
+                        params.append(
+                            '/* output */ forward_%s_offset_%d_'
+                            'chan_%d_replica_%d' %
+                            (tensor.name, offset, chan, replica_id))
+                for replica_id in range(rf):
                     params.append(
-                        '/* output */ forward_%s_offset_%d_chan_%d_replica_%d' %
-                        (tensor.name, offset, chan, replica_id))
-            for replica_id in range(rf):
-                params.append('/*  input */ compute_%s_chan_%d_replica_%d' %
-                    (tensor.name, chan, replica_id))
-            params.append('/*  param */ epoch_num')
-            printer.PrintFunc(
-                'reconnect<%s>' % tensor.type, params, ';', align=0)
+                        '/*  input */ compute_%s_chan_%d_replica_%d' %
+                        (tensor.name, chan, replica_id))
+                params.append('/*  param */ epoch_num')
+                printer.PrintFunc(
+                    'reconnect<%s>' % tensor.type, params, ';', align=0)
 
         for node in super_source.tpo_node_generator():
             logger.debug('%s' % repr(node))
@@ -1240,7 +1257,7 @@ def _generate_code(printer, stencil):
                         printer.PrintLine('input_stream_chan_%d_bank_%d, '
                             'coalesced_data_num);' % (chan, bank))
                         printer.UnIndent()
-                    print_reconnect(stencil.input)
+                print_reconnect(stencil.input)
             elif isinstance(node, ForwardNode):
                 for replica_id in range(stencil.replication_factor):
                     for chan in range(node.tensor.chan):
@@ -1265,8 +1282,8 @@ def _generate_code(printer, stencil):
                             'chan_%d_replica_%d' % (node.tensor.name,
                                 node.offset, chan, replica_id))
                         params.append('/*  param */ epoch_num')
-                    printer.PrintFunc('forward_%d<%s, %d>' % (output_num,
-                        node.tensor.type, node.depth), params, ';', align=0)
+                        printer.PrintFunc('forward_%d<%s, %d>' % (output_num,
+                            node.tensor.type, node.depth), params, ';', align=0)
             elif isinstance(node, ComputeNode):
                 for replica_id in range(stencil.replication_factor):
                     params = []
@@ -1286,8 +1303,7 @@ def _generate_code(printer, stencil):
                     printer.PrintFunc('compute_%s<%d>' % (node.stage.name,
                         replica_id), params, ';', align=0)
                 if not node.stage.IsOutput():
-                    for chan in range(stencil.tensors[input_name].chan):
-                        print_reconnect(node.stage.output)
+                    print_reconnect(node.stage.output)
             elif isinstance(node, SuperSinkNode):
                 for chan in range(stencil.output.chan):
                     for bank in range(stencil.dram_bank):
