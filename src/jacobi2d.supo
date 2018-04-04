@@ -2,10 +2,16 @@ kernel: jacobi2d
 burst width: 512
 dram separate: no
 dram bank: 1
-unroll factor: 8
-input float: t1(2000,)
-output float: t0(0,0) = (t1(0,1)+t1(1,0)+t1(0,0)+t1(0,-1)+t1(-1,0))*0.2f
-iterate: 1
-border: preserve
-cluster: fine
+unroll factor: 2
+input float: t1(32,)
+output float:
+    t0(0, 0) ~48= (
+        t1( 0,  1) + 
+        t1( 1,  0) + 
+        t1( 0,  0) + 
+        t1( 0, -1) + 
+        t1(-1,  0)) * 0.2f
+iterate: 2
+border: ignore
+cluster: none
 

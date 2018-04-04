@@ -3,9 +3,9 @@
 #include<string.h>
 #include<time.h>
 
-#include"sobel.h"
+#include"seidel2d.h"
 
-int sobel_test(const char*, const int dims[4]);
+int seidel2d_test(const char*, const int dims[4]);
 int main(int argc, char **argv)
 {
     if(argc != 4)
@@ -14,5 +14,5 @@ int main(int argc, char **argv)
         return 1;
     }
     int dims[4] = {atoi(argv[2]), atoi(argv[3]), 0, 0};
-    return sobel_test(argv[1], dims);
+    return seidel2d_test(argv[1], dims);
 }
