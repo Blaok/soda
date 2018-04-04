@@ -1109,24 +1109,24 @@ def PrintCode(stencil, output_file):
             PrintComputeStage(printer, stencil, stage)
 
     if stencil.replication_factor > 1:
-        inputs = set()
+        dst_lists = set()
         super_source = create_dataflow_graph(stencil)
-        def add_inputs(tensor):
+        def add_dst_lists(tensor):
             rf = stencil.replication_factor
             dst_ids = [start%rf for start, end
                 in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
                 if start == end]
             dst_ids = tuple(dst_id if dst_id in dst_ids else None
                 for dst_id in range(stencil.replication_factor))
-            inputs.add(dst_ids)
+            dst_lists.add(dst_ids)
         for node in super_source.tpo_node_generator():
             if isinstance(node, SuperSourceNode):
-                add_inputs(stencil.input)
+                add_dst_lists(stencil.input)
             elif isinstance(node, ComputeNode):
                 if not node.stage.IsOutput():
-                    add_inputs(node.stage.output)
-        for inputs in inputs:
-            _print_reconnect_func(printer, inputs)
+                    add_dst_lists(node.stage.output)
+        for dst_list in dst_lists:
+            _print_reconnect_func(printer, dst_list)
     printer.PrintLine()
 
     PrintInterface(printer, stencil)
@@ -1222,6 +1222,11 @@ def _generate_code(printer, stencil):
             offsets = [start for start, end
                 in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
                 if start == end]
+            offset_modulos = [offset % rf for offset in offsets]
+            dst_list = [None]*rf
+            for dst_id in range(rf):
+                if dst_id in offset_modulos:
+                    dst_list[dst_id] = dst_id
             for chan in range(tensor.chan):
                 params = []
                 for replica_id in range(rf):
@@ -1236,8 +1241,10 @@ def _generate_code(printer, stencil):
                         '/*  input */ compute_%s_chan_%d_replica_%d' %
                         (tensor.name, chan, replica_id))
                 params.append('/*  param */ epoch_num')
+                func_name = ('reconnect_%s' %
+                    '_'.join(map(str, filter(None.__ne__, dst_list))))
                 printer.PrintFunc(
-                    'reconnect<%s>' % tensor.type, params, ';', align=0)
+                    '%s<%s>' % (func_name, tensor.type), params, ';', align=0)
 
         for node in super_source.tpo_node_generator():
             logger.debug('%s' % repr(node))
@@ -1337,11 +1344,11 @@ def _print_store_call(printer, stencil):
                 'output_stream_chan_%d_bank_%d, coalesced_data_num);' %
                 ((c, i)*2))
 
-def _print_reconnect_func(printer, inputs):
-    rf = len(inputs)
+def _print_reconnect_func(printer, dst_list):
+    rf = len(dst_list)
     params = []
     for replica_id in range(rf):
-        for idx, dst in enumerate(inputs):
+        for idx, dst in enumerate(dst_list):
             if dst is not None:
                 params.append('/* output */ hls::stream<T>& '
                     'dst_%d_replica_%d' % (idx, replica_id))
@@ -1349,13 +1356,14 @@ def _print_reconnect_func(printer, inputs):
         params.append('/*  input */ hls::stream<T>& src_replica_%d' %
             replica_id)
     params.append('/*  param */ uint32_t epoch_num')
-    printer.PrintFunc('template<typename T> void reconnect', params, align=0)
+    func_name = 'reconnect_%s' % '_'.join(map(str, filter(None.__ne__, dst_list)))
+    printer.PrintFunc('template<typename T> void %s' % func_name, params, align=0)
     printer.DoScope()
     for replica_id in range(rf):
         printer.PrintLine('T buf_%d = 0;' % replica_id)
 
     printer.PrintLine('uint32_t epoch = 0;')
-    printer.PrintLine('reconnect:', 0)
+    printer.PrintLine('%s:' % func_name, 0)
     printer.PrintLine('while(epoch < epoch_num)')
     printer.DoScope()
     printer.PrintLine('if(not (%s))' % ' or '.join(
@@ -1367,7 +1375,7 @@ def _print_reconnect_func(printer, inputs):
             (replica_id, replica_id))
 
     for replica_id in range(rf):
-        for dst_id in inputs:
+        for dst_id in dst_list:
             if dst_id is not None:
                 if replica_id-dst_id >= 0:
                     printer.PrintLine('dst_%d_replica_%d << val_%d;' %
