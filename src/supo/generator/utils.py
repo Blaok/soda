@@ -71,6 +71,9 @@ class Buffer(object):
     def IsOutput(self):
         return len(self.children)==0
 
+    def is_output(self):
+        return len(self.children)==0
+
     def IsInput(self):
         return self.parent is None or self.parent.IsInput()
 
@@ -126,6 +129,7 @@ class Stencil(object):
         # parameters can be explored
         self.tile_size = kwargs.pop('tile_size')
         self.unroll_factor = kwargs.pop('unroll_factor')
+        self.replication_factor = kwargs.pop('replication_factor')
         self.dram_separate = kwargs.pop('dram_separate')
         if self.dram_separate:
             if self.dram_bank%2 != 0:
@@ -399,6 +403,9 @@ class Stencil(object):
     def GetConsumerBuffers(self):
         return [b for b in self.buffers.values() if b.parent is not None]
 
+    def get_producer_tensors(self):
+        return [t for t in self.tensors.values() if not t.is_output()]
+
     def GetStagesChronologically(self):
         return [self.stages[b.name] for b in self.chronological_buffers if b.name in self.stages]
 
@@ -424,21 +431,22 @@ class Stencil(object):
 
     def GetReuseBuffers(self):
         if not hasattr(self, 'reuse_buffers'):
+            unroll_factor = self.unroll_factor
             self.reuse_buffer_lengths = {}
             self.reuse_buffers = {}
             for b in self.GetProducerBuffers():
-                self.reuse_buffers[b.name] = _GetBuffer(self.tile_size, b, self.unroll_factor)
-                self.reuse_buffer_lengths[b.name] = {}
-                first = [True]*self.unroll_factor
-                for start, end in self.reuse_buffers[b.name][1:]:
-                    if first[start%self.unroll_factor]:
-                        first[start%self.unroll_factor] = False
-                        if start >= self.unroll_factor:
-                            self.reuse_buffer_lengths[
-                                b.name][end] = end//self.unroll_factor
+                reuse_buffer = _GetBuffer(self.tile_size, b, unroll_factor)
+                reuse_buffer_length = {}
+                self.reuse_buffers[b.name] = reuse_buffer
+                self.reuse_buffer_lengths[b.name] = reuse_buffer_length
+                first = [True]*unroll_factor
+                for start, end in reuse_buffer[1:]:
+                    if first[start%unroll_factor]:
+                        first[start%unroll_factor] = False
+                        if start >= unroll_factor:
+                            reuse_buffer_length[end] = end//unroll_factor
                             continue
-                    self.reuse_buffer_lengths[
-                                b.name][end] = (end-start)//self.unroll_factor
+                    reuse_buffer_length[end] = (end-start)//unroll_factor
         return self.reuse_buffers
 
     def GetAllPoints(self):
@@ -588,6 +596,60 @@ class Stencil(object):
         self.forwardings[src_name] = forwardings
         return forwardings
 
+    def get_replicated_next_fifo(self):
+        if not hasattr(self, 'replicated_next_fifo'):
+            self.replicated_next_fifo = {}
+            for name, reuse_buffer in (self.get_replicated_reuse_buffers()
+                    .items()):
+                self.replicated_next_fifo[name] = {}
+                for start, end in reuse_buffer[1:]:
+                    if start<end:
+                        self.replicated_next_fifo[name][start] = end
+            _logger.debug('replicated_next_fifo: %s'
+                % self.replicated_next_fifo)
+        return self.replicated_next_fifo
+
+    def get_replicated_reuse_buffer_length(self, name, offset):
+        if not hasattr(self, 'replicated_reuse_buffer_lengths'):
+            self.get_replicated_reuse_buffers()
+        return self.replicated_reuse_buffer_lengths[name][offset]
+
+    def get_replicated_reuse_buffers(self):
+        if not hasattr(self, 'replicated_reuse_buffers'):
+            replication_factor = self.replication_factor
+            self.replicated_reuse_buffer_lengths = {}
+            self.replicated_reuse_buffers = {}
+            for tensor in self.get_producer_tensors():
+                reuse_buffer =  _get_replicated_reuse_buffer(self.tile_size,
+                    tensor, replication_factor)
+                self.replicated_reuse_buffers[tensor.name] = reuse_buffer
+                self.replicated_reuse_buffer_lengths[tensor.name] = {}
+                first = [True]*self.replication_factor
+                for start, end in reuse_buffer[1:]:
+                    if first[start%replication_factor]:
+                        first[start%replication_factor] = False
+                        if start >= replication_factor:
+                            self.replicated_reuse_buffer_lengths[tensor.name][
+                                end] = end//replication_factor
+                            continue
+                    self.replicated_reuse_buffer_lengths[tensor.name][end] = (
+                        end-start)//replication_factor
+            _logger.debug('replicated_reuse_buffers: %s' %
+                self.replicated_reuse_buffers)
+            _logger.debug('replicated_reuse_buffer_lengths: %s' %
+                self.replicated_reuse_buffer_lengths)
+        return self.replicated_reuse_buffers
+
+    def get_replicated_all_points(self):
+        if not hasattr(self, 'replicated_all_points'):
+            self.replicated_all_points = {}
+            for tensor in self.get_producer_tensors():
+                self.replicated_all_points[tensor.name
+                    ] =  _get_replicated_points(self.tile_size, tensor)
+            _logger.debug('replicated_all_points: %s' %
+                self.replicated_all_points)
+        return self.replicated_all_points
+
 def _GetChains(tile_size, b, unroll_factor):
     _logger.debug('get reuse chains of buffer %s' % b.name)
     A_dag = set.union(*[(lambda offsets: set.union(*[{max(offsets)+i-x+s.delay[b.name] for x in offsets} for i in range(unroll_factor)]))(SerializeIterative(s.window[b.name], tile_size)) for s in b.children])
@@ -623,6 +685,55 @@ def _GetBuffer(tile_size, b, unroll_factor):
             offsets.append(chain[j+1])
     reuse_buffer[0] = max(offsets)+1
     _logger.debug('reuse chains of buffer %s: %s' % (b.name, reuse_buffer))
+    return reuse_buffer
+
+def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
+    _logger.debug('\033[1mget replicated reuse chains of tensor %s\033[0m' %
+        tensor.name)
+    A_dag = set()
+    for stage in tensor.children:
+        offsets = SerializeIterative(stage.window[tensor.name], tile_size)
+        A_dag |=  {max(offsets)-offset+stage.delay[tensor.name]
+            for offset in offsets}
+    _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
+    chains = sum(reversed([
+        tuple([tuple(sorted(x for x in A_dag if x%replication_factor == i))])
+        for i in range(replication_factor)]), ())
+    for idx, chain in enumerate(chains):
+        _logger.debug('reuse chain %d of buffer %s: %s' %
+            (idx, tensor.name, chain))
+    return chains
+
+def _get_replicated_points(tile_size, tensor):
+    all_points = {} # {name:{offset:point_index}}
+    for stage in tensor.children:
+        all_points[stage.name] = {}
+        offsets = SerializeIterative(stage.window[tensor.name], tile_size)
+        max_offset = max(offsets)
+        for idx, offset in enumerate(offsets):
+            all_points[stage.name][
+                max_offset-offset+stage.delay[tensor.name]] = idx
+    for stage in tensor.children:
+        for offset, points in all_points[stage.name].items():
+            _logger.debug('%s <- %s @ offset=%d <=> (%s)' % (
+                stage.name, tensor.name, offset,
+                ', '.join(map(str, stage.window[tensor.name][points]))))
+    return all_points
+
+def _get_replicated_reuse_buffer(tile_size, tensor, replication_factor):
+    reuse_buffer = [None] # [length, (start, end), (start, end), ...]
+    offsets = []
+    for chain in _get_replicated_reuse_chains(tile_size, tensor,
+            replication_factor):
+        if len(chain) > 0:
+            reuse_buffer.append((chain[0], chain[0]))
+            offsets.append(chain[0])
+            for j in range(len(chain)-1):
+                reuse_buffer.append((chain[j], chain[j+1]))
+                offsets.append(chain[j+1])
+    reuse_buffer[0] = max(offsets)+1
+    _logger.debug('reuse chains of tensor %s: %s' %
+        (tensor.name, reuse_buffer))
     return reuse_buffer
 
 class Printer(object):

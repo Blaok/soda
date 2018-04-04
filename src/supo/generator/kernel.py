@@ -622,6 +622,20 @@ def PrintInterface(p, stencil):
 
     extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
 
+    p.PrintLine('uint64_t epoch_num = coalesced_data_num*%d/%d;' % (
+        stencil.burst_width*stencil.dram_bank/type_width[stencil.input.type],
+        unroll_factor))
+    p.PrintLine()
+
+    if stencil.replication_factor > 1:
+        _generate_code(p, stencil)
+
+        p.UnScope()
+        p.PrintLine()
+        p.PrintLine('}//extern "C"')
+
+        return
+
     GetTensorAt = lambda n, o, c: ('%s_offset_%d_chan_%d') % (n, o, c)
 
     # reuse buffers
@@ -697,10 +711,6 @@ def PrintInterface(p, stencil):
                         p.PrintLine('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
                         param = (stage.output.type, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % (stage.name, d, c, unroll_index))
                         p.PrintLine('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
-    p.PrintLine()
-
-
-    p.PrintLine('uint64_t epoch_num = coalesced_data_num*%d/%d;' % (stencil.burst_width*stencil.dram_bank/type_width[stencil.input.type], unroll_factor))
     p.PrintLine()
 
     p.PrintLine('#pragma HLS dataflow', 0)
@@ -1098,5 +1108,285 @@ def PrintCode(stencil, output_file):
         for stage in stencil.GetStagesChronologically():
             PrintComputeStage(printer, stencil, stage)
 
+    if stencil.replication_factor > 1:
+        dst_lists = set()
+        super_source = create_dataflow_graph(stencil)
+        def add_dst_lists(tensor):
+            rf = stencil.replication_factor
+            dst_ids = [start%rf for start, end
+                in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
+                if start == end]
+            dst_ids = tuple(dst_id if dst_id in dst_ids else None
+                for dst_id in range(stencil.replication_factor))
+            dst_lists.add(dst_ids)
+        for node in super_source.tpo_node_generator():
+            if isinstance(node, SuperSourceNode):
+                add_dst_lists(stencil.input)
+            elif isinstance(node, ComputeNode):
+                if not node.stage.IsOutput():
+                    add_dst_lists(node.stage.output)
+        for dst_list in dst_lists:
+            _print_reconnect_func(printer, dst_list)
+    printer.PrintLine()
+
     PrintInterface(printer, stencil)
+
+def _generate_code(printer, stencil):
+    super_source = create_dataflow_graph(stencil)
+
+    if stencil.replication_factor > 1:
+        pragmas = []
+        hls_streams = set()
+        for chan in range(stencil.input.chan):
+            for replica_id in range(stencil.replication_factor):
+                var_type = stencil.input.type
+                var_name = ('compute_%s_chan_%d_replica_%d' %
+                    (stencil.input.name, chan, replica_id))
+                printer.PrintLine('hls::stream<%s> %s("%s");' %
+                    (var_type, var_name, var_name))
+                pragmas.append((var_name, 2))
+                hls_streams.add(var_name)
+        for src_node, dst_node in super_source.bfs_edge_generator():
+            logger.debug('%s -> %s' % (repr(src_node), repr(dst_node)))
+            if isinstance(dst_node, ForwardNode):
+                for chan in range(dst_node.tensor.chan):
+                    if isinstance(src_node, ComputeNode):
+                        for replica_id in range(stencil.replication_factor):
+                            var_type = dst_node.tensor.type
+                            var_name = ('compute_%s_chan_%d_replica_%d' %
+                                (dst_node.tensor.name, chan, replica_id))
+                            if var_name in hls_streams:
+                                continue
+                            printer.PrintLine('hls::stream<%s> %s("%s");' %
+                                    (var_type, var_name, var_name))
+                            pragmas.append((var_name, 2))
+                            hls_streams.add(var_name)
+                    for replica_id in range(stencil.replication_factor):
+                        var_type = dst_node.tensor.type
+                        var_name = 'forward_%s_offset_%d_chan_%d_replica_%d' % (
+                            dst_node.tensor.name, dst_node.offset,
+                            chan, replica_id)
+                        if var_name in hls_streams:
+                            continue
+                        printer.PrintLine('hls::stream<%s> %s("%s");' %
+                            (var_type, var_name, var_name))
+                        pragmas.append((var_name, max(1, dst_node.depth)))
+                        hls_streams.add(var_name)
+            elif (isinstance(src_node, ForwardNode) and
+                  isinstance(dst_node, ComputeNode)):
+                for replica_id in range(stencil.replication_factor):
+                    for chan in range(src_node.tensor.chan):
+                        var_type = src_node.tensor.type
+                        var_name = ('from_%s_offset_%d_to_compute_%s_chan_%d_'
+                            'replica_%d' % (src_node.tensor.name,
+                                src_node.offset, dst_node.stage.name,
+                                chan, replica_id))
+                        if var_name in hls_streams:
+                            continue
+                        printer.PrintLine('hls::stream<%s> %s("%s");' %
+                            (var_type, var_name, var_name))
+                        pragmas.append((var_name, max(2,
+                            super_source.get_extra_depth((src_node, dst_node))
+                            +1)))
+                        hls_streams.add(var_name)
+            elif (isinstance(src_node, ComputeNode) and
+                  isinstance(dst_node, SuperSinkNode)):
+                for replica_id in range(stencil.replication_factor):
+                    for chan in range(src_node.stage.output.chan):
+                        var_type = src_node.stage.output.type
+                        var_name = ('compute_%s_chan_%d_replica_%d' %
+                            (src_node.stage.name, chan, replica_id))
+                        if var_name in hls_streams:
+                            continue
+                        printer.PrintLine('hls::stream<%s> %s("%s");' %
+                            (var_type, var_name, var_name))
+                        pragmas.append((var_name, 2))
+                        hls_streams.add(var_name)
+            else:
+                raise SemanticError('unknown dataflow edge: %s -> %s' %
+                        (repr(src_node), repr(dst_node)))
+
+        for pragma in pragmas:
+            printer.PrintLine(
+                '#pragma HLS stream variable=%s depth=%d' % pragma, 0)
+
+        printer.PrintLine()
+        printer.PrintLine('#pragma HLS dataflow', 0)
+
+        replicated_all_points = stencil.get_replicated_all_points()
+        replicated_reuse_buffers = stencil.get_replicated_reuse_buffers()
+        replicated_next_fifo = stencil.get_replicated_next_fifo()
+
+        def print_reconnect(tensor):
+            rf = stencil.replication_factor
+            offsets = [start for start, end
+                in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
+                if start == end]
+            offset_modulos = [offset % rf for offset in offsets]
+            dst_list = [None]*rf
+            for dst_id in range(rf):
+                if dst_id in offset_modulos:
+                    dst_list[dst_id] = dst_id
+            for chan in range(tensor.chan):
+                params = []
+                for replica_id in range(rf):
+                    for offset in sorted(offsets,
+                            key = lambda offset: offset%rf):
+                        params.append(
+                            '/* output */ forward_%s_offset_%d_'
+                            'chan_%d_replica_%d' %
+                            (tensor.name, offset, chan, replica_id))
+                for replica_id in range(rf):
+                    params.append(
+                        '/*  input */ compute_%s_chan_%d_replica_%d' %
+                        (tensor.name, chan, replica_id))
+                params.append('/*  param */ epoch_num')
+                func_name = ('reconnect_%s' %
+                    '_'.join(map(str, filter(None.__ne__, dst_list))))
+                printer.PrintFunc(
+                    '%s<%s>' % (func_name, tensor.type), params, ';', align=0)
+
+        for node in super_source.tpo_node_generator():
+            logger.debug('%s' % repr(node))
+            if isinstance(node, SuperSourceNode):
+                _print_load_call(printer, stencil)
+                for chan in range(stencil.input.chan):
+                    for bank in range(stencil.dram_bank):
+                        printer.PrintLine('unpack_%s(' %
+                            GetSupoType(stencil.input.type))
+                        printer.DoIndent()
+                        for replica_id in range(
+                                stencil.dram_bank-1-bank,
+                                stencil.replication_factor,
+                                stencil.dram_bank):
+                            printer.PrintLine('compute_%s_chan_%d_replica_%d,' %
+                                (stencil.input.name, chan, replica_id))
+                        printer.PrintLine('input_stream_chan_%d_bank_%d, '
+                            'coalesced_data_num);' % (chan, bank))
+                        printer.UnIndent()
+                print_reconnect(stencil.input)
+            elif isinstance(node, ForwardNode):
+                for replica_id in range(stencil.replication_factor):
+                    for chan in range(node.tensor.chan):
+                        params = []
+                        output_num = 0
+                        for dst_name, points in replicated_all_points[
+                                node.tensor.name].items():
+                            if node.offset in points:
+                                params.append('/* output */ from_%s_offset_%d_'
+                                    'to_compute_%s_chan_%d_replica_%d' % (
+                                        node.tensor.name, node.offset,
+                                        dst_name, chan, replica_id))
+                                output_num += 1
+                        next_offset = (replicated_next_fifo[node.tensor.name]
+                            .get(node.offset))
+                        if next_offset is not None:
+                            params.append('/* output */ forward_%s_offset_%d_'
+                                'chan_%d_replica_%d' % (node.tensor.name,
+                                    next_offset, chan, replica_id))
+                            output_num += 1
+                        params.append('/*  input */ forward_%s_offset_%d_'
+                            'chan_%d_replica_%d' % (node.tensor.name,
+                                node.offset, chan, replica_id))
+                        params.append('/*  param */ epoch_num')
+                        printer.PrintFunc('forward_%d<%s, %d>' % (output_num,
+                            node.tensor.type, node.depth), params, ';', align=0)
+            elif isinstance(node, ComputeNode):
+                for replica_id in range(stencil.replication_factor):
+                    params = []
+                    for chan in range(node.stage.output.chan):
+                        params.append('/* output */ compute_%s_chan_%d_'
+                            'replica_%d' % (node.stage.output.name, chan,
+                                replica_id))
+                    for input_name in node.stage.inputs:
+                        all_points = replicated_all_points[input_name]
+                        for offset in all_points[node.stage.name]:
+                            for chan in range(stencil.tensors[input_name].chan):
+                                params.append('/*  input */ from_%s_offset_%d_'
+                                    'to_compute_%s_chan_%d_replica_%d' % (
+                                        input_name, offset,
+                                        node.stage.name, chan, replica_id))
+                    params.append('/*  param */ epoch_num')
+                    printer.PrintFunc('compute_%s<%d>' % (node.stage.name,
+                        replica_id), params, ';', align=0)
+                if not node.stage.IsOutput():
+                    print_reconnect(node.stage.output)
+            elif isinstance(node, SuperSinkNode):
+                for chan in range(stencil.output.chan):
+                    for bank in range(stencil.dram_bank):
+                        printer.PrintLine('pack_%s(output_stream_chan_%d_'
+                            'bank_%d,' % (GetSupoType(stencil.output.type),
+                                chan, bank))
+                        printer.DoIndent()
+                        for replica_id in range(
+                                stencil.dram_bank-1-bank,
+                                stencil.replication_factor,
+                                stencil.dram_bank):
+                            printer.PrintLine('compute_%s_chan_%d_replica_%d,'
+                                % (stencil.output.name, chan, replica_id))
+                        printer.PrintLine('coalesced_data_num);')
+                        printer.UnIndent()
+                _print_store_call(printer, stencil)
+            else:
+                raise SemanticError('unknown dataflow node: %s' % repr(node))
+
+def _print_load_call(printer, stencil):
+    for c in range(stencil.input.chan):
+        for i in range(stencil.dram_bank):
+            printer.PrintLine('load(input_stream_chan_%d_bank_%d, '
+                'var_input_chan_%d_bank_%d, coalesced_data_num);' %
+                ((c, i)*2))
+
+def _print_store_call(printer, stencil):
+    for c in range(stencil.output.chan):
+        for i in range(stencil.dram_bank):
+            printer.PrintLine('store(var_output_chan_%d_bank_%d, '
+                'output_stream_chan_%d_bank_%d, coalesced_data_num);' %
+                ((c, i)*2))
+
+def _print_reconnect_func(printer, dst_list):
+    rf = len(dst_list)
+    params = []
+    for replica_id in range(rf):
+        for idx, dst in enumerate(dst_list):
+            if dst is not None:
+                params.append('/* output */ hls::stream<T>& '
+                    'dst_%d_replica_%d' % (idx, replica_id))
+    for replica_id in range(rf):
+        params.append('/*  input */ hls::stream<T>& src_replica_%d' %
+            replica_id)
+    params.append('/*  param */ uint32_t epoch_num')
+    func_name = 'reconnect_%s' % '_'.join(map(str, filter(None.__ne__, dst_list)))
+    printer.PrintFunc('template<typename T> void %s' % func_name, params, align=0)
+    printer.DoScope()
+    for replica_id in range(rf):
+        printer.PrintLine('T buf_%d = 0;' % replica_id)
+
+    printer.PrintLine('uint32_t epoch = 0;')
+    printer.PrintLine('%s:' % func_name, 0)
+    printer.PrintLine('while(epoch < epoch_num)')
+    printer.DoScope()
+    printer.PrintLine('if(not (%s))' % ' or '.join(
+        'src_replica_%d.empty()' % replica_id for replica_id
+        in range(rf)))
+    printer.DoScope()
+    for replica_id in range(rf):
+        printer.PrintLine('T val_%d = src_replica_%d.read();' %
+            (replica_id, replica_id))
+
+    for replica_id in range(rf):
+        for dst_id in dst_list:
+            if dst_id is not None:
+                if replica_id-dst_id >= 0:
+                    printer.PrintLine('dst_%d_replica_%d << val_%d;' %
+                        (dst_id, replica_id, replica_id-dst_id))
+                else:
+                    printer.PrintLine('dst_%d_replica_%d << buf_%d;' %
+                        (dst_id, replica_id, rf+replica_id-dst_id))
+    for replica_id in range(rf):
+        printer.PrintLine('buf_%d = val_%d;' % (replica_id, replica_id))
+    printer.PrintLine('++epoch;')
+    printer.UnScope()
+    printer.UnScope()
+    printer.UnScope()
 
