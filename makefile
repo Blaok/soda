@@ -2,27 +2,29 @@
 
 APP ?= blur
 SDA_VER ?= 2017.1
-TILE_SIZE_DIM_0 ?= 1000
-#TILE_SIZE_DIM_1 ?= 1024
-UNROLL_FACTOR ?= 64
-HOST_ARGS ?= 1000 100
+TILE_SIZE_DIM_0 ?= 32
+#TILE_SIZE_DIM_1 ?= 32
+UNROLL_FACTOR ?= 2
+HOST_ARGS ?= 32 32
 HOST_SRCS ?= $(APP)_run.cpp
 DRAM_BANK ?= 1
 ITERATE ?= 1
-CLUSTER ?= fine
+CLUSTER ?= none
 BORDER ?= ignore
 
 ifneq ("$(REPLICATION_FACTOR)","")
-REPLICATION := --replication-factor $(REPLICATION_FACTOR)
-REPLICATION_SUFFIX := -replicate$(REPLICATION_FACTOR)
-UNROLL_FACTOR := $(REPLICATION_FACTOR)
+FACTOR_ARGUMENT := --replication-factor $(REPLICATION_FACTOR)
+FACTOR_SUFFIX := replicate$(REPLICATION_FACTOR)
+else
+FACTOR_ARGUMENT := --unroll-factor $(UNROLL_FACTOR)
+FACTOR_SUFFIX := unroll$(UNROLL_FACTOR)
 endif
 
-CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered$(REPLICATION_SUFFIX).xclbin
-COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
-HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
 
-KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-unroll$(UNROLL_FACTOR)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered$(REPLICATION_SUFFIX).cpp
+KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.cpp
 KERNEL_NAME ?= $(APP)_kernel
 HOST_XCLSRC ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-iterate$(ITERATE)-border-$(BORDER)d.cpp
 HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-iterate$(ITERATE)-border-$(BORDER)d
@@ -120,15 +122,15 @@ check-git-status:
 ############################## generate source files ##############################
 $(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc $(REPLICATION) --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --kernel-file $@ $^
+	src/supoc $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --kernel-file $@ $^
 
 $(TMP)/$(HOST_XCLSRC): $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --source-file $@ $^
+	src/supoc $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --source-file $@ $^
 
 $(TMP)/$(APP).h: $(SRC)/$(APP).supo
 	@mkdir -p $(TMP)
-	src/supoc --unroll-factor $(UNROLL_FACTOR) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --header-file $@ $^
+	src/supoc $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --header-file $@ $^
 
 ############################## generate host binary ##############################
 $(BIN)/$(HOST_BIN): $(OBJ)/$(HOST_SRCS:.cpp=.o) $(OBJ)/$(HOST_XCLSRC:.cpp=.o)
