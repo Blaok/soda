@@ -76,11 +76,13 @@ CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE
 ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
 CLCXX_OPT += --xp "vivado_param:project.runs.noReportGeneration=false"
 endif # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
+ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank0+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank1+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M01_AXI ";done)
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank2+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M02_AXI ";done)
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank3+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M03_AXI ";done)
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem[0-9]+'       $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'gmem[0-9]+'                  );do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
+endif # ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
 CLCXX_CSIM_OPT = -t sw_emu
 CLCXX_COSIM_OPT = -t hw_emu
 CLCXX_HW_OPT = -t hw
