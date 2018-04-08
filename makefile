@@ -31,11 +31,12 @@ HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DI
 
 SHELL = /bin/bash
 SRC ?= src
-OBJ ?= obj/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
-BIN ?= bin/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
-BIT ?= bit/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
-RPT ?= rpt/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
-TMP ?= tmp/$(COMMIT)/$(word 2,$(subst :, ,$(XDEVICE)))
+LABEL ?= $(COMMIT)
+OBJ ?= obj/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
+BIN ?= bin/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
+BIT ?= bit/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
+RPT ?= rpt/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
+TMP ?= tmp/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 
 AWS_AFI_DIR ?= afis
 AWS_AFI_LOG ?= logs
