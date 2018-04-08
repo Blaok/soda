@@ -9,7 +9,6 @@ import operator
 import os
 import sys
 
-from supo.generator.dataflow import *
 from supo.generator.utils import *
 from supo.grammar import ExtraParam
 
@@ -485,8 +484,7 @@ def PrintInterface(p, stencil):
     dram_separate = stencil.dram_separate
     input_chan = stencil.input.chan
     output_chan = stencil.output.chan
-
-    super_source = create_dataflow_graph(stencil)
+    super_source = stencil.dataflow_super_source
 
     logger.info('generate reuse buffers')
     reuse_buffers = stencil.GetReuseBuffers()
@@ -1110,7 +1108,7 @@ def PrintCode(stencil, output_file):
 
     if stencil.replication_factor > 1:
         dst_lists = set()
-        super_source = create_dataflow_graph(stencil)
+        super_source = stencil.dataflow_super_source
         def add_dst_lists(tensor):
             rf = stencil.replication_factor
             dst_ids = [start%rf for start, end
@@ -1132,7 +1130,7 @@ def PrintCode(stencil, output_file):
     PrintInterface(printer, stencil)
 
 def _generate_code(printer, stencil):
-    super_source = create_dataflow_graph(stencil)
+    super_source = stencil.dataflow_super_source
 
     if stencil.replication_factor > 1:
         pragmas = []

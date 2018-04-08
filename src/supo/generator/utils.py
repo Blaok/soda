@@ -9,6 +9,7 @@ import operator
 import os
 import sys
 
+from supo.generator.dataflow import *
 import supo.grammar
 
 # constants
@@ -396,6 +397,8 @@ class Stencil(object):
 
         # compatiblity
         self.tensors = self.buffers
+
+        self.dataflow_super_source = create_dataflow_graph(self)
 
     def GetProducerBuffers(self):
         return [b for b in self.buffers.values() if len(b.children)>0]
