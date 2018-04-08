@@ -145,7 +145,7 @@ def main():
             dim = supo_model.dim,
             extra_params = supo_model.extra_params,
             tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)]+[0],
-            unroll_factor = (args.unroll_factor if args.unroll_factor is not None else supo_model.unroll_factor) if args.replication_factor is None or args.replication_factor == 1 else args.replication_factor,
+            unroll_factor = (args.unroll_factor if args.unroll_factor is not None else supo_model.unroll_factor) if args.replication_factor is None else args.replication_factor,
             replication_factor = args.replication_factor if args.replication_factor is not None else 1,
             dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else supo_model.dram_separate)
 
