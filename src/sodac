@@ -7,12 +7,12 @@ import operator
 import os
 import sys
 
-from supo.grammar import *
-import supo.generator.kernel
-import supo.generator.host
-import supo.generator.header
-import supo.generator.utils
-import supo.model.xilinx
+from soda.grammar import *
+import soda.generator.kernel
+import soda.generator.host
+import soda.generator.header
+import soda.generator.utils
+import soda.model.xilinx
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def main():
     if (sys.version_info.major, sys.version_info.minor) < (3, 6):
         raise Exception('Python 3.6+ is needed for correct result')
-    parser = argparse.ArgumentParser(prog='supoc', description='Stencil with Unrolling and Pipelining Optimization (SUPO) compiler')
+    parser = argparse.ArgumentParser(prog='sodac', description='Stencil with Unrolling and Pipelining Optimization (SODA) compiler')
     parser.add_argument('--verbose', '-v',
                         action='count',
                         dest='verbose',
@@ -74,9 +74,9 @@ def main():
                         dest='cluster',
                         help='module clustering level, `none` generates standalone compute / forward modules, `fine` fuses forwarders into compute modules, `coarse` fuses each stage together, `full` fuses everything together')
     parser.add_argument(type=str,
-                        dest='supo_src',
+                        dest='soda_src',
                         metavar='file',
-                        help='supo source code')
+                        help='soda source code')
     parser.add_argument('--output-dir', '-o',
                         type=str,
                         dest='output_dir',
@@ -120,34 +120,34 @@ def main():
     logger.info('set log level to '+logging.getLevelName(logging_level))
     # TODO: check tile size
 
-    supo_mm = metamodel_from_str(supo_grammar, classes=supo_grammar_classes)
+    soda_mm = metamodel_from_str(soda_grammar, classes=soda_grammar_classes)
     logger.info('build metamodel')
     try:
-        if args.supo_src=='-':
-            supo_file_name = sys.stdin.name
-            supo_model = supo_mm.model_from_str(sys.stdin.read())
+        if args.soda_src=='-':
+            soda_file_name = sys.stdin.name
+            soda_model = soda_mm.model_from_str(sys.stdin.read())
         else:
-            with open(args.supo_src, 'r') as supo_file:
-                supo_model = supo_mm.model_from_str(supo_file.read())
-                supo_file_name = supo_file.name
-        logger.info('%s parsed as supo file' % supo_file_name)
+            with open(args.soda_src, 'r') as soda_file:
+                soda_model = soda_mm.model_from_str(soda_file.read())
+                soda_file_name = soda_file.name
+        logger.info('%s parsed as soda file' % soda_file_name)
 
-        stencil = supo.generator.utils.Stencil(
-            burst_width = args.burst_width if args.burst_width is not None else supo_model.burst_width,
-            dram_bank = args.dram_bank if args.dram_bank is not None else supo_model.dram_bank,
-            border = args.border if args.border is not None else supo_model.border,
-            iterate = args.iterate if args.iterate is not None else supo_model.iterate,
-            cluster = args.cluster if args.cluster is not None else supo_model.cluster,
-            app_name = supo_model.app_name,
-            input = supo_model.input,
-            output = supo_model.output,
-            intermediates = supo_model.intermediates,
-            dim = supo_model.dim,
-            extra_params = supo_model.extra_params,
-            tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)]+[0],
-            unroll_factor = (args.unroll_factor if args.unroll_factor is not None else supo_model.unroll_factor) if args.replication_factor is None else args.replication_factor,
+        stencil = soda.generator.utils.Stencil(
+            burst_width = args.burst_width if args.burst_width is not None else soda_model.burst_width,
+            dram_bank = args.dram_bank if args.dram_bank is not None else soda_model.dram_bank,
+            border = args.border if args.border is not None else soda_model.border,
+            iterate = args.iterate if args.iterate is not None else soda_model.iterate,
+            cluster = args.cluster if args.cluster is not None else soda_model.cluster,
+            app_name = soda_model.app_name,
+            input = soda_model.input,
+            output = soda_model.output,
+            intermediates = soda_model.intermediates,
+            dim = soda_model.dim,
+            extra_params = soda_model.extra_params,
+            tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else soda_model.tile_size[i] for i in range(soda_model.dim-1)]+[0],
+            unroll_factor = (args.unroll_factor if args.unroll_factor is not None else soda_model.unroll_factor) if args.replication_factor is None else args.replication_factor,
             replication_factor = args.replication_factor if args.replication_factor is not None else 1,
-            dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else supo_model.dram_separate)
+            dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else soda_model.dram_separate)
 
         logger.debug('kernel        : %s' % stencil.app_name)
         logger.debug('burst width   : %d' % stencil.burst_width)
@@ -167,29 +167,29 @@ def main():
 
         if args.kernel_file is not None:
             if args.kernel_file=='-':
-                supo.generator.kernel.PrintCode(stencil, sys.stdout)
+                soda.generator.kernel.PrintCode(stencil, sys.stdout)
             else:
                 with open(args.kernel_file, 'w') as kernel_file:
-                    supo.generator.kernel.PrintCode(stencil, kernel_file)
+                    soda.generator.kernel.PrintCode(stencil, kernel_file)
 
         if args.host_file is not None:
             if args.host_file=='-':
-                supo.generator.host.PrintCode(stencil, sys.stdout)
+                soda.generator.host.PrintCode(stencil, sys.stdout)
             else:
                 with open(args.host_file, 'w') as host_file:
-                    supo.generator.host.PrintCode(stencil, host_file)
+                    soda.generator.host.PrintCode(stencil, host_file)
 
         if args.header_file is not None:
             if args.header_file=='-':
-                supo.generator.header.PrintCode(stencil, sys.stdout)
+                soda.generator.header.PrintCode(stencil, sys.stdout)
             else:
                 with open(args.header_file, 'w') as header_file:
-                    supo.generator.header.PrintCode(stencil, header_file)
+                    soda.generator.header.PrintCode(stencil, header_file)
 
         if args.estimation_file is not None:
             if args.model_file is None:
-                if args.supo_src.endswith('.supo'):
-                    model_file = args.supo_src[:-len('.supo')]+'_model.json'
+                if args.soda_src.endswith('.soda'):
+                    model_file = args.soda_src[:-len('.soda')]+'_model.json'
                 else:
                     logger.fatal('cannot find resource model file')
                     sys.exit(1)
@@ -198,7 +198,7 @@ def main():
 
             def print_estimation():
                 def print_estimation():
-                    supo.model.xilinx.print_estimation(stencil,
+                    soda.model.xilinx.print_estimation(stencil,
                                                        model_file,
                                                        estimation_file)
                 if args.estimation_file == '-':
@@ -224,18 +224,18 @@ def main():
                 with open(os.path.join(
                     args.output_dir if args.output_dir is not None else '',
                     '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (
-                        supo_model.app_name, 'x'.join(
-                            ['%d'%x for x in supo_model.tile_size[0:-1]]),
-                        supo_model.unroll_factor, supo_model.dram_bank,
-                        '-separated' if supo_model.dram_separate else '')),
+                        soda_model.app_name, 'x'.join(
+                            ['%d'%x for x in soda_model.tile_size[0:-1]]),
+                        soda_model.unroll_factor, soda_model.dram_bank,
+                        '-separated' if soda_model.dram_separate else '')),
                     'w') as kernel_file:
-                    supo.generator.kernel.PrintCode(stencil, kernel_file)
+                    soda.generator.kernel.PrintCode(stencil, kernel_file)
             if args.host_file is None:
-                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
-                    supo.generator.host.PrintCode(stencil, host_file)
+                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % soda_model.app_name), 'w') as host_file:
+                    soda.generator.host.PrintCode(stencil, host_file)
             if args.header_file is None:
-                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.h' % supo_model.app_name), 'w') as header_file:
-                    supo.generator.header.PrintCode(stencil, header_file)
+                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.h' % soda_model.app_name), 'w') as header_file:
+                    soda.generator.header.PrintCode(stencil, header_file)
     except TextXSyntaxError as e:
         logger.error(e)
         sys.exit(1)

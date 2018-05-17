@@ -8,7 +8,7 @@ import operator
 import os
 import sys
 
-from supo.generator.utils import *
+from soda.generator.utils import *
 
 logger = logging.getLogger('__main__').getChild(__name__)
 

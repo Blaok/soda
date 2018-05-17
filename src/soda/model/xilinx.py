@@ -3,8 +3,8 @@ import logging
 import math
 import subprocess
 
-from supo.generator.utils import *
-from supo.model.resource import *
+from soda.generator.utils import *
+from soda.model.resource import *
 
 logger = logging.getLogger('__main__').getChild(__name__)
 

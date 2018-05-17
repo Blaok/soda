@@ -9,8 +9,8 @@ import operator
 import os
 import sys
 
-from supo.generator.utils import *
-from supo.grammar import ExtraParam
+from soda.generator.utils import *
+from soda.grammar import ExtraParam
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -717,7 +717,7 @@ def PrintInterface(p, stencil):
             p.PrintLine('load(input_stream_chan_%d_bank_%d, var_input_chan_%d_bank_%d, coalesced_data_num);' % ((c, i)*2))
     for c in range(input_chan):
         for i in range(dram_bank):
-            p.PrintLine('unpack_%s(' % GetSupoType(stencil.input.type))
+            p.PrintLine('unpack_%s(' % GetSodaType(stencil.input.type))
             p.DoIndent()
             for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
                 p.PrintLine('%s,' % GetTensorAt(stencil.input.name, stencil.input.offset+unroll_index, c))
@@ -813,7 +813,7 @@ def PrintInterface(p, stencil):
 
     for c in range(output_chan):
         for i in range(dram_bank):
-            p.PrintLine('pack_%s(output_stream_chan_%d_bank_%d,' % (GetSupoType(stencil.output.type), c, i))
+            p.PrintLine('pack_%s(output_stream_chan_%d_bank_%d,' % (GetSodaType(stencil.output.type), c, i))
             p.DoIndent()
             for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
                 p.PrintLine('%s,' % GetTensorAt(stencil.output.name, unroll_index, c))
@@ -850,14 +850,14 @@ def PrintUnpack(printer, burst_width, data_type, unroll_factor):
         ii = coalesced_size/unroll_factor
     GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
     GetDstName = lambda i: ('to_%0'+str(len(str(unroll_factor-1)))+'d') % i
-    printer.PrintLine('void unpack_%s(' % GetSupoType(data_type))
+    printer.PrintLine('void unpack_%s(' % GetSodaType(data_type))
     printer.DoIndent()
     for unroll_index in range(unroll_factor):
         printer.PrintLine(('hls::stream<%s>& %s,') % (data_type, GetDstName(unroll_index)))
     printer.PrintLine('hls::stream<ap_uint<%d> >& from, uint64_t data_num)' % burst_width)
     printer.UnIndent()
     printer.DoScope()
-    printer.PrintLine('unpack_%s_epoch:' % GetSupoType(data_type), 0)
+    printer.PrintLine('unpack_%s_epoch:' % GetSodaType(data_type), 0)
     printer.PrintLine('for(uint64_t i = 0; i < data_num; ++i)')
     printer.DoScope()
     printer.PrintLine('#pragma HLS pipeline II=%d' % ii, 0)
@@ -895,14 +895,14 @@ def PrintPack(printer, burst_width, data_type, unroll_factor):
         ii = coalesced_size/unroll_factor
     GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
     GetDstName = lambda i: ('from_%0'+str(len(str(unroll_factor-1)))+'d') % i
-    printer.PrintLine('void pack_%s(hls::stream<ap_uint<%d> >& to,' % (GetSupoType(data_type), burst_width))
+    printer.PrintLine('void pack_%s(hls::stream<ap_uint<%d> >& to,' % (GetSodaType(data_type), burst_width))
     printer.DoIndent()
     for unroll_index in range(unroll_factor):
         printer.PrintLine(('hls::stream<%s>& %s,') % (data_type, GetDstName(unroll_index)))
     printer.PrintLine('uint64_t data_num)')
     printer.UnIndent()
     printer.DoScope()
-    printer.PrintLine('pack_%s_epoch:' % GetSupoType(data_type), 0)
+    printer.PrintLine('pack_%s_epoch:' % GetSodaType(data_type), 0)
     printer.PrintLine('for(uint64_t i = 0; i < data_num; ++i)')
     printer.DoScope()
     printer.PrintLine('#pragma HLS pipeline II=%d' % ii, 0)
@@ -1251,7 +1251,7 @@ def _generate_code(printer, stencil):
                 for chan in range(stencil.input.chan):
                     for bank in range(stencil.dram_bank):
                         printer.PrintLine('unpack_%s(' %
-                            GetSupoType(stencil.input.type))
+                            GetSodaType(stencil.input.type))
                         printer.DoIndent()
                         for replica_id in range(
                                 stencil.dram_bank-1-bank,
@@ -1313,7 +1313,7 @@ def _generate_code(printer, stencil):
                 for chan in range(stencil.output.chan):
                     for bank in range(stencil.dram_bank):
                         printer.PrintLine('pack_%s(output_stream_chan_%d_'
-                            'bank_%d,' % (GetSupoType(stencil.output.type),
+                            'bank_%d,' % (GetSodaType(stencil.output.type),
                                 chan, bank))
                         printer.DoIndent()
                         for replica_id in range(
