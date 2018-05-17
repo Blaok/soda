@@ -8,7 +8,11 @@ import os
 import sys
 
 from supo.grammar import *
-import supo.generator.kernel, supo.generator.host, supo.generator.header, supo.generator.utils
+import supo.generator.kernel
+import supo.generator.host
+import supo.generator.header
+import supo.generator.utils
+import supo.model.xilinx
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -93,6 +97,16 @@ def main():
                         dest='header_file',
                         metavar='file',
                         help='host C++ header code; overrides --output-dir')
+    parser.add_argument('--model-file',
+                        type=str,
+                        dest='model_file',
+                        metavar='file',
+                        help='resource model specified as json file')
+    parser.add_argument('--estimation-file',
+                        type=str,
+                        dest='estimation_file',
+                        metavar='file',
+                        help='report resource and performance estimation as json file')
 
     args = parser.parse_args()
     verbose = 0 if args.verbose is None else args.verbose
@@ -131,7 +145,7 @@ def main():
             dim = supo_model.dim,
             extra_params = supo_model.extra_params,
             tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else supo_model.tile_size[i] for i in range(supo_model.dim-1)]+[0],
-            unroll_factor = (args.unroll_factor if args.unroll_factor is not None else supo_model.unroll_factor) if args.replication_factor is None or args.replication_factor == 1 else args.replication_factor,
+            unroll_factor = (args.unroll_factor if args.unroll_factor is not None else supo_model.unroll_factor) if args.replication_factor is None else args.replication_factor,
             replication_factor = args.replication_factor if args.replication_factor is not None else 1,
             dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else supo_model.dram_separate)
 
@@ -172,9 +186,49 @@ def main():
                 with open(args.header_file, 'w') as header_file:
                     supo.generator.header.PrintCode(stencil, header_file)
 
-        if args.output_dir is not None or args.kernel_file is None and args.host_file is None and args.header_file is None:
+        if args.estimation_file is not None:
+            if args.model_file is None:
+                if args.supo_src.endswith('.supo'):
+                    model_file = args.supo_src[:-len('.supo')]+'_model.json'
+                else:
+                    logger.fatal('cannot find resource model file')
+                    sys.exit(1)
+            else:
+                model_file = args.model_file
+
+            def print_estimation():
+                def print_estimation():
+                    supo.model.xilinx.print_estimation(stencil,
+                                                       model_file,
+                                                       estimation_file)
+                if args.estimation_file == '-':
+                    estimation_file = sys.stdout
+                    print_estimation()
+                else:
+                    with open(args.estimation_file, 'w') as estimation_file:
+                        print_estimation()
+            if model_file == '-':
+                model_file = sys.stdin
+                print_estimation()
+            else:
+                with open(model_file) as model_file:
+                    print_estimation()
+
+
+        if (args.output_dir is not None or
+                args.kernel_file is None and
+                args.host_file is None and
+                args.header_file is None and
+                args.estimation_file is None):
             if args.kernel_file is None:
-                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (supo_model.app_name, 'x'.join(['%d'%x for x in supo_model.tile_size[0:-1]]), supo_model.k, supo_model.dram_bank, '-separated' if supo_model.dram_separate else '')), 'w') as kernel_file:
+                with open(os.path.join(
+                    args.output_dir if args.output_dir is not None else '',
+                    '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (
+                        supo_model.app_name, 'x'.join(
+                            ['%d'%x for x in supo_model.tile_size[0:-1]]),
+                        supo_model.unroll_factor, supo_model.dram_bank,
+                        '-separated' if supo_model.dram_separate else '')),
+                    'w') as kernel_file:
                     supo.generator.kernel.PrintCode(stencil, kernel_file)
             if args.host_file is None:
                 with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % supo_model.app_name), 'w') as host_file:
