@@ -9,8 +9,8 @@ import operator
 import os
 import sys
 
-from supo.generator.dataflow import *
-import supo.grammar
+from soda.generator.dataflow import *
+import soda.grammar
 
 # constants
 coords_tiled = 'xyzw'
@@ -43,12 +43,12 @@ class Buffer(object):
         self.name = node.name
         self.type = node.type
         self.chan = node.chan
-        if isinstance(node, supo.grammar.Output):
+        if isinstance(node, soda.grammar.Output):
             self.idx = next(iter(node.expr)).idx
             for e in node.expr:
                 if e.idx != self.idx:
                     raise InternalError('Normalization went wrong')
-        elif isinstance(node, supo.grammar.Intermediate):
+        elif isinstance(node, soda.grammar.Intermediate):
             self.idx = next(iter(node.expr)).idx
             for e in node.expr:
                 if e.idx != self.idx:
@@ -161,7 +161,7 @@ class Stencil(object):
         IntermediateLoadCallBack = lambda n: NameFromIter(n, iteration) if n == input_node.name else NameFromIter(n, iteration) if n in intermediate_names else n
         OutputLoadCallBack = lambda n: NameFromIter(n, iteration-1) if n == input_node.name or n in intermediate_names else n
         for iteration in range(1, self.iterate):
-            new_intermediate = supo.grammar.Intermediate(output_node=output_node)
+            new_intermediate = soda.grammar.Intermediate(output_node=output_node)
             new_intermediate.MutateLoad(OutputLoadCallBack)
             new_intermediate.MutateStore(lambda n: NameFromIter(input_node.name, iteration))
             if self.preserve_border:
@@ -426,9 +426,9 @@ class Stencil(object):
 
     # return [StageExpr, ...]
     def GetExprFor(self, node):
-        if isinstance(node, supo.grammar.Output):
+        if isinstance(node, soda.grammar.Output):
             return node.expr
-        if isinstance(node, supo.grammar.Intermediate):
+        if isinstance(node, soda.grammar.Intermediate):
             return node.expr
         raise SemanticError('cannot get expression for %s' % str(type(node)))
 
@@ -801,16 +801,16 @@ class Printer(object):
                 self.PrintLine(line)
             self.UnIndent()
 
-def GetCType(supo_type):
-    if supo_type in {'uint8', 'uint16', 'uint32', 'uint64', 'int8', 'int16', 'int32', 'int64'}:
-        return supo_type+'_t'
-    return supo_type
+def GetCType(soda_type):
+    if soda_type in {'uint8', 'uint16', 'uint32', 'uint64', 'int8', 'int16', 'int32', 'int64'}:
+        return soda_type+'_t'
+    return soda_type
 
-def GetSupoType(c_type):
+def GetSodaType(c_type):
     return c_type[:-2] if c_type[-2:] == '_t' else c_type
 
-def IsFloat(supo_type):
-    return supo_type in {'float', 'double'}
+def IsFloat(soda_type):
+    return soda_type in {'float', 'double'}
 
 def PrintGuard(printer, var, val):
     printer.PrintLine('#if %s != %d' % (var, val))

@@ -123,17 +123,17 @@ check-git-status:
 	@echo $(COMMIT)
 
 ############################## generate source files ##############################
-$(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).supo
+$(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/supoc $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --kernel-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --kernel-file $@ $^
 
-$(TMP)/$(HOST_XCLSRC): $(SRC)/$(APP).supo
+$(TMP)/$(HOST_XCLSRC): $(SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/supoc $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --source-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --source-file $@ $^
 
-$(TMP)/$(APP).h: $(SRC)/$(APP).supo
+$(TMP)/$(APP).h: $(SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/supoc $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --header-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --header-file $@ $^
 
 ############################## generate host binary ##############################
 $(BIN)/$(HOST_BIN): $(OBJ)/$(HOST_SRCS:.cpp=.o) $(OBJ)/$(HOST_XCLSRC:.cpp=.o)

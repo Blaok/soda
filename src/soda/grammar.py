@@ -6,13 +6,13 @@ import operator
 import os
 import sys
 
-import supo.generator.utils
-from supo.generator.utils import SemanticError, SemanticWarn
+import soda.generator.utils
+from soda.generator.utils import SemanticError, SemanticWarn
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
-supo_grammar = '''
-SupoProgram:
+soda_grammar = '''
+SodaProgram:
 (
     ('burst' 'width' ':' burst_width=INT)
     ('dram' 'bank' ':' dram_bank=INT)
@@ -83,7 +83,7 @@ def GetResultType(operand1, operand2, operator):
             return t
     raise SemanticError('cannot parse type: %s %s %s' % (operand1, operator, operand2))
 
-class SupoProgram(object):
+class SodaProgram(object):
     def __init__(self, **kwargs):
         self.burst_width = kwargs.pop('burst_width')
         self.dram_bank = kwargs.pop('dram_bank')
@@ -412,7 +412,7 @@ class Operand(object):
 
 class Input(object):
     def __init__(self, **kwargs):
-        self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
+        self.type = soda.generator.utils.GetCType(kwargs.pop('type'))
         self.name = kwargs.pop('name')
         self.chan = StringToInteger(kwargs.pop('chan'), 1)
         if(self.chan<1):
@@ -424,7 +424,7 @@ class Input(object):
 
 class ExtraParam(object):
     def __init__(self, **kwargs):
-        self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
+        self.type = soda.generator.utils.GetCType(kwargs.pop('type'))
         self.name = kwargs.pop('name')
         self.size = kwargs.pop('size')
         attrs = kwargs.pop('attrs')
@@ -456,7 +456,7 @@ class ExtraParam(object):
 
 class Output(object):
     def __init__(self, **kwargs):
-        self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
+        self.type = soda.generator.utils.GetCType(kwargs.pop('type'))
         self.expr = kwargs.pop('expr')
         for e in self.expr:
             if hasattr(self, 'name'):
@@ -523,7 +523,7 @@ class Intermediate(object):
             self.border = output_node.border
             self.expr = copy.deepcopy(output_node.expr)
             return
-        self.type = supo.generator.utils.GetCType(kwargs.pop('type'))
+        self.type = soda.generator.utils.GetCType(kwargs.pop('type'))
         self.expr = kwargs.pop('expr')
         for e in self.expr:
             if hasattr(self, 'name'):
@@ -618,5 +618,5 @@ class StageExpr(object):
         if hasattr(self, 'loads'):
             del self.loads
 
-supo_grammar_classes = [SupoProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, StageExpr, Intermediate]
+soda_grammar_classes = [SodaProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, StageExpr, Intermediate]
 

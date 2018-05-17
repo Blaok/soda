@@ -1,6 +1,6 @@
-# SUPO: Stencil with Unrolling and Pipelining Optimizations
+# SODA: Stencil with Unrolling and Pipelining Optimizations
 
-## SUPO DSL Example
+## SODA DSL Example
 
     # comments start with hashtag(#)
     
@@ -46,7 +46,7 @@
 + Currently only `+,-,*,/%` operators are implemented
 + Currently `math.h` functions can be parsed but type induction is not fully implemented
 + Note that `2.0` will be a `double` number. To generate `float`, use `2.0f`. This may help reduce DSP usage
-+ SUPO is tiling-based and the size of the tile is specified in the `input` keyword. The last dimension is omitted because it is not needed in the reuse buffer generation
++ SODA is tiling-based and the size of the tile is specified in the `input` keyword. The last dimension is omitted because it is not needed in the reuse buffer generation
 + The input, output, or the intermediate buffer can have more than 1 channels, which is helpful when dealing with things like RGB images
 
 
@@ -62,8 +62,8 @@
   - `xilinx:adm-pcie-7v3:1ddr:3.0` (default) and `xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0` are tested
 
 ### Clone the Repo
-    git clone https://github.com/Blaok/supo.git
-    cd supo
+    git clone https://github.com/Blaok/soda.git
+    cd soda
 
 ### Generate HLS kernel code
     make kernel
