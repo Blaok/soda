@@ -1,0 +1,65 @@
+#!/bin/bash
+LABEL=9adad6e-dirty
+LABEL=iccad18
+XDEVICE=adm-pcie-ku3
+separate=separated-
+export DRAM_SEPARATE=yes
+bank=2
+
+run() {
+    #run_freq
+    #run_post_syn_util
+    run_exec_time
+}
+
+#. ./test-funcs.sh
+. ./test-funcs-rep.sh
+
+app=sobel2d
+iterate=1
+tile_size=16384
+for unroll in 1 2 4 8 16 32
+do
+    run
+done
+
+app=denoise2d
+iterate=1
+tile_size=16384
+for unroll in 1 2 4 8 16
+do
+    run
+done
+
+app=denoise3d
+iterate=1
+tile_size=128x128
+for unroll in 1 2 4 8 16
+do
+    run
+done
+
+for app in jacobi2d seidel2d
+do
+    tile_size=16384
+    for iterate in 1 8
+    do
+        for unroll in 1 2 4 8 16
+        do
+            run
+        done
+    done
+done
+
+for app in jacobi3d heat3d
+do
+    tile_size=128x128
+    for iterate in 1 8
+    do
+        for unroll in 1 2 4 8 16
+        do
+            run
+        done
+    done
+done
+

@@ -1,0 +1,9 @@
+#!/bin/sh
+src/supoc src/sobel2d.supo   --estimation-file - --model-file src/ku3_model.json --unroll-factor 32 --iterate 1  --dram-bank 2 --dram-separate yes --tile-size 524302   |jq '.resource_routed.BRAM'
+src/supoc src/denoise2d.supo --estimation-file - --model-file src/ku3_model.json --unroll-factor 8  --iterate 1  --dram-bank 2 --dram-separate no  --tile-size 21846    |jq '.resource_routed.BRAM'
+src/supoc src/denoise3d.supo --estimation-file - --model-file src/ku3_model.json --unroll-factor 4  --iterate 1  --dram-bank 2 --dram-separate no  --tile-size 156 157  |jq '.resource_routed.BRAM'
+src/supoc src/jacobi2d.supo  --estimation-file - --model-file src/ku3_model.json --unroll-factor 8  --iterate 10 --dram-bank 2 --dram-separate yes --tile-size 16392    |jq '.resource_routed.BRAM'
+src/supoc src/jacobi3d.supo  --estimation-file - --model-file src/ku3_model.json --unroll-factor 8  --iterate 6  --dram-bank 2 --dram-separate yes --tile-size 181 182  |jq '.resource_routed.BRAM'
+src/supoc src/seidel2d.supo  --estimation-file - --model-file src/ku3_model.json --unroll-factor 8  --iterate 9  --dram-bank 2 --dram-separate yes --tile-size 32768    |jq '.resource_routed.BRAM'
+src/supoc src/heat3d.supo    --estimation-file - --model-file src/ku3_model.json --unroll-factor 8  --iterate 5  --dram-bank 2 --dram-separate yes --tile-size 256 257  |jq '.resource_routed.BRAM'
+

@@ -1,0 +1,32 @@
+#!/bin/zsh
+#app=jacobi2d
+#unroll=8
+#iterate=12
+upper=4096
+
+while $(src/supoc src/${app}.supo --estimation-file - --model-file src/ku3_model.json --replication-factor ${unroll} --tile-size ${upper} --iterate ${iterate} --dram-bank ${bank} --dram-separate ${separate}|jq '.permissible')
+do
+    upper=$((upper*2))
+done
+
+delta=$((upper / 4))
+while (( delta > 0 ))
+do
+    echo "search from ${upper} with step of -${delta}"
+    for i in $(seq ${upper} -${delta} 1)
+    do
+        if $(src/supoc src/${app}.supo --estimation-file - --model-file src/ku3_model.json --replication-factor ${unroll} --tile-size $i --iterate ${iterate} --dram-bank ${bank} --dram-separate ${separate}|jq '.permissible')
+        then
+            echo "current best for $app: $i"
+            break
+        fi
+    done
+    upper=$((i+delta))
+    if (( delta > unroll || delta == 1 ))
+    then
+        delta=$((delta / 2))
+    else
+        delta=1
+    fi
+done
+

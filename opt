@@ -1,0 +1,18 @@
+#!/bin/zsh
+CPU_NUM=$(($(nproc) / 2))
+interval=1
+while true
+do
+    echo '======================================================================'
+    for app in sobel2d denoise2d denoise3d jacobi2d jacobi3d seidel2d heat3d
+    do
+        while (( $(awk '{print $1}' /proc/loadavg) > $CPU_NUM ))
+        do
+            sleep $interval
+        done
+        (./opt-$app|tail -n1)&
+        sleep $interval
+    done
+    wait
+done
+

@@ -1,0 +1,54 @@
+#!/bin/zsh
+#app=denoise3d
+#unroll=8
+#iterate=1
+
+obj=0.0
+
+function calc_obj() {
+    echo $(( (1-iterate*2./i) * (1-iterate*2./j) ))
+}
+
+upper=256
+while $(src/supoc src/${app}.supo --estimation-file - --model-file src/ku3_model.json --replication-factor ${unroll} --tile-size $upper $upper --iterate ${iterate} --dram-bank ${bank} --dram-separate ${separate}|jq '.permissible')
+do
+    upper=$((upper*2))
+done
+
+delta=$((upper/4))
+while ((delta>0))
+do
+    echo "search from ${upper} with step of -${delta}"
+    for i in $(seq $upper -${delta} 1)
+    do
+        for j in $(seq $upper -${delta} 1)
+        do
+            if [[ $(calc_obj) -lt ${obj} ]]
+            then
+                break
+            fi
+            if $(src/supoc src/${app}.supo --estimation-file - --model-file src/ku3_model.json --replication-factor ${unroll} --tile-size $i $j --iterate ${iterate} --dram-bank ${bank} --dram-separate ${separate}|jq '.permissible')
+            then
+                besti=$i
+                bestj=$j
+                obj=$(calc_obj)
+                echo "current best for $app: ${i}x$j $obj"
+                break
+            fi
+        done
+    done
+    upperi=$((besti+delta))
+    upperj=$((bestj+delta))
+    if (( upperi > upperj ))
+    then
+        upper=$upperi
+    else
+        upper=$upperj
+    fi
+    if (( delta > unroll || delta == 1 ))
+    then
+        delta=$((delta / 2))
+    else
+        delta=1
+    fi
+done
