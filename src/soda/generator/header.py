@@ -58,8 +58,8 @@ def PrintCode(stencil, header_file):
     p.PrintLine('#endif//HALIDE_FUNCTION_ATTRS')
     p.PrintLine()
 
-    buffers = [stencil.input.name, stencil.output.name] + [param.name for param in stencil.extra_params.values()]
-    p.PrintLine('int %s(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS;' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x for x in buffers])))
+    tensors = [stencil.input.name, stencil.output.name] + [param.name for param in stencil.extra_params.values()]
+    p.PrintLine('int %s(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS;' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x for x in tensors])))
     p.PrintLine()
 
     p.PrintLine('#endif//HALIDE_%s_H_' % stencil.app_name.upper())

@@ -123,10 +123,10 @@ def PrintHalideErrorReport(p):
     p.PrintLine()
 
 def PrintWrapped(p, stencil):
-    buffers = [[stencil.input.name, stencil.input.type], [stencil.output.name, stencil.output.type]]+[[p.name, p.type] for p in stencil.extra_params.values()]
-    p.PrintLine('static int %s_wrapped(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in buffers])))
+    tensors = [[stencil.input.name, stencil.input.type], [stencil.output.name, stencil.output.type]]+[[p.name, p.type] for p in stencil.extra_params.values()]
+    p.PrintLine('static int %s_wrapped(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in tensors])))
     p.DoScope()
-    for b in buffers:
+    for b in tensors:
         PrintUnloadBuffer(p, b[0], b[1])
 
     p.PrintLine('if(var_%s_host_and_dev_are_null)' % stencil.output.name)
@@ -630,12 +630,12 @@ def PrintWrapped(p, stencil):
     p.PrintLine()
 
 def PrintEntrance(p, stencil):
-    buffers = [[stencil.input.name, stencil.input.type], [stencil.output.name, stencil.output.type]]+[[p.name, p.type] for p in stencil.extra_params.values()]
-    p.PrintLine('int %s(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in buffers])))
+    tensors = [[stencil.input.name, stencil.input.type], [stencil.output.name, stencil.output.type]]+[[p.name, p.type] for p in stencil.extra_params.values()]
+    p.PrintLine('int %s(%sconst char* xclbin) HALIDE_FUNCTION_ATTRS' % (stencil.app_name, ''.join([('buffer_t *var_%s_buffer, ') % x[0] for x in tensors])))
     p.DoScope()
-    for b in buffers:
+    for b in tensors:
         PrintUnloadBuffer(p, b[0], b[1])
-    p.PrintLine('return %s_wrapped(%sxclbin);' % (stencil.app_name, ''.join([('var_%s_buffer, ') % x[0] for x in buffers])))
+    p.PrintLine('return %s_wrapped(%sxclbin);' % (stencil.app_name, ''.join([('var_%s_buffer, ') % x[0] for x in tensors])))
     p.UnScope()
     p.PrintLine()
 
@@ -673,7 +673,7 @@ def PrintTest(p, stencil):
 
     p.PrintLine('int %s_test(const char* xclbin, const int dims[4])' % stencil.app_name)
     p.DoScope()
-    p.PrintLine('buffer_t %s;' % ', '.join([b.name for b in stencil.buffers.values()]))
+    p.PrintLine('buffer_t %s;' % ', '.join([b.name for b in stencil.tensors.values()]))
     for param in stencil.extra_params.values():
         p.PrintLine('buffer_t %s;' % param.name)
 
@@ -683,13 +683,13 @@ def PrintTest(p, stencil):
         p.PrintLine('memset(&%s, 0, sizeof(buffer_t));' % param.name)
     p.PrintLine()
 
-    for b in stencil.buffers.values():
+    for b in stencil.tensors.values():
         p.PrintLine('%s* %s_img = new %s[%s]();' % (b.type, b.name, b.type, '*'.join(['dims[%d]' % x for x in range(stencil.dim)]+[str(b.chan)])))
     for param in stencil.extra_params.values():
         p.PrintLine('%s %s_img%s;' % (param.type, param.name, reduce(operator.add, ['[%s]'%x for x in param.size])))
     p.PrintLine()
 
-    for b in stencil.buffers.values():
+    for b in stencil.tensors.values():
         for d in range(stencil.dim):
             p.PrintLine('%s.extent[%d] = dims[%d];' % (b.name, d, d))
         if b.chan>1:
@@ -757,11 +757,11 @@ def PrintTest(p, stencil):
                 stencil_window_input = stencil_window_input_queue.popleft()
                 if stencil_window_input.parent is None:
                     break
-                parent_buffers = stencil_window_input.parent.inputs
-                if len(parent_buffers)==1 and next(iter(parent_buffers.values())).parent is not None and next(iter(parent_buffers.values())).parent.PreserveBorderFrom() is not None:
-                    stencil_window_input = next(iter(parent_buffers.values()))
+                parent_tensors = stencil_window_input.parent.inputs
+                if len(parent_tensors)==1 and next(iter(parent_tensors.values())).parent is not None and next(iter(parent_tensors.values())).parent.PreserveBorderFrom() is not None:
+                    stencil_window_input = next(iter(parent_tensors.values()))
                     break
-                stencil_window_input_queue += parent_buffers.values()
+                stencil_window_input_queue += parent_tensors.values()
                 stencil_window_input = stencil_window_input.parent.output
             logger.debug('preserving border from %s' % stencil_window_input.name)
         else:
@@ -774,7 +774,7 @@ def PrintTest(p, stencil):
             p.PrintLine('for(int32_t %c = %d; %c<dims[%d]-%d; ++%c)' % (coords_in_orig[dim], output_idx[dim], coords_in_orig[dim], dim, stencil_dim[dim]-output_idx[dim]-1, coords_in_orig[dim]))
             p.DoScope()
         for e in s.expr:
-            e.PrintCode(p, stencil.buffers, LoadPrinter, StorePrinter)
+            e.PrintCode(p, stencil.tensors, LoadPrinter, StorePrinter)
         p.PrintLine()
         if len(s.output.children)==0:
             for c in range(stencil.output.chan):

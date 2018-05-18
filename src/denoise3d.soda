@@ -8,21 +8,21 @@ border: ignore
 cluster: none
 
 input float: uf[2](32,32,) # [u,f]
-buffer float: diff_u(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0, -1,  0)
-buffer float: diff_d(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0,  1,  0)
-buffer float: diff_l(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0](-1,  0,  0)
-buffer float: diff_r(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 1,  0,  0)
-buffer float: diff_i(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0,  0, -1)
-buffer float: diff_o(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0,  0,  1)
-buffer float: g(0, 0, 0) ~125= 1.0f / sqrt(0.00005f+
+local float: diff_u(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0, -1,  0)
+local float: diff_d(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0,  1,  0)
+local float: diff_l(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0](-1,  0,  0)
+local float: diff_r(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 1,  0,  0)
+local float: diff_i(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0,  0, -1)
+local float: diff_o(0, 0, 0) ~12= uf[0](0, 0, 0) - uf[0]( 0,  0,  1)
+local float: g(0, 0, 0) ~125= 1.0f / sqrt(0.00005f+
     diff_u(0, 0, 0)*diff_u(0, 0, 0)+
     diff_d(0, 0, 0)*diff_d(0, 0, 0)+
     diff_l(0, 0, 0)*diff_l(0, 0, 0)+
     diff_r(0, 0, 0)*diff_r(0, 0, 0)+
     diff_i(0, 0, 0)*diff_i(0, 0, 0)+
     diff_o(0, 0, 0)*diff_o(0, 0, 0))
-buffer float: r0(0, 0, 0) ~14= uf[0](0, 0, 0) * uf[1](0, 0, 0) * (1.0f/0.03f)
-buffer float:
+local float: r0(0, 0, 0) ~14= uf[0](0, 0, 0) * uf[1](0, 0, 0) * (1.0f/0.03f)
+local float:
     r1(0, 0, 0) ~73= (r0(0, 0, 0) * (2.38944f + r0(0, 0, 0) * (0.950037f + r0(0, 0, 0)))) / (4.65314f + r0(0, 0, 0) * (2.57541f + r0(0, 0, 0) * (1.48937f + r0(0, 0, 0))))
 output float:
     output(0, 0, 0) ~113= (uf[0](0, 0, 0) + 5.0f * (uf[0](1, 0, 0) * g(1, 0, 0) + uf[0](-1, 0, 0) * g(-1, 0, 0) + uf[0](0, 1, 0) * g(0, 1, 0) + uf[0](0, -1, 0) * g(0, -1, 0) + uf[0](0, 0, 1) * g(0, 0, 1) + uf[0](0, 0, -1) * g(0, 0, -1) + (1.0f/0.03f) * uf[1](0, 0, 0)*r1(0, 0, 0)) ) / (1.0f + 5.0f*(g(1, 0, 0) + g(-1, 0, 0) + g(0, 1, 0) + g(0, -1, 0) + g(0, 0, 1) + g(0, 0, -1) + (1.0f/0.03f)))

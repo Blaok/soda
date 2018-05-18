@@ -25,19 +25,19 @@ def PrintComputeInput(printer, stencil):
             printer.DoIndent()
 
             # outputs
-            intermediate_offsets = []
+            local_offsets = []
             offset = unroll_factor-1-pe_id
             while offset is not None:
-                intermediate_offsets.append(offset)
+                local_offsets.append(offset)
                 for output_stage in tensor.children:
                     points = all_points[tensor.name][output_stage.name][offset]
                     for unroll_index, point in points.items():
-                        for c in range(stencil.buffers[tensor.name].chan):
+                        for c in range(stencil.tensors[tensor.name].chan):
                             printer.PrintLine('/* output */ hls::stream<%s>& from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (tensor.type, tensor.name, output_stage.name, point, c, unroll_index))
                 offset = next_fifo[tensor.name].get(offset, None)
 
             # inputs
-            for c in range(stencil.buffers[tensor.name].chan):
+            for c in range(stencil.tensors[tensor.name].chan):
                 printer.PrintLine('/*  input */ hls::stream<%s>& %s_offset_%s_chan_%d,' % (tensor.type, tensor.name, unroll_factor-1-pe_id, c))
 
             params = []
@@ -53,22 +53,22 @@ def PrintComputeInput(printer, stencil):
             printer.UnIndent()
             printer.DoScope()
 
-            PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, pe_id)
+            PrintTensorStatements(printer, local_offsets, unroll_factor, tensor, pe_id)
 
             printer.PrintLine('compute_%s_pe_%d_epoch:' % (tensor.name, pe_id), 0)
             printer.PrintLine('for(uint32_t epoch = 0; epoch < epoch_num+%d; ++epoch)' %
-                ((intermediate_offsets[-1]-intermediate_offsets[0])//unroll_factor))
+                ((local_offsets[-1]-local_offsets[0])//unroll_factor))
             printer.DoScope()
             printer.PrintLine('#pragma HLS pipeline II=1', 0)
-            PrintBuffers(printer, stencil, tensor, pe_id)
+            PrintTensors(printer, stencil, tensor, pe_id)
             printer.UnScope()
 
             printer.UnScope()
             printer.PrintLine()
 
-def PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, pe_id):
+def PrintTensorStatements(printer, local_offsets, unroll_factor, tensor, pe_id):
             pragmas = []
-            for begin, end in zip(intermediate_offsets[:-1], intermediate_offsets[1:]):
+            for begin, end in zip(local_offsets[:-1], local_offsets[1:]):
                 for c in range(tensor.chan):
                     param = '%s_offset_%s_chan_%d' % (tensor.name, end, c)
                     printer.PrintLine('hls::stream<%s> %s("%s");' % (tensor.type, param, param))
@@ -76,7 +76,7 @@ def PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, 
             for pragma in pragmas:
                 printer.PrintLine(pragma, 0)
 
-def PrintBuffers(printer, stencil, tensor, pe_id):
+def PrintTensors(printer, stencil, tensor, pe_id):
     unroll_factor = stencil.unroll_factor
     all_points = stencil.GetAllPoints()
     next_fifo = stencil.GetNextFIFO()
@@ -145,10 +145,10 @@ def PrintBuffers(printer, stencil, tensor, pe_id):
         def PrintIntervalReads():
             read = reads[depth]
             read_set.add(read)
-            for c in range(stencil.buffers[tensor.name].chan):
+            for c in range(stencil.tensors[tensor.name].chan):
                 printer.PrintLine('%s tmp_%s = %s.read();' % (tensor.type, read%c, read%c))
         def PrintIntervalWrites():
-            for c in range(stencil.buffers[tensor.name].chan):
+            for c in range(stencil.tensors[tensor.name].chan):
                 for write, read in writes.get(depth, []):
                     if read in read_set:
                         printer.PrintLine('%s << tmp_%s;' % (write%c, read%c))
@@ -203,21 +203,21 @@ def PrintComputeStage(printer, stencil, stage):
         printer.DoIndent()
 
         # outputs
-        intermediate_offsets = []
+        local_offsets = []
         if stencil.cluster == 'none':
-            for c in range(stencil.buffers[stage.name].chan):
+            for c in range(stencil.tensors[stage.name].chan):
                 printer.PrintLine('/* output */ hls::stream<%s>& %s_chan_%d,' % (stage.output.type, stage.name, c))
         elif stage.IsOutput():
-            for c in range(stencil.buffers[stage.name].chan):
+            for c in range(stencil.tensors[stage.name].chan):
                 printer.PrintLine('/* output */ hls::stream<%s>& %s_offset_%d_chan_%d,' % (stage.output.type, stage.name, unroll_factor-1-pe_id, c))
         else:
             offset = unroll_factor-1-pe_id
             while offset is not None:
-                intermediate_offsets.append(offset)
+                local_offsets.append(offset)
                 for output_stage in tensor.children:
                     points = all_points[tensor.name][output_stage.name][offset]
                     for unroll_index, point in points.items():
-                        for c in range(stencil.buffers[tensor.name].chan):
+                        for c in range(stencil.tensors[tensor.name].chan):
                             printer.PrintLine('/* output */ hls::stream<%s>& from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (tensor.type, tensor.name, output_stage.name, point, c, unroll_index))
                 offset = next_fifo[tensor.name].get(offset, None)
 
@@ -234,7 +234,7 @@ def PrintComputeStage(printer, stencil, stage):
                             (stage.output.type, param, c))
 
         # inputs
-        for param in [(stencil.buffers[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))) for input_name, input_window in stage.window.items() for indices in input_window for c in range(stencil.buffers[input_name].chan)]:
+        for param in [(stencil.tensors[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))) for input_name, input_window in stage.window.items() for indices in input_window for c in range(stencil.tensors[input_name].chan)]:
             printer.PrintLine('/*  input */ hls::stream<%s>& %s,' % param)
 
         # params
@@ -260,8 +260,8 @@ def PrintComputeStage(printer, stencil, stage):
 
         bound = ''
         if stencil.cluster != 'none' and not stage.IsOutput():
-            bound = '+%d' % ((intermediate_offsets[-1]-intermediate_offsets[0])//unroll_factor)
-            PrintBufferStatements(printer, intermediate_offsets, unroll_factor, tensor, pe_id)
+            bound = '+%d' % ((local_offsets[-1]-local_offsets[0])//unroll_factor)
+            PrintTensorStatements(printer, local_offsets, unroll_factor, tensor, pe_id)
             printer.PrintLine()
             for c in range(tensor.chan):
                 param = '%s_offset_%d_chan_%d' % (tensor.name, unroll_factor-1-pe_id, c)
@@ -279,7 +279,7 @@ def PrintComputeStage(printer, stencil, stage):
         params = []
         for input_name, input_window in stage.window.items():
             for indices in input_window:
-                for c in range(stencil.buffers[input_name].chan):
+                for c in range(stencil.tensors[input_name].chan):
                     params.append('%s_chan_%d_at_%s' %
                         (input_name, c, GetIndicesId(indices)))
         printer.PrintLine('if(not (%s))' % ' or '.join(
@@ -313,8 +313,8 @@ def PrintComputeStage(printer, stencil, stage):
         for input_name, input_window in stage.window.items():
             params = []
             for indices in input_window:
-                for c in range(stencil.buffers[input_name].chan):
-                    params.append((stencil.buffers[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))))
+                for c in range(stencil.tensors[input_name].chan):
+                    params.append((stencil.tensors[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, GetIndicesId(indices))))
 
             for param in params:
                 printer.PrintLine('%s load_%s = %s.read();' % (param[0], param[1], param[1]))
@@ -334,7 +334,7 @@ def PrintComputeStage(printer, stencil, stage):
         StorePrinter = lambda node: '%s store_%s_chan_%d' % (stage.output.type, node.name, node.chan)
 
         for expr in stage.expr:
-            expr.PrintCode(printer, stencil.buffers, LoadPrinter, StorePrinter, add_latency=True)
+            expr.PrintCode(printer, stencil.tensors, LoadPrinter, StorePrinter, add_latency=True)
 
         for c in range(stage.output.chan):
             if stencil.cluster == 'none':
@@ -381,7 +381,7 @@ def PrintComputeStage(printer, stencil, stage):
         if stencil.cluster == 'fine' and not stage.IsOutput():
             printer.UnScope()
             printer.PrintLine()
-            PrintBuffers(printer, stencil, stage.output, pe_id)
+            PrintTensors(printer, stencil, stage.output, pe_id)
         printer.PrintLine('++epoch;')
         printer.UnScope()
         printer.UnScope()
@@ -644,8 +644,8 @@ def PrintInterface(p, stencil):
             logger.debug('generate %s' % msg)
             p.PrintLine('// %s' % msg)
             for start, end in reuse_buffer[1:]:
-                for c in range(stencil.buffers[name].chan):
-                    p.PrintLine('hls::stream<%s> %s("%s");' % ((stencil.buffers[name].type,)+(GetTensorAt(name, end, c),)*2))
+                for c in range(stencil.tensors[name].chan):
+                    p.PrintLine('hls::stream<%s> %s("%s");' % ((stencil.tensors[name].type,)+(GetTensorAt(name, end, c),)*2))
                     buffer_length = stencil.GetReuseBufferLength(name, end)
                     tensor_name = GetTensorAt(name, end, c)
                     if buffer_length > 1:
@@ -657,13 +657,13 @@ def PrintInterface(p, stencil):
         p.PrintLine('// %s' % stencil.input.name)
         for unroll_index in range(unroll_factor):
             for c in range(stencil.input.chan):
-                p.PrintLine('hls::stream<%s> %s("%s");' % ((stencil.buffers[stencil.input.name].type,)+(GetTensorAt(stencil.input.name, unroll_index, c),)*2))
+                p.PrintLine('hls::stream<%s> %s("%s");' % ((stencil.tensors[stencil.input.name].type,)+(GetTensorAt(stencil.input.name, unroll_index, c),)*2))
         p.PrintLine()
 
     p.PrintLine('// %s' % stencil.output.name)
     for unroll_index in range(unroll_factor):
         for c in range(stencil.output.chan):
-            p.PrintLine('hls::stream<%s> %s("%s");' % ((stencil.buffers[stencil.output.name].type,)+(GetTensorAt(stencil.output.name, unroll_index, c),)*2))
+            p.PrintLine('hls::stream<%s> %s("%s");' % ((stencil.tensors[stencil.output.name].type,)+(GetTensorAt(stencil.output.name, unroll_index, c),)*2))
     p.PrintLine()
 
     # params
@@ -682,8 +682,8 @@ def PrintInterface(p, stencil):
                     cpt_node = super_source.cpt_nodes[(stage.name, pe_id)]
                     extra_depth = super_source.get_extra_depth(
                         (fwd_node, cpt_node))
-                    for c in range(stencil.buffers[input_name].chan):
-                        var_type = stencil.buffers[input_name].type
+                    for c in range(stencil.tensors[input_name].chan):
+                        var_type = stencil.tensors[input_name].type
                         var_name = 'from_%s_to_%s_param_%d_chan_%d_pe_%d' % (
                             input_name, stage.name, i, c, pe_id)
                         p.PrintLine('hls::stream<%s> %s("%s");' % (
@@ -750,7 +750,7 @@ def PrintInterface(p, stencil):
             '/* output */ border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
                 for input_name, input_window in stage.window.items():
                     for i in range(len(input_window)):
-                        for c in range(stencil.buffers[input_name].chan):
+                        for c in range(stencil.tensors[input_name].chan):
                             params += [
                         '/*  input */ from_%s_to_%s_param_%d_chan_%d_pe_%d'
                         % (input_name, stage.name, i, c, unroll_index)]
@@ -768,41 +768,41 @@ def PrintInterface(p, stencil):
                 PrintForwardCall(p, stencil, stage.name)
             p.PrintLine()
     elif stencil.cluster == 'fine':
-        for buffer in [stencil.input]+[stage.output for stage in stencil.GetStagesChronologically()]:
-            inputs = tuple(reversed(range(unroll_factor))) if buffer.IsOutput() else [start for start, end in stencil.GetReuseBuffers()[buffer.name][1:] if start==end]
+        for tensor in [stencil.input]+[stage.output for stage in stencil.GetStagesChronologically()]:
+            inputs = tuple(reversed(range(unroll_factor))) if tensor.IsOutput() else [start for start, end in stencil.GetReuseBuffers()[tensor.name][1:] if start==end]
             for pe_id in range(unroll_factor):
-                p.PrintLine('compute_%s_pe_%d(' % (buffer.name, pe_id))
+                p.PrintLine('compute_%s_pe_%d(' % (tensor.name, pe_id))
                 p.DoIndent()
 
                 # outputs
                 offset = unroll_factor-1-pe_id
-                if buffer.IsOutput():
-                    for c in range(stencil.buffers[buffer.name].chan):
-                        p.PrintLine('/* output */ %s_offset_%s_chan_%d,' % (buffer.name, offset, c))
+                if tensor.IsOutput():
+                    for c in range(stencil.tensors[tensor.name].chan):
+                        p.PrintLine('/* output */ %s_offset_%s_chan_%d,' % (tensor.name, offset, c))
                 else:
                     while offset is not None:
-                        for output_stage in buffer.children:
-                            points = all_points[buffer.name][output_stage.name][offset]
+                        for output_stage in tensor.children:
+                            points = all_points[tensor.name][output_stage.name][offset]
                             for unroll_index, point in points.items():
-                                for c in range(stencil.buffers[buffer.name].chan):
-                                    p.PrintLine('/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (buffer.name, output_stage.name, point, c, unroll_index))
-                        offset = next_fifo[buffer.name].get(offset, None)
+                                for c in range(stencil.tensors[tensor.name].chan):
+                                    p.PrintLine('/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (tensor.name, output_stage.name, point, c, unroll_index))
+                        offset = next_fifo[tensor.name].get(offset, None)
 
                 # inputs
-                if buffer.IsInput():
-                    for c in range(stencil.buffers[stencil.input.name].chan):
+                if tensor.IsInput():
+                    for c in range(stencil.tensors[stencil.input.name].chan):
                         p.PrintLine('/*  input */ %s_offset_%s_chan_%d,' % (stencil.input.name, unroll_factor-1-pe_id, c))
                 else:
-                    for param in ['from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, buffer.name, i, c, pe_id) for input_name, input_window in buffer.parent.window.items() for i in range(len(input_window)) for c in range(stencil.buffers[input_name].chan)]:
+                    for param in ['from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, tensor.name, i, c, pe_id) for input_name, input_window in tensor.parent.window.items() for i in range(len(input_window)) for c in range(stencil.tensors[input_name].chan)]:
                         p.PrintLine('/*  input */ %s,' % param)
 
                 params = []
-                if buffer.PreserveBorderTo():
+                if tensor.PreserveBorderTo():
                     for d in range(stencil.dim-1):
-                        for c in range(buffer.chan):
-                            param = (buffer.name, d, c, pe_id)
+                        for c in range(tensor.chan):
+                            param = (tensor.name, d, c, pe_id)
                             params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
-                if buffer.PreserveBorderFrom():
+                if tensor.PreserveBorderFrom():
                     params += ['input_bound_dim_%d' % d for d in range(stencil.dim-1)]
                     params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
                 for param in params:
@@ -1054,8 +1054,8 @@ def PrintForwardCall(printer, stencil, src_name):
         forward_num = len(args[1])
         temp_param = forwardings[offset][4]
         func_name = '%s_%d<%s, %s>' % (args[0], forward_num,
-            stencil.buffers[src_name].type, temp_param)
-        for c in range(stencil.buffers[src_name].chan):
+            stencil.tensors[src_name].type, temp_param)
+        for c in range(stencil.tensors[src_name].chan):
             printer.PrintFunc(
                 func_name,
                 [s%c for s in args[1]]+

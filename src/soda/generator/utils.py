@@ -30,15 +30,15 @@ class SemanticError(Exception):
 class SemanticWarn(Exception):
     pass
 
-# Buffer.name: str
-# Buffer.type: str
-# Buffer.chan: int
-# Buffer.idx: (int, ...)
-# Buffer.parent: Stage
-# Buffer.children: {Stage, ...}
-# Buffer.offset: int
-# Buffer.border: ('preserve', {Stage, ...})
-class Buffer(object):
+# Tensor.name: str
+# Tensor.type: str
+# Tensor.chan: int
+# Tensor.idx: (int, ...)
+# Tensor.parent: Stage
+# Tensor.children: {Stage, ...}
+# Tensor.offset: int
+# Tensor.border: ('preserve', {Stage, ...})
+class Tensor(object):
     def __init__(self, node):
         self.name = node.name
         self.type = node.type
@@ -48,7 +48,7 @@ class Buffer(object):
             for e in node.expr:
                 if e.idx != self.idx:
                     raise InternalError('Normalization went wrong')
-        elif isinstance(node, soda.grammar.Intermediate):
+        elif isinstance(node, soda.grammar.Local):
             self.idx = next(iter(node.expr)).idx
             for e in node.expr:
                 if e.idx != self.idx:
@@ -82,9 +82,9 @@ class Buffer(object):
 # Stage.offset: {str: [int, ...], ...}
 # Stage.delay: {str: int, ...}
 # Stage.expr: [StageExpr, ...]
-# Stage.inputs: {str: Buffer, ...}
-# Stage.output: Buffer
-# Stage.border: ('preserve', Buffer)
+# Stage.inputs: {str: Tensor, ...}
+# Stage.output: Tensor
+# Stage.border: ('preserve', Tensor)
 class Stage(object):
     def __init__(self, **kwargs):
         self.window = kwargs.pop('window')
@@ -152,45 +152,45 @@ class Stencil(object):
                 raise SemanticError('input must have the same number of channel as output if iterate > 1 times, current input has %d chanels but output has %d channels' % (input_node.chan, output_node.chan))
             _logger.debug('pipeline %d iterations of %s -> %s' % (self.iterate, input_node.name, output_node.name))
 
-        intermediates = kwargs.pop('intermediates')
-        intermediate_names = set(x.name for x in intermediates)
+        locals = kwargs.pop('locals')
+        local_names = set(x.name for x in locals)
 
-        new_intermediates = []
+        new_locals = []
         preserved_borders = {}  # {to: {from, ...}, ...}
         NameFromIter = lambda n, i: n+'_iter%d' % i if i > 0 else n
-        IntermediateLoadCallBack = lambda n: NameFromIter(n, iteration) if n == input_node.name else NameFromIter(n, iteration) if n in intermediate_names else n
-        OutputLoadCallBack = lambda n: NameFromIter(n, iteration-1) if n == input_node.name or n in intermediate_names else n
+        LocalLoadCallBack = lambda n: NameFromIter(n, iteration) if n == input_node.name else NameFromIter(n, iteration) if n in local_names else n
+        OutputLoadCallBack = lambda n: NameFromIter(n, iteration-1) if n == input_node.name or n in local_names else n
         for iteration in range(1, self.iterate):
-            new_intermediate = soda.grammar.Intermediate(output_node=output_node)
-            new_intermediate.MutateLoad(OutputLoadCallBack)
-            new_intermediate.MutateStore(lambda n: NameFromIter(input_node.name, iteration))
+            new_local = soda.grammar.Local(output_node=output_node)
+            new_local.MutateLoad(OutputLoadCallBack)
+            new_local.MutateStore(lambda n: NameFromIter(input_node.name, iteration))
             if self.preserve_border:
                 border_from = NameFromIter(input_node.name, iteration-1)
-                new_intermediate.PreserveBorder(border_from)
-                preserved_borders.setdefault(new_intermediate.name, set()).add(border_from)
-            new_intermediates.append(new_intermediate)
-            for intermediate in intermediates:
-                new_intermediate = copy.deepcopy(intermediate)
-                new_intermediate.MutateLoad(IntermediateLoadCallBack)
-                new_intermediate.MutateStore(lambda n: NameFromIter(n, iteration))
-                new_intermediates.append(new_intermediate)
+                new_local.PreserveBorder(border_from)
+                preserved_borders.setdefault(new_local.name, set()).add(border_from)
+            new_locals.append(new_local)
+            for local in locals:
+                new_local = copy.deepcopy(local)
+                new_local.MutateLoad(LocalLoadCallBack)
+                new_local.MutateStore(lambda n: NameFromIter(n, iteration))
+                new_locals.append(new_local)
         if self.preserve_border:
             border_from = NameFromIter(input_node.name, self.iterate-1)
             output_node.PreserveBorder(border_from)
             preserved_borders.setdefault(output_node.name, set()).add(border_from)
         output_node.MutateLoad(lambda n: NameFromIter(n, self.iterate-1))
-        intermediates += new_intermediates
+        locals += new_locals
 
         _logger.debug(input_node)
-        for intermediate in intermediates:
-            _logger.debug('Intermediate(')
-            _logger.debug('    name: %s,' % intermediate.name)
-            _logger.debug('    type: %s,' % intermediate.type)
-            _logger.debug('    chan: %s,' % intermediate.chan)
-            _logger.debug('    border: %s,' % intermediate.border)
-            for e in intermediate.expr:
+        for local in locals:
+            _logger.debug('Local(')
+            _logger.debug('    name: %s,' % local.name)
+            _logger.debug('    type: %s,' % local.type)
+            _logger.debug('    chan: %s,' % local.chan)
+            _logger.debug('    border: %s,' % local.border)
+            for e in local.expr:
                 _logger.debug('    expr  : [')
-                _logger.debug('        %s%s' % (e, '])' if e is intermediate.expr[-1] else ''))
+                _logger.debug('        %s%s' % (e, '])' if e is local.expr[-1] else ''))
         _logger.debug('Output(')
         _logger.debug('    name: %s,' % output_node.name)
         _logger.debug('    type: %s,' % output_node.type)
@@ -200,75 +200,75 @@ class Stencil(object):
             _logger.debug('    expr  : [')
             _logger.debug('        %s%s' % (e, '])' if e is output_node.expr[-1] else ','))
 
-        self.buffers = {i.name: Buffer(i) for i in intermediates}
-        if input_node.name in intermediate_names:
-            raise SemanticError('input name conflict with buffer: %s' % self.input.name)
+        self.tensors = {i.name: Tensor(i) for i in locals}
+        if input_node.name in local_names:
+            raise SemanticError('input name conflict with tensor: %s' % self.input.name)
         else:
-            self.input = Buffer(input_node)
-            self.buffers[self.input.name] = self.input
-        if output_node.name in intermediate_names:
-            raise SemanticError('output name conflict with buffer: %s' % self.output.name)
+            self.input = Tensor(input_node)
+            self.tensors[self.input.name] = self.input
+        if output_node.name in local_names:
+            raise SemanticError('output name conflict with tensor: %s' % self.output.name)
         else:
-            self.output = Buffer(output_node)
-            self.buffers[self.output.name] = self.output
+            self.output = Tensor(output_node)
+            self.tensors[self.output.name] = self.output
 
         self.stages = {}
-        for intermediate in intermediates:
-            child_buffer = self.buffers[intermediate.name]
-            parent_buffers = self.GetParentBuffersFor(intermediate)
-            window = self.GetWindowFor(intermediate)
+        for local in locals:
+            child_tensor = self.tensors[local.name]
+            parent_tensors = self.GetParentTensorsFor(local)
+            window = self.GetWindowFor(local)
             this_stage = Stage(window=window,
                 offset={n: SerializeIterative(w, self.tile_size) for n, w in window.items()},
                 delay={},
-                expr=self.GetExprFor(intermediate),
-                inputs=parent_buffers,
-                output=child_buffer,
-                border=intermediate.border)
-            self.stages[intermediate.name] = this_stage
-            child_buffer.parent = this_stage
-            for b in parent_buffers.values():
+                expr=self.GetExprFor(local),
+                inputs=parent_tensors,
+                output=child_tensor,
+                border=local.border)
+            self.stages[local.name] = this_stage
+            child_tensor.parent = this_stage
+            for b in parent_tensors.values():
                 b.children.add(this_stage)
 
-        parent_buffers = self.GetParentBuffersFor(output_node)
+        parent_tensors = self.GetParentTensorsFor(output_node)
         window = self.GetWindowFor(output_node)
         output_stage = Stage(window=window,
             offset={n: SerializeIterative(w, self.tile_size) for n, w in window.items()},
             delay={},
             expr=self.GetExprFor(output_node),
-            inputs=parent_buffers,
+            inputs=parent_tensors,
             output=self.output,
             border=output_node.border)
         self.stages[output_node.name] = output_stage
         self.output.parent = output_stage
-        for b in parent_buffers.values():
+        for b in parent_tensors.values():
             b.children.add(output_stage)
 
-        # let buffer/stage remember which stages/buffers to send/recv as borders
+        # let tensor/stage remember which stages/tensors to send/recv as borders
         for dst, srcs in preserved_borders.items():
             for src in srcs:
                 _logger.debug('border from %s to %s' % (src, dst))
-            if self.buffers[src].border is None:
-                self.buffers[src].border = ('preserve', set())
-            self.buffers[src].border[1].add(self.stages[dst])
+            if self.tensors[src].border is None:
+                self.tensors[src].border = ('preserve', set())
+            self.tensors[src].border[1].add(self.stages[dst])
             if self.stages[dst].border is None:
-                self.stages[dst].border = ('preserve', self.buffers[src])
+                self.stages[dst].border = ('preserve', self.tensors[src])
 
-        # now that we have global knowledge of the buffers we can calculate the offsets of buffers
-        _logger.info('calculate buffer offsets')
+        # now that we have global knowledge of the tensors we can calculate the offsets of tensors
+        _logger.info('calculate tensor offsets')
         processing_queue = deque([self.input.name])
-        processed_buffers = {self.input.name}
-        self.chronological_buffers = [self.input]
-        _logger.debug('buffer %s is at offset %d' % (self.input.name, self.input.offset))
+        processed_tensors = {self.input.name}
+        self.chronological_tensors = [self.input]
+        _logger.debug('tensor %s is at offset %d' % (self.input.name, self.input.offset))
         while len(processing_queue)>0:
-            b = self.buffers[processing_queue.popleft()]
-            _logger.debug('inspecting buffer %s\'s children' % b.name)
+            b = self.tensors[processing_queue.popleft()]
+            _logger.debug('inspecting tensor %s\'s children' % b.name)
             for s in b.children:
-                if ({x.name for x in s.inputs.values()} <= processed_buffers
-                    and s.name not in processed_buffers):
+                if ({x.name for x in s.inputs.values()} <= processed_tensors
+                    and s.name not in processed_tensors):
                     # good, all inputs are processed
-                    # can determine offset of current buffer
+                    # can determine offset of current tensor
                     _logger.debug(
-                        'input%s for buffer %s (i.e. %s) %s processed' % (
+                        'input%s for tensor %s (i.e. %s) %s processed' % (
                             '' if len(s.inputs)==1 else 's',
                             s.name,
                             ', '.join([x.name for x in s.inputs.values()]),
@@ -331,14 +331,14 @@ class Stencil(object):
                                                    stage_offset)
                         if delay>0:
                             _logger.debug(
-                                'buffer %s arrives at buffer %s '
+                                'tensor %s arrives at tensor %s '
                                 'at offset %d < %d; add %d delay' % (
                                     x.name, s.name,
                                     x.offset+s.offset[x.name][-1]-stage_offset,
                                     s.output.offset, delay))
                         else:
                             _logger.debug(
-                                'buffer %s arrives at buffer %s '
+                                'tensor %s arrives at tensor %s '
                                 'at offset %d = %d; good' % (
                                     x.name, s.name,
                                     x.offset+s.offset[x.name][-1]-stage_offset,
@@ -348,33 +348,33 @@ class Stencil(object):
                             (s.name, x.name, s.delay[x.name]))
 
                     processing_queue.append(s.name)
-                    processed_buffers.add(s.name)
-                    self.chronological_buffers.append(s.output)
+                    processed_tensors.add(s.name)
+                    self.chronological_tensors.append(s.output)
                 else:
                     for bb in s.inputs.values():
-                        if bb.name not in processed_buffers:
+                        if bb.name not in processed_tensors:
                             _logger.debug(
-                                'buffer %s requires buffer %s as an input' %
+                                'tensor %s requires tensor %s as an input' %
                                 (s.name, bb.name))
                             _logger.debug(
-                                'but buffer %s isn\'t processed yet' % bb.name)
+                                'but tensor %s isn\'t processed yet' % bb.name)
                             _logger.debug(
                                 'add %s to scheduling queue' % bb.name)
                             processing_queue.append(bb.name)
 
         # setup preserving borders, has to be done here because overall window cannot be generated before dependency graph is created
-        for node in intermediates+[output_node]:
+        for node in locals+[output_node]:
             if hasattr(node, 'preserve_border'):
                 # preserve border from node.preserve_border to node.name
                 windows = self.stages[node.name].window
                 windows.setdefault(node.preserve_border, list(set(windows.get(node.preserve_border, set()))|{next(iter(node.expr)).idx}))
-                stencil_window = GetOverallStencilWindow(self.buffers[node.preserve_border], self.buffers[node.name])
+                stencil_window = GetOverallStencilWindow(self.tensors[node.preserve_border], self.tensors[node.name])
                 self.stages[node.name].delay.setdefault(node.preserve_border, GetStencilDistance(stencil_window, self.tile_size)-Serialize(GetStencilWindowOffset(stencil_window), self.tile_size))
                 _logger.debug('window for %s@%s is %s' % (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
-                self.stages[node.name].inputs.setdefault(node.preserve_border, self.buffers[node.preserve_border])
-                self.buffers[node.preserve_border].children.add(self.stages[node.name])
+                self.stages[node.name].inputs.setdefault(node.preserve_border, self.tensors[node.preserve_border])
+                self.tensors[node.preserve_border].children.add(self.stages[node.name])
 
-        _logger.debug('buffers: '+str(list(self.buffers.keys())))
+        _logger.debug('tensors: '+str(list(self.tensors.keys())))
         LoadPrinter = lambda node: '%s(%s)' % (node.name, ', '.join(map(str, node.idx))) if node.name in self.extra_params else '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         StorePrinter = lambda node: '%s[%d](%s)' % (node.name, node.chan, ', '.join(map(str, node.idx)))
         for s in self.stages.values():
@@ -395,26 +395,23 @@ class Stencil(object):
         self.input_partition  = self.burst_width/self.pixel_width_i*self.dram_bank/2 if self.burst_width/self.pixel_width_i*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
         self.output_partition = self.burst_width/self.pixel_width_o*self.dram_bank/2 if self.burst_width/self.pixel_width_o*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
 
-        # compatiblity
-        self.tensors = self.buffers
-
         self.dataflow_super_source = create_dataflow_graph(self)
 
-    def GetProducerBuffers(self):
-        return [b for b in self.buffers.values() if len(b.children)>0]
+    def GetProducerTensors(self):
+        return [b for b in self.tensors.values() if len(b.children)>0]
 
-    def GetConsumerBuffers(self):
-        return [b for b in self.buffers.values() if b.parent is not None]
+    def GetConsumerTensors(self):
+        return [b for b in self.tensors.values() if b.parent is not None]
 
     def get_producer_tensors(self):
         return [t for t in self.tensors.values() if not t.is_output()]
 
     def GetStagesChronologically(self):
-        return [self.stages[b.name] for b in self.chronological_buffers if b.name in self.stages]
+        return [self.stages[b.name] for b in self.chronological_tensors if b.name in self.stages]
 
-    # return [Buffer, ...]
-    def GetParentBuffersFor(self, node):
-        return {x: self.buffers[x] for x in {x.name for x in node.GetLoads() if x.name not in self.extra_params}}
+    # return [Tensor, ...]
+    def GetParentTensorsFor(self, node):
+        return {x: self.tensors[x] for x in {x.name for x in node.GetLoads() if x.name not in self.extra_params}}
 
     # return {name: [(idx, ...), ...]}
     def GetWindowFor(self, node):
@@ -428,7 +425,7 @@ class Stencil(object):
     def GetExprFor(self, node):
         if isinstance(node, soda.grammar.Output):
             return node.expr
-        if isinstance(node, soda.grammar.Intermediate):
+        if isinstance(node, soda.grammar.Local):
             return node.expr
         raise SemanticError('cannot get expression for %s' % str(type(node)))
 
@@ -437,7 +434,7 @@ class Stencil(object):
             unroll_factor = self.unroll_factor
             self.reuse_buffer_lengths = {}
             self.reuse_buffers = {}
-            for b in self.GetProducerBuffers():
+            for b in self.GetProducerTensors():
                 reuse_buffer = _GetBuffer(self.tile_size, b, unroll_factor)
                 reuse_buffer_length = {}
                 self.reuse_buffers[b.name] = reuse_buffer
@@ -455,7 +452,7 @@ class Stencil(object):
     def GetAllPoints(self):
         if not hasattr(self, 'all_points'):
             self.all_points = {}
-            for b in self.GetProducerBuffers():
+            for b in self.GetProducerTensors():
                 self.all_points[b.name] = _GetPoints(self.tile_size, b, self.unroll_factor)
         return self.all_points
 
@@ -481,8 +478,8 @@ class Stencil(object):
                     for offset, points in sorted(dst_point_dicts.items()):
                         if (
                             offset<self.unroll_factor and
-                            self.buffers[src_name].PreserveBorderTo() and
-                            not self.buffers[src_name].IsInput()):
+                            self.tensors[src_name].PreserveBorderTo() and
+                            not self.tensors[src_name].IsInput()):
                             self.forwarders_with_border |= {(
                                 src_name,
                                 len(self.GetForwardings(src_name)[offset][1]))}
@@ -545,8 +542,8 @@ class Stencil(object):
                 forward_num = len(params)-1
                 if (
                     offset<self.unroll_factor and
-                    self.buffers[src_name].PreserveBorderTo() and
-                    not self.buffers[src_name].IsInput()):
+                    self.tensors[src_name].PreserveBorderTo() and
+                    not self.tensors[src_name].IsInput()):
                     stage = self.stages[src_name]
                     if stage.PreserveBorderFrom():
                         self_window_input = stage.PreserveBorderFrom()
@@ -654,12 +651,12 @@ class Stencil(object):
         return self.replicated_all_points
 
 def _GetChains(tile_size, b, unroll_factor):
-    _logger.debug('get reuse chains of buffer %s' % b.name)
+    _logger.debug('get reuse chains of tensor %s' % b.name)
     A_dag = set.union(*[(lambda offsets: set.union(*[{max(offsets)+i-x+s.delay[b.name] for x in offsets} for i in range(unroll_factor)]))(SerializeIterative(s.window[b.name], tile_size)) for s in b.children])
-    _logger.debug('A† of buffer %s: %s' % (b.name, A_dag))
+    _logger.debug('A† of tensor %s: %s' % (b.name, A_dag))
     chains = sum(reversed([tuple([tuple(sorted(x for x in A_dag if x%unroll_factor == i))]) for i in range(unroll_factor)]), ())
     for idx, chain in enumerate(chains):
-        _logger.debug('reuse chain %d of buffer %s: %s' % (idx, b.name, chain))
+        _logger.debug('reuse chain %d of tensor %s: %s' % (idx, b.name, chain))
     return chains
 
 def _GetPoints(tile_size, b, unroll_factor):
@@ -687,7 +684,7 @@ def _GetBuffer(tile_size, b, unroll_factor):
             reuse_buffer.append((chain[j], chain[j+1]))
             offsets.append(chain[j+1])
     reuse_buffer[0] = max(offsets)+1
-    _logger.debug('reuse chains of buffer %s: %s' % (b.name, reuse_buffer))
+    _logger.debug('reuse chains of tensor %s: %s' % (b.name, reuse_buffer))
     return reuse_buffer
 
 def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
@@ -703,7 +700,7 @@ def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
         tuple([tuple(sorted(x for x in A_dag if x%replication_factor == i))])
         for i in range(replication_factor)]), ())
     for idx, chain in enumerate(chains):
-        _logger.debug('reuse chain %d of buffer %s: %s' %
+        _logger.debug('reuse chain %d of tensor %s: %s' %
             (idx, tensor.name, chain))
     return chains
 
@@ -838,21 +835,21 @@ def GetStencilDim(A):
     return [max_index-min_index+1 for max_index, min_index in zip([max([point[dim] for point in A]) for dim in range(len(next(iter(A))))], [min([point[dim] for point in A]) for dim in range(len(next(iter(A))))])]
 
 _overall_stencil_window_cache = {}
-def GetOverallStencilWindow(input_buffer, output_buffer):
+def GetOverallStencilWindow(input_tensor, output_tensor):
     # normalize store index to 0
-    if (id(input_buffer), id(output_buffer)) in _overall_stencil_window_cache:
-        return _overall_stencil_window_cache[(id(input_buffer), id(output_buffer))]
-    _logger.debug('get overall stencil window of %s <- %s' % (output_buffer.name, input_buffer.name))
+    if (id(input_tensor), id(output_tensor)) in _overall_stencil_window_cache:
+        return _overall_stencil_window_cache[(id(input_tensor), id(output_tensor))]
+    _logger.debug('get overall stencil window of %s <- %s' % (output_tensor.name, input_tensor.name))
     all_points = set()
-    if output_buffer.parent is not None:
-        for name, points in output_buffer.parent.window.items():
-            if name != input_buffer.name:
-                recursive_points = GetOverallStencilWindow(input_buffer, output_buffer.parent.inputs[name])
-                all_points |= set.union(*[{tuple(map(lambda a, b, c: a + b - c, p, point, output_buffer.idx)) for p in recursive_points} for point in points])
+    if output_tensor.parent is not None:
+        for name, points in output_tensor.parent.window.items():
+            if name != input_tensor.name:
+                recursive_points = GetOverallStencilWindow(input_tensor, output_tensor.parent.inputs[name])
+                all_points |= set.union(*[{tuple(map(lambda a, b, c: a + b - c, p, point, output_tensor.idx)) for p in recursive_points} for point in points])
             else:
-                all_points |= set(tuple(map(operator.sub, point, output_buffer.idx)) for point in points)
-    _logger.debug('overall stencil window of %s (%s) <- %s is %s (%d points)' % (output_buffer.name, ', '.join(['0']*len(output_buffer.idx)), input_buffer.name, all_points, len(all_points)))
-    _overall_stencil_window_cache[(id(input_buffer), id(output_buffer))] = all_points
+                all_points |= set(tuple(map(operator.sub, point, output_tensor.idx)) for point in points)
+    _logger.debug('overall stencil window of %s (%s) <- %s is %s (%d points)' % (output_tensor.name, ', '.join(['0']*len(output_tensor.idx)), input_tensor.name, all_points, len(all_points)))
+    _overall_stencil_window_cache[(id(input_tensor), id(output_tensor))] = all_points
     return all_points
 
 def GetStencilWindowOffset(stencil_window):
