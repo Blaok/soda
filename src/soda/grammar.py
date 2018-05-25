@@ -64,20 +64,6 @@ Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|
 YesOrNo: 'yes'|'no';
 '''
 
-SODA_GRAMMAR_CLASSES = [
-    Expression,
-    ExtraParam,
-    Factor,
-    Func,
-    Input,
-    Local,
-    Operand,
-    Output,
-    SodaProgram,
-    StageExpr,
-    Term
-]
-
 def StringToInteger(s, none_val=None):
     if s is None:
         return none_val
@@ -631,4 +617,18 @@ class StageExpr(object):
         self.expr.MutateLoad(cb)
         if hasattr(self, 'loads'):
             del self.loads
+
+SODA_GRAMMAR_CLASSES = [
+    Expression,
+    ExtraParam,
+    Factor,
+    Func,
+    Input,
+    Local,
+    Operand,
+    Output,
+    SodaProgram,
+    StageExpr,
+    Term
+]
 
