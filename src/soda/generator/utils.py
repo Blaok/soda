@@ -446,7 +446,7 @@ class Stencil(object):
             self.reuse_buffer_lengths = {}
             self.reuse_buffers = {}
             for b in self.GetProducerTensors():
-                reuse_buffer = _GetBuffer(self.tile_size, b, unroll_factor)
+                reuse_buffer = _get_reuse_buffer(self.tile_size, b, unroll_factor)
                 reuse_buffer_length = {}
                 self.reuse_buffers[b.name] = reuse_buffer
                 self.reuse_buffer_lengths[b.name] = reuse_buffer_length
@@ -464,7 +464,7 @@ class Stencil(object):
         if not hasattr(self, 'all_points'):
             self.all_points = {}
             for b in self.GetProducerTensors():
-                self.all_points[b.name] = _GetPoints(self.tile_size, b, self.unroll_factor)
+                self.all_points[b.name] = _get_points(self.tile_size, b, self.unroll_factor)
         return self.all_points
 
     def GetNextFIFO(self):
@@ -532,12 +532,12 @@ class Stencil(object):
                 outputs = forwardings[offset][1]
                 inputs = forwardings[offset][2]
                 params = forwardings[offset][3]
-                for unroll_index, point_index in points.items():
+                for unroll_idx, point_index in points.items():
                     outputs.insert(
                         0,
                         '/* output */ '
                         'from_%s_to_%s_param_%d_chan_%%d_pe_%d' %
-                        (src_name, dst_name, point_index, unroll_index))
+                        (src_name, dst_name, point_index, unroll_idx))
 
                 if func_name:
                     continue
@@ -576,7 +576,7 @@ class Stencil(object):
                         Serialize(overall_idx, self.tile_size))*iteration
 
                     func_name += '_'+src_name
-                    temp_param = '%d-%d' % (unroll_index, delay)
+                    temp_param = '%d-%d' % (unroll_idx, delay)
                     for d in range(self.dim-1):
                         param_offset = (
                             (self.tile_size[d]-self_dim[d]+1)*
@@ -586,13 +586,13 @@ class Stencil(object):
                                 1))
                         param = (
                             src_name, d,
-                            (unroll_index+param_offset)%self.unroll_factor)
+                            (unroll_idx+param_offset)%self.unroll_factor)
                         inputs.append(
                             '/*  input */ border_from_%s_dim_%d_'
                             'left_chan_%%d_pe_%d' % param)
                         param = (
                             src_name, d,
-                            (unroll_index-param_offset)%self.unroll_factor)
+                            (unroll_idx-param_offset)%self.unroll_factor)
                         inputs.append(
                             '/*  input */ border_from_%s_dim_%d_'
                             'right_chan_%%d_pe_%d' % param)
@@ -661,41 +661,113 @@ class Stencil(object):
                 self.replicated_all_points)
         return self.replicated_all_points
 
-def _GetChains(tile_size, b, unroll_factor):
-    _logger.debug('get reuse chains of tensor %s' % b.name)
-    A_dag = set.union(*[(lambda offsets: set.union(*[{max(offsets)+i-x+s.delay[b.name] for x in offsets} for i in range(unroll_factor)]))(SerializeIterative(s.window[b.name], tile_size)) for s in b.children])
-    _logger.debug('A† of tensor %s: %s' % (b.name, A_dag))
-    chains = sum(reversed([tuple([tuple(sorted(x for x in A_dag if x%unroll_factor == i))]) for i in range(unroll_factor)]), ())
+def _get_reuse_chains(tile_size, tensor, unroll_factor):
+    """Generates reuse chains for a Tensor.
+
+    Generates reuse chains for a Tensor under the given tile size and unroll
+    factor.
+
+    Args:
+        tile_size: An iterable representing the tile size in each dimension.
+        tensor: A Tensor to which the reuse chains belongs.
+        unroll_factor: An int representing the unroll factor.
+
+    Returns:
+        A list of tuples where each tuple represents a reuse chain and each
+        element of the tuple represents the offset from the lastest input.
+    """
+
+    _logger.debug('get reuse chains of tensor %s' % tensor.name)
+
+    def unroll_offsets(offsets):
+        unrolled_offsets = set()
+        for unroll_idx in range(unroll_factor):
+            for offset in offsets:
+                unrolled_offsets.add(max(offsets) + unroll_idx - offset +
+                                     stage.delay[tensor.name])
+        return unrolled_offsets
+
+    A_dag = set()
+    for stage in tensor.children:
+        A_dag |= unroll_offsets(SerializeIterative(stage.window[tensor.name],
+                                                   tile_size))
+    _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
+
+    chains = []
+    for chain_idx in reversed(range(unroll_factor)):
+        chains.append(tuple(sorted(
+            offset for offset in A_dag if offset % unroll_factor == chain_idx)))
+    _logger.debug(chains)
+
     for idx, chain in enumerate(chains):
-        _logger.debug('reuse chain %d of tensor %s: %s' % (idx, b.name, chain))
+        _logger.debug('reuse chain %d of tensor %s: %s' %
+                      (idx, tensor.name, chain))
     return chains
 
-def _GetPoints(tile_size, b, unroll_factor):
-    all_points = {} # {name:{offset:{unroll_index:point_index}}}
-    for s in b.children:
-        all_points[s.name] = {}
-        offsets = SerializeIterative(s.window[b.name], tile_size)
-        max_offset = max(offsets)
-        for unroll_index in range(unroll_factor):
+def _get_points(tile_size, tensor, unroll_factor):
+    """Generates offset-to-point mapping for a Tensor.
+
+    Generates a mapping which can be used to determine the accessed point index
+    from the offset for a Tensor, under the given tile size and unroll factor.
+
+    Args:
+        tile_size: An iterable representing the tile size in each dimension.
+        tensor: A Tensor to which the mapping belongs.
+        unroll_factor: An int representing the unroll factor.
+
+    Returns:
+        A dict of name str to a dict of offset to a dict of unroll index to
+        point index.
+    """
+
+    all_points = {} # {name: {offset: {unroll_idx: point_idx}}}
+    for stage in tensor.children:
+        all_points[stage.name] = {}
+        offsets = SerializeIterative(stage.window[tensor.name], tile_size)
+        for unroll_idx in range(unroll_factor):
             for idx, offset in enumerate(offsets):
-                all_points[s.name].setdefault(max_offset-offset+s.delay[b.name]+unroll_index, {})[unroll_factor-1-unroll_index] = idx
-    for s in b.children:
-        for offset, points in all_points[s.name].items():
-            for unroll_index, point in points.items():
-                _logger.debug('%s <- %s @ offset=%d <=> (%s) @ unroll_index=%d' % (s.name, b.name, offset, ', '.join(map(str, s.window[b.name][point])), unroll_index))
+                all_points[stage.name].setdefault(
+                    max(offsets) - offset + stage.delay[tensor.name] +
+                        unroll_idx,
+                    {})[unroll_factor-1-unroll_idx] = idx
+    for stage in tensor.children:
+        for offset, points in all_points[stage.name].items():
+            for unroll_idx, point in points.items():
+                _logger.debug(
+                    '%s <- %s @ offset=%d <=> (%s) @ unroll_idx=%d' %
+                    (stage.name, tensor.name, offset,
+                     ', '.join(map(str, stage.window[tensor.name][point])),
+                     unroll_idx))
     return all_points
 
-def _GetBuffer(tile_size, b, unroll_factor):
+def _get_reuse_buffer(tile_size, tensor, unroll_factor):
+    """Generates reuse buffer for a Tensor.
+
+    Generates a list representing the reuse buffer for a Tensor, under the given
+    tile size and unroll factor.
+
+    Args:
+        tile_size: An iterable representing the tile size in each dimension.
+        tensor: A Tensor to which the mapping belongs.
+        unroll_factor: An int representing the unroll factor.
+
+    Returns:
+        A list whose first element is an int representing the length of the
+        reuse buffer (capacity of data element), followed by unroll_factor
+        number of (start, end) tuples, where start and end are the offsets from
+        the lastest input of each piece of the reuse buffer.
+    """
+
     reuse_buffer = [None]  # [length, (start, end), (start, end), ...]
     offsets = []
-    for chain in _GetChains(tile_size, b, unroll_factor):
+    for chain in _get_reuse_chains(tile_size, tensor, unroll_factor):
         reuse_buffer.append((chain[0], chain[0]))
         offsets.append(chain[0])
         for j in range(len(chain)-1):
             reuse_buffer.append((chain[j], chain[j+1]))
             offsets.append(chain[j+1])
     reuse_buffer[0] = max(offsets)+1
-    _logger.debug('reuse chains of tensor %s: %s' % (b.name, reuse_buffer))
+    _logger.debug('reuse chains of tensor %s: %s' % (tensor.name, reuse_buffer))
     return reuse_buffer
 
 def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
