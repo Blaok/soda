@@ -11,7 +11,7 @@ from soda.generator.utils import SemanticError, SemanticWarn
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
-soda_grammar = '''
+SODA_GRAMMAR = '''
 SodaProgram:
 (
     ('burst' 'width' ':' burst_width=INT)
@@ -63,6 +63,20 @@ Term: operand=Factor (operator=MulOrDiv operand=Factor)*;
 Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|'double';
 YesOrNo: 'yes'|'no';
 '''
+
+SODA_GRAMMAR_CLASSES = [
+    Expression,
+    ExtraParam,
+    Factor,
+    Func,
+    Input,
+    Local,
+    Operand,
+    Output,
+    SodaProgram,
+    StageExpr,
+    Term
+]
 
 def StringToInteger(s, none_val=None):
     if s is None:
@@ -617,6 +631,4 @@ class StageExpr(object):
         self.expr.MutateLoad(cb)
         if hasattr(self, 'loads'):
             del self.loads
-
-soda_grammar_classes = [SodaProgram, Expression, Term, Factor, Func, Operand, ExtraParam, Input, Output, StageExpr, Local]
 

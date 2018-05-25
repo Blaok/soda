@@ -253,9 +253,9 @@ def PrintComputeStage(printer, stencil, stage):
             printer.PrintLine('// '+msg)
             printer.PrintLine('int32_t i = pe_id-%d;' % delay)
             for i in range(1, len(stencil.tile_size)):
-                printer.PrintLine('uint16_t %c = 0;' % coords_in_tile[i])
+                printer.PrintLine('uint16_t %c = 0;' % COORDS_IN_TILE[i])
             for i in range(len(stencil.tile_size)-1):
-                printer.PrintLine('uint16_t %c_base = 0;' % coords_in_orig[i])
+                printer.PrintLine('uint16_t %c_base = 0;' % COORDS_IN_ORIG[i])
             printer.PrintLine()
 
         bound = ''
@@ -292,11 +292,11 @@ def PrintComputeStage(printer, stencil, stage):
 
         if stage.PreserveBorderFrom():
             for i in range(len(stencil.tile_size)-1):
-                printer.PrintLine('uint16_t  %c = %c_base+%c;' % (coords_in_orig[i], coords_in_orig[i], coords_in_tile[i]))
-            printer.PrintLine('uint16_t& %c = %c;' % (coords_in_orig[len(stencil.tile_size)-1], coords_in_tile[len(stencil.tile_size)-1]))
+                printer.PrintLine('uint16_t  %c = %c_base+%c;' % (COORDS_IN_ORIG[i], COORDS_IN_ORIG[i], COORDS_IN_TILE[i]))
+            printer.PrintLine('uint16_t& %c = %c;' % (COORDS_IN_ORIG[len(stencil.tile_size)-1], COORDS_IN_TILE[len(stencil.tile_size)-1]))
 
-            IndexTile = lambda d: '%c' % (coords_in_tile[d])
-            IndexOrig = lambda d: '%c' % (coords_in_orig[d])
+            IndexTile = lambda d: '%c' % (COORDS_IN_TILE[d])
+            IndexOrig = lambda d: '%c' % (COORDS_IN_ORIG[d])
             output_idx = GetStencilWindowOffset(stencil_window)
             stencil_dim = GetStencilDim(stencil_window)
             MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
@@ -325,7 +325,7 @@ def PrintComputeStage(printer, stencil, stage):
             printer.DoScope()
             preserve_border_from = stage.PreserveBorderFrom()
             printer.PrintLine('%s_chan_%d<<load_%s_chan_%d_at_%s;' % (stage.name, c, preserve_border_from.name, c, GetIndicesId(stage.idx)))
-            #printer.PrintLine('printf("bypass: epoch%%d pe%%d %s %s val=%%d\\n", epoch, pe_id, %s, %s load_%s_chan_%d_at_%s);' % (' '.join('%c=%%d' % coords_in_tile[d] for d in range(stencil.dim)), ' '.join('%c=%%d' % coords_in_orig[d] for d in range(stencil.dim)), ', '.join(coords_in_tile[:stencil.dim]), ', '.join(coords_in_orig[:stencil.dim]), preserve_border_from.name, c, GetIndicesId(stage.idx)))
+            #printer.PrintLine('printf("bypass: epoch%%d pe%%d %s %s val=%%d\\n", epoch, pe_id, %s, %s load_%s_chan_%d_at_%s);' % (' '.join('%c=%%d' % COORDS_IN_TILE[d] for d in range(stencil.dim)), ' '.join('%c=%%d' % COORDS_IN_ORIG[d] for d in range(stencil.dim)), ', '.join(COORDS_IN_TILE[:stencil.dim]), ', '.join(COORDS_IN_ORIG[:stencil.dim]), preserve_border_from.name, c, GetIndicesId(stage.idx)))
             printer.UnScope()
             printer.PrintLine('else')
             printer.DoScope()
@@ -392,16 +392,16 @@ def PrintIncrementCoordinates(printer, stencil, stage):
     overall_stencil_window = GetOverallStencilWindow(*([stage.PreserveBorderFrom(), stage.output] if stencil.preserve_border else [stencil.input, stencil.output]))
     overall_stencil_dim = GetStencilDim(overall_stencil_window)
 
-    PrintIfTile = lambda d: printer.PrintLine('if(%c>=TILE_SIZE_DIM_%d)' % (coords_in_tile[d], d))
-    PrintIfTileLastDim = lambda d: printer.PrintLine('if(%c >= input_size_dim_%d)' % (coords_in_tile[d], d))
-    PrintIfTensor = lambda d: printer.PrintLine('if(%c >= input_size_dim_%d)' % (coords_in_orig[d], d))
-    PrintIncrementTile = lambda d: printer.PrintLine('++%c;' % (coords_in_tile[d]))
-    PrintDecrementTile = lambda d: printer.PrintLine('%c -= TILE_SIZE_DIM_%d;' % (coords_in_tile[d], d))
-    PrintIncrementOrig = lambda d: printer.PrintLine('%c_base += TILE_SIZE_DIM_%d - %s + 1;' % (coords_in_orig[d], d, overall_stencil_dim[d]))
-    PrintDecrementOrig = lambda d: printer.PrintLine('%c_base = 0;' % coords_in_orig[d])
-    PrintDecrementTileLastDim = lambda d: printer.PrintLine('%c -= input_size_dim_%d;' % (coords_in_tile[d], d))
+    PrintIfTile = lambda d: printer.PrintLine('if(%c>=TILE_SIZE_DIM_%d)' % (COORDS_IN_TILE[d], d))
+    PrintIfTileLastDim = lambda d: printer.PrintLine('if(%c >= input_size_dim_%d)' % (COORDS_IN_TILE[d], d))
+    PrintIfTensor = lambda d: printer.PrintLine('if(%c >= input_size_dim_%d)' % (COORDS_IN_ORIG[d], d))
+    PrintIncrementTile = lambda d: printer.PrintLine('++%c;' % (COORDS_IN_TILE[d]))
+    PrintDecrementTile = lambda d: printer.PrintLine('%c -= TILE_SIZE_DIM_%d;' % (COORDS_IN_TILE[d], d))
+    PrintIncrementOrig = lambda d: printer.PrintLine('%c_base += TILE_SIZE_DIM_%d - %s + 1;' % (COORDS_IN_ORIG[d], d, overall_stencil_dim[d]))
+    PrintDecrementOrig = lambda d: printer.PrintLine('%c_base = 0;' % COORDS_IN_ORIG[d])
+    PrintDecrementTileLastDim = lambda d: printer.PrintLine('%c -= input_size_dim_%d;' % (COORDS_IN_TILE[d], d))
 
-    printer.PrintLine('if(%s)' % ' && '.join('%c_base<input_bound_dim_%d' % (coords_in_orig[d], d) for d in range(stencil.dim-1)))
+    printer.PrintLine('if(%s)' % ' && '.join('%c_base<input_bound_dim_%d' % (COORDS_IN_ORIG[d], d) for d in range(stencil.dim-1)))
     printer.DoScope()
     printer.PrintLine('i+=%d;' % stencil.unroll_factor)
     if len(stencil.tile_size)>1:
@@ -621,7 +621,7 @@ def PrintInterface(p, stencil):
     extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
 
     p.PrintLine('uint64_t epoch_num = coalesced_data_num*%d/%d;' % (
-        stencil.burst_width*stencil.dram_bank/type_width[stencil.input.type],
+        stencil.burst_width*stencil.dram_bank/TYPE_WIDTH[stencil.input.type],
         unroll_factor))
     p.PrintLine()
 
@@ -844,7 +844,7 @@ def PrintLoad(printer):
     printer.UnScope()
 
 def PrintUnpack(printer, burst_width, data_type, unroll_factor):
-    coalesced_size = burst_width//type_width[data_type]
+    coalesced_size = burst_width//TYPE_WIDTH[data_type]
     ii = 1
     if coalesced_size > unroll_factor:
         ii = coalesced_size/unroll_factor
@@ -864,13 +864,13 @@ def PrintUnpack(printer, burst_width, data_type, unroll_factor):
     printer.PrintLine('ap_uint<%d> tmp;' % burst_width)
     printer.PrintLine('from>>tmp;')
     if IsFloat(data_type):
-        printer.PrintLine('uint%d_t raw_bits;' % type_width[data_type])
+        printer.PrintLine('uint%d_t raw_bits;' % TYPE_WIDTH[data_type])
     if coalesced_size >= unroll_factor:
         for i in range(coalesced_size):
             if IsFloat(data_type):
-                printer.PrintLine('raw_bits = tmp(%s*%d-1, %s*%d); %s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type], GetDstName(i%unroll_factor), data_type))
+                printer.PrintLine('raw_bits = tmp(%s*%d-1, %s*%d); %s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i%unroll_factor), data_type))
             else:
-                printer.PrintLine('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type]))
+                printer.PrintLine('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type]))
     else:
         printer.PrintLine('switch(i&%d)' % (unroll_factor//coalesced_size-1))
         printer.DoScope()
@@ -879,9 +879,9 @@ def PrintUnpack(printer, burst_width, data_type, unroll_factor):
             printer.DoScope()
             for i in range(coalesced_size):
                 if IsFloat(data_type):
-                    printer.PrintLine('raw_bits = tmp(%s*%d-1, %s*%d);%s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type], GetDstName(i+batch*coalesced_size), data_type))
+                    printer.PrintLine('raw_bits = tmp(%s*%d-1, %s*%d);%s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size), data_type))
                 else:
-                    printer.PrintLine('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type]))
+                    printer.PrintLine('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type]))
             printer.PrintLine('break;')
             printer.UnScope()
         printer.UnScope()
@@ -889,7 +889,7 @@ def PrintUnpack(printer, burst_width, data_type, unroll_factor):
     printer.UnScope()
 
 def PrintPack(printer, burst_width, data_type, unroll_factor):
-    coalesced_size = burst_width//type_width[data_type]
+    coalesced_size = burst_width//TYPE_WIDTH[data_type]
     ii = 1
     if coalesced_size > unroll_factor:
         ii = coalesced_size/unroll_factor
@@ -912,9 +912,9 @@ def PrintPack(printer, burst_width, data_type, unroll_factor):
     if coalesced_size >= unroll_factor:
         for i in range(coalesced_size):
             if IsFloat(data_type):
-                printer.PrintLine('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type], type_width[data_type]))
+                printer.PrintLine('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], TYPE_WIDTH[data_type]))
             else:
-                printer.PrintLine('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type], GetDstName(i%unroll_factor)))
+                printer.PrintLine('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i%unroll_factor)))
     else:
         printer.PrintLine('switch(i&%d)' % (unroll_factor//coalesced_size-1))
         printer.DoScope()
@@ -923,9 +923,9 @@ def PrintPack(printer, burst_width, data_type, unroll_factor):
             printer.DoScope()
             for i in range(coalesced_size):
                 if IsFloat(data_type):
-                    printer.PrintLine('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type], type_width[data_type]))
+                    printer.PrintLine('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], TYPE_WIDTH[data_type]))
                 else:
-                    printer.PrintLine('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), type_width[data_type], GetCoalescedIdx(i), type_width[data_type], GetDstName(i+batch*coalesced_size)))
+                    printer.PrintLine('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size)))
             printer.PrintLine('break;')
             printer.UnScope()
         printer.UnScope()
@@ -985,9 +985,9 @@ def PrintForwardFuncWithBorder(printer, stencil, forwarder_with_border):
     printer.DoScope()
     printer.PrintLine(' int32_t i = i_init;')
     for i in range(1, len(stencil.tile_size)):
-        printer.PrintLine('uint16_t %c = 0;' % coords_in_tile[i])
+        printer.PrintLine('uint16_t %c = 0;' % COORDS_IN_TILE[i])
     for i in range(len(stencil.tile_size)-1):
-        printer.PrintLine('uint16_t %c_base = 0;' % coords_in_orig[i])
+        printer.PrintLine('uint16_t %c_base = 0;' % COORDS_IN_ORIG[i])
     printer.PrintLine()
     printer.PrintLine('forward_%s_%d_epoch:' % forwarder_with_border, 0)
     printer.PrintLine('for(uint32_t epoch = 0; epoch < data_num; ++epoch)')
@@ -995,11 +995,11 @@ def PrintForwardFuncWithBorder(printer, stencil, forwarder_with_border):
     printer.PrintLine('#pragma HLS pipeline II=1', 0)
 
     for i in range(len(stencil.tile_size)-1):
-        printer.PrintLine('uint16_t  %c = %c_base+%c;' % (coords_in_orig[i], coords_in_orig[i], coords_in_tile[i]))
-    printer.PrintLine('uint16_t& %c = %c;' % (coords_in_orig[len(stencil.tile_size)-1], coords_in_tile[len(stencil.tile_size)-1]))
+        printer.PrintLine('uint16_t  %c = %c_base+%c;' % (COORDS_IN_ORIG[i], COORDS_IN_ORIG[i], COORDS_IN_TILE[i]))
+    printer.PrintLine('uint16_t& %c = %c;' % (COORDS_IN_ORIG[len(stencil.tile_size)-1], COORDS_IN_TILE[len(stencil.tile_size)-1]))
 
-    IndexTile = lambda d: '%c' % (coords_in_tile[d])
-    IndexOrig = lambda d: '%c' % (coords_in_orig[d])
+    IndexTile = lambda d: '%c' % (COORDS_IN_TILE[d])
+    IndexOrig = lambda d: '%c' % (COORDS_IN_ORIG[d])
     output_idx = GetStencilWindowOffset(stencil_window)
     stencil_dim = GetStencilDim(stencil_window)
     MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])

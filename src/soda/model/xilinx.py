@@ -122,14 +122,14 @@ def print_estimation(stencil, model_file, output_file):
     if stencil.dram_separate:
         performance = min(performance,
             dram_bandwidth*stencil.dram_bank/
-                (stencil.input.chan*type_width[stencil.input.type]/8),
+                (stencil.input.chan*TYPE_WIDTH[stencil.input.type]/8),
             dram_bandwidth*stencil.dram_bank/
-                (stencil.output.chan*type_width[stencil.output.type]/8))
+                (stencil.output.chan*TYPE_WIDTH[stencil.output.type]/8))
     else:
         performance = min(performance,
             dram_bandwidth*stencil.dram_bank/(
-                stencil.input.chan*type_width[stencil.input.type]/8+
-                stencil.output.chan*type_width[stencil.output.type]/8))
+                stencil.input.chan*TYPE_WIDTH[stencil.input.type]/8+
+                stencil.output.chan*TYPE_WIDTH[stencil.output.type]/8))
     performance *= stencil.iterate
 
     estimation_routed = estimation['resource_routed']
@@ -145,14 +145,14 @@ def print_estimation(stencil, model_file, output_file):
         if isinstance(dst_node, ForwardNode):
             for c in range(dst_node.tensor.chan*repli):
                 accumulate_fifo(estimation_routed,
-                                type_width[dst_node.tensor.type],
+                                TYPE_WIDTH[dst_node.tensor.type],
                                 max(dst_node.depth, 1))
         elif (isinstance(src_node, ForwardNode) and
               isinstance(dst_node, ComputeNode)):
             extra_depth = super_source.get_extra_depth((src_node, dst_node))
             for c in range(src_node.tensor.chan*repli):
                 accumulate_fifo(estimation_routed,
-                                type_width[src_node.tensor.type],
+                                TYPE_WIDTH[src_node.tensor.type],
                                 max(extra_depth+1, 2))
 
     estimation_routed['BRAM'] = math.ceil(estimation_routed['BRAM']/2)

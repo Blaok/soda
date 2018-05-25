@@ -137,7 +137,7 @@ def PrintWrapped(p, stencil):
         if dim > 0:
             stride = '*'.join([('%s_size_dim_%d' % (stencil.output.name, x)) for x in range(dim)])
         output_str[dim] = (', var_%s_min_%d, %s_size_dim_%d, %s' % (stencil.output.name, dim, stencil.output.name, dim, stride))
-    p.PrintLine('bool %s = halide_rewrite_buffer(var_%s_buffer, %d%s%s%s%s);' % (p.NewVar(), stencil.output.name, type_width[stencil.output.type]/8, output_str[0], output_str[1], output_str[2], output_str[3]))
+    p.PrintLine('bool %s = halide_rewrite_buffer(var_%s_buffer, %d%s%s%s%s);' % (p.NewVar(), stencil.output.name, TYPE_WIDTH[stencil.output.type]/8, output_str[0], output_str[1], output_str[2], output_str[3]))
     p.PrintLine('(void)%s;' % p.LastVar())
     p.UnScope('if(var_%s_host_and_dev_are_null)' % stencil.output.name)
 
@@ -153,7 +153,7 @@ def PrintWrapped(p, stencil):
         if dim > 0:
             stride = '*'.join([p.LastVar(x-stencil.dim) for x in range(dim)])
         input_str[dim] = (', var_%s_min_%d, %s, %s' % (stencil.output.name, dim, p.LastVar(dim-stencil.dim), stride))
-    p.PrintLine('bool %s = halide_rewrite_buffer(var_%s_buffer, %d%s%s%s%s);' % (p.NewVar(), stencil.input.name, type_width[stencil.input.type]/8, input_str[0], input_str[1], input_str[2], input_str[3]))
+    p.PrintLine('bool %s = halide_rewrite_buffer(var_%s_buffer, %d%s%s%s%s);' % (p.NewVar(), stencil.input.name, TYPE_WIDTH[stencil.input.type]/8, input_str[0], input_str[1], input_str[2], input_str[3]))
     p.PrintLine('(void)%s;' % p.LastVar())
     p.UnScope('if(var_%s_host_and_dev_are_null)' % stencil.input.name)
 
@@ -174,7 +174,7 @@ def PrintWrapped(p, stencil):
     p.PrintLine()
 
     p.PrintLine('// change #bank if there is a env var defined')
-    p.PrintLine('int dram_bank = %d;' % max_dram_bank)
+    p.PrintLine('int dram_bank = %d;' % MAX_DRAM_BANK)
     p.PrintLine('bool dram_separate = false;')
     p.PrintLine('if(nullptr!=getenv("DRAM_BANK"))')
     p.DoScope()
@@ -210,10 +210,10 @@ def PrintWrapped(p, stencil):
     p.PrintLine()
 
     for c in range(stencil.input.chan):
-        for i in range(max_dram_bank):
+        for i in range(MAX_DRAM_BANK):
             p.PrintLine('cl_mem var_%s_%d_bank_%d_cl;' % (stencil.input.name, c, i))
     for c in range(stencil.output.chan):
-        for i in range(max_dram_bank):
+        for i in range(MAX_DRAM_BANK):
             p.PrintLine('cl_mem var_%s_%d_bank_%d_cl;' % (stencil.output.name, c, i))
     p.PrintLine()
 
@@ -368,13 +368,13 @@ def PrintWrapped(p, stencil):
     p.UnScope()
     p.PrintLine()
 
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine('cl_mem_ext_ptr_t %s_ext_bank_%d, %s_ext_bank_%d;' % (stencil.input.name, i, stencil.output.name, i))
     p.PrintLine('if(dram_separate)')
     p.DoScope()
     p.PrintLine('switch(dram_bank)')
     p.DoScope()
-    for i in range(1, max_dram_bank//2+1):
+    for i in range(1, MAX_DRAM_BANK//2+1):
         p.PrintLine('case %d:' % i)
         p.DoIndent()
         for c in range(i):
@@ -387,41 +387,41 @@ def PrintWrapped(p, stencil):
     p.UnScope()
     p.PrintLine('else')
     p.DoScope()
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine('%s_ext_bank_%d.flags = XCL_MEM_DDR_BANK%d;' % (stencil.output.name, i, i))
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine('%s_ext_bank_%d.flags = XCL_MEM_DDR_BANK%d;' % (stencil.input.name, i, i))
     p.UnScope()
 
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine('%s_ext_bank_%d.obj = 0;' % (stencil.input.name, i))
         p.PrintLine('%s_ext_bank_%d.param = 0;' % (stencil.input.name, i))
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine('%s_ext_bank_%d.obj = 0;' % (stencil.output.name, i))
         p.PrintLine('%s_ext_bank_%d.param = 0;' % (stencil.output.name, i))
     p.PrintLine()
 
     for c in range(stencil.input.chan):
-        for i in range(max_dram_bank):
+        for i in range(MAX_DRAM_BANK):
             p.PrintLine('var_%s_%d_bank_%d_cl = dram_bank > %d ? clCreateBuffer(context, CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, var_%s_buf_size, &%s_ext_bank_%d, nullptr) : nullptr;' % (stencil.input.name, c, i, i, stencil.input.name, stencil.input.name, i))
     for c in range(stencil.output.chan):
-        for i in range(max_dram_bank):
+        for i in range(MAX_DRAM_BANK):
             p.PrintLine('var_%s_%d_bank_%d_cl = dram_bank > %d ? clCreateBuffer(context, CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, var_%s_buf_size, &%s_ext_bank_%d, nullptr) : nullptr;' % (stencil.output.name, c, i, i, stencil.output.name, stencil.output.name, i))
 
     for param in stencil.extra_params.values():
         p.PrintLine('var_%s_cl = clCreateBuffer(context, CL_MEM_READ_ONLY, %s*sizeof(%s), nullptr, nullptr);' % (param.name, '*'.join([str(x) for x in param.size]), param.type))
 
-    p.PrintLine('if(%s)' % ' || '.join(['(dram_bank>%d && (%s || %s))' % (x, ' || '.join(['!var_%s_%d_bank_%d_cl' % (stencil.input.name, c, x) for c in range(stencil.input.chan)]), ' || '.join(['!var_%s_%d_bank_%d_cl' % (stencil.output.name, c, x) for c in range(stencil.output.chan)])) for x in range(max_dram_bank)]+['!var_%s_cl' % param.name for param in stencil.extra_params.values()]))
+    p.PrintLine('if(%s)' % ' || '.join(['(dram_bank>%d && (%s || %s))' % (x, ' || '.join(['!var_%s_%d_bank_%d_cl' % (stencil.input.name, c, x) for c in range(stencil.input.chan)]), ' || '.join(['!var_%s_%d_bank_%d_cl' % (stencil.output.name, c, x) for c in range(stencil.output.chan)])) for x in range(MAX_DRAM_BANK)]+['!var_%s_cl' % param.name for param in stencil.extra_params.values()]))
     p.DoScope()
     p.PrintLine('fprintf(*error_report, "ERROR: Failed to allocate device memory\\n");')
     p.PrintLine('exit(EXIT_FAILURE);')
     p.UnScope()
     p.PrintLine()
 
-    p.PrintLine('cl_event write_events[%d];' % (max_dram_bank*stencil.input.chan+len(stencil.extra_params)))
+    p.PrintLine('cl_event write_events[%d];' % (MAX_DRAM_BANK*stencil.input.chan+len(stencil.extra_params)))
     for idx, param in enumerate(stencil.extra_params.values()):
         p.PrintLine('%s* var_%s_buf = (%s*)clEnqueueMapBuffer(commands, var_%s_cl, CL_FALSE, CL_MAP_WRITE, 0, %s*sizeof(%s), 0, nullptr, write_events+%d, &err);' % (param.type, param.name, param.type, param.name, '*'.join([str(x) for x in param.size]), param.type, idx))
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         for c in range(stencil.input.chan):
             p.PrintLine('%s* var_%s_%d_buf_bank_%d = dram_bank>%d ? (%s*)clEnqueueMapBuffer(commands, var_%s_%d_bank_%d_cl, CL_FALSE, CL_MAP_WRITE, 0, var_%s_buf_size, 0, nullptr, write_events+%d, &err) : nullptr;' % (stencil.input.type, stencil.input.name, c, i, i, stencil.input.type, stencil.input.name, c, i, stencil.input.name, i*stencil.input.chan+c+len(stencil.extra_params)))
     p.PrintLine('clWaitForEvents(dram_bank*%d+%d, write_events);' % (stencil.input.chan, len(stencil.extra_params)))
@@ -433,26 +433,26 @@ def PrintWrapped(p, stencil):
         p.DoScope()
         p.PrintLine('int32_t actual_tile_size_dim_%d = (tile_index_dim_%d==tile_num_dim_%d-1) ? %s_size_dim_%d-(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)*tile_index_dim_%d : TILE_SIZE_DIM_%d;' % ((dim,)*3+(stencil.input.name,)+(dim,)*5))
 
-    p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, coords_in_tile[stencil.dim-1]))
+    p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d; ++%c)' % (COORDS_IN_TILE[stencil.dim-1], COORDS_IN_TILE[stencil.dim-1], stencil.input.name, stencil.dim-1, COORDS_IN_TILE[stencil.dim-1]))
     p.DoScope()
     for dim in range(stencil.dim-2, -1, -1):
-        p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d; ++%c)' % (coords_in_tile[dim], coords_in_tile[dim], dim, coords_in_tile[dim]))
+        p.PrintLine('for(int32_t %c = 0; %c < actual_tile_size_dim_%d; ++%c)' % (COORDS_IN_TILE[dim], COORDS_IN_TILE[dim], dim, COORDS_IN_TILE[dim]))
         p.DoScope()
 
-    p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(coords_tiled))
-    p.PrintLine('// (%s) is coordinates in original image' % ', '.join(coords_in_orig))
-    p.PrintLine('// (%s) is coordinates in a tile' % ', '.join(coords_in_tile))
-    offset_in_tile = '+'.join(['%c%s' % (coords_in_tile[x], ''.join(['*TILE_SIZE_DIM_%d'%xx for xx in range(x)])) for x in range(stencil.dim)])
+    p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(COORDS_TILED))
+    p.PrintLine('// (%s) is coordinates in original image' % ', '.join(COORDS_IN_ORIG))
+    p.PrintLine('// (%s) is coordinates in a tile' % ', '.join(COORDS_IN_TILE))
+    offset_in_tile = '+'.join(['%c%s' % (COORDS_IN_TILE[x], ''.join(['*TILE_SIZE_DIM_%d'%xx for xx in range(x)])) for x in range(stencil.dim)])
     p.PrintLine('int32_t burst_index = (%s)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank);' % offset_in_tile)
     p.PrintLine('int32_t burst_residue = (%s)%%(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank);' % offset_in_tile)
     for dim in range(stencil.dim-1):
-        p.PrintLine('int32_t %c = tile_index_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)+%c;' % (coords_in_orig[dim], dim, dim, dim, coords_in_tile[dim]))
-    p.PrintLine('int32_t %c = %c;' % (coords_in_orig[stencil.dim-1], coords_in_tile[stencil.dim-1]))
+        p.PrintLine('int32_t %c = tile_index_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)+%c;' % (COORDS_IN_ORIG[dim], dim, dim, dim, COORDS_IN_TILE[dim]))
+    p.PrintLine('int32_t %c = %c;' % (COORDS_IN_ORIG[stencil.dim-1], COORDS_IN_TILE[stencil.dim-1]))
     p.PrintLine('int64_t tiled_offset = (%s)*tile_size_linearized_i+burst_index*(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+burst_residue;' % '+'.join(['%stile_index_dim_%d' % (''.join(['tile_num_dim_%d*'%xx for xx in range(x)]), x) for x in range(stencil.dim-1)]))
-    p.PrintLine('int64_t original_offset = %s;' % '+'.join(['%c*var_%s_stride_%d' % (coords_in_orig[x], stencil.input.name, x) for x in range(stencil.dim)]))
+    p.PrintLine('int64_t original_offset = %s;' % '+'.join(['%c*var_%s_stride_%d' % (COORDS_IN_ORIG[x], stencil.input.name, x) for x in range(stencil.dim)]))
     p.PrintLine('switch(tiled_offset%dram_bank)')
     p.DoScope()
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine('case %d:' % i)
         p.DoIndent()
         for c in range(stencil.input.chan):
@@ -470,7 +470,7 @@ def PrintWrapped(p, stencil):
     p.PrintLine('err = 0;')
     for idx, param in enumerate(stencil.extra_params.values()):
         p.PrintLine('err |= clEnqueueUnmapMemObject(commands, var_%s_cl, var_%s_buf, 0, nullptr, write_events+%d);' % (param.name, param.name, idx))
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         for c in range(stencil.input.chan):
             p.PrintLine('err |= dram_bank>%d ? clEnqueueUnmapMemObject(commands, var_%s_%d_bank_%d_cl, var_%s_%d_buf_bank_%d, 0, nullptr, write_events+%d) : err;' % ((i,)+(stencil.input.name, c, i)*2+(i*stencil.input.chan+c+len(stencil.extra_params),)))
     p.PrintLine()
@@ -501,10 +501,10 @@ def PrintWrapped(p, stencil):
     p.PrintLine()
 
     for c in range(stencil.output.chan):
-        for i in range(max_dram_bank):
+        for i in range(MAX_DRAM_BANK):
             p.PrintLine('if(dram_bank>%d) err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_%d_bank_%d_cl);' % (i, stencil.output.name, c, i))
     for c in range(stencil.input.chan):
-        for i in range(max_dram_bank):
+        for i in range(MAX_DRAM_BANK):
             p.PrintLine('if(dram_bank>%d) err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_%d_bank_%d_cl);' % (i, stencil.input.name, c, i))
     for param in stencil.extra_params.values():
         p.PrintLine('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), &var_%s_cl);' % param.name)
@@ -547,8 +547,8 @@ def PrintWrapped(p, stencil):
     p.UnScope()
     p.PrintLine()
 
-    p.PrintLine('cl_event read_events[%d];' % (max_dram_bank*stencil.output.chan))
-    for i in range(max_dram_bank):
+    p.PrintLine('cl_event read_events[%d];' % (MAX_DRAM_BANK*stencil.output.chan))
+    for i in range(MAX_DRAM_BANK):
         for c in range(stencil.output.chan):
             p.PrintLine('%s* var_%s_%d_buf_bank_%d = dram_bank>%d ? (%s*)clEnqueueMapBuffer(commands, var_%s_%d_bank_%d_cl, CL_FALSE, CL_MAP_READ, 0, var_%s_buf_size, 0, nullptr, read_events+%d, &err) : nullptr;' % (stencil.output.type, stencil.output.name, c, i, i, stencil.output.type, stencil.output.name, c, i, stencil.output.name, i*stencil.output.chan+c))
     p.PrintLine('clWaitForEvents(dram_bank*%d, read_events);' % stencil.output.chan)
@@ -563,35 +563,35 @@ def PrintWrapped(p, stencil):
         overall_stencil_window = GetOverallStencilWindow(stencil.output.parent.PreserveBorderFrom(), stencil.output)
         overall_stencil_offset = GetStencilWindowOffset(overall_stencil_window)
         overall_stencil_dim = GetStencilDim(overall_stencil_window)
-        p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d; ++%c)' % (coords_in_tile[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.input.name, stencil.dim-1, coords_in_tile[stencil.dim-1]))
+        p.PrintLine('for(int32_t %c = 0; %c < %s_size_dim_%d; ++%c)' % (COORDS_IN_TILE[stencil.dim-1], COORDS_IN_TILE[stencil.dim-1], stencil.input.name, stencil.dim-1, COORDS_IN_TILE[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
-            p.PrintLine('for(int32_t %c = tile_index_dim_%d==0 ? 0 : %d; %c < actual_tile_size_dim_%d-(tile_index_dim_%d==tile_num_dim_%d-1 ? 0 : %d); ++%c)' % (coords_in_tile[dim], dim, overall_stencil_offset[dim], coords_in_tile[dim], dim, dim, dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], coords_in_tile[dim]))
+            p.PrintLine('for(int32_t %c = tile_index_dim_%d==0 ? 0 : %d; %c < actual_tile_size_dim_%d-(tile_index_dim_%d==tile_num_dim_%d-1 ? 0 : %d); ++%c)' % (COORDS_IN_TILE[dim], dim, overall_stencil_offset[dim], COORDS_IN_TILE[dim], dim, dim, dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], COORDS_IN_TILE[dim]))
             p.DoScope()
     else:
         overall_stencil_window = GetOverallStencilWindow(stencil.input, stencil.output)
         overall_stencil_offset = GetStencilWindowOffset(overall_stencil_window)
         overall_stencil_dim = GetStencilDim(overall_stencil_window)
-        p.PrintLine('for(int32_t %c = %d; %c < %s_size_dim_%d-%d; ++%c)' % (coords_in_tile[stencil.dim-1], overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1], stencil.output.name, stencil.dim-1, overall_stencil_dim[stencil.dim-1]-1-overall_stencil_offset[stencil.dim-1], coords_in_tile[stencil.dim-1]))
+        p.PrintLine('for(int32_t %c = %d; %c < %s_size_dim_%d-%d; ++%c)' % (COORDS_IN_TILE[stencil.dim-1], overall_stencil_offset[stencil.dim-1], COORDS_IN_TILE[stencil.dim-1], stencil.output.name, stencil.dim-1, overall_stencil_dim[stencil.dim-1]-1-overall_stencil_offset[stencil.dim-1], COORDS_IN_TILE[stencil.dim-1]))
         p.DoScope()
         for dim in range(stencil.dim-2, -1, -1):
-            p.PrintLine('for(int32_t %c = %d; %c < actual_tile_size_dim_%d-%d; ++%c)' % (coords_in_tile[dim], overall_stencil_offset[dim], coords_in_tile[dim], dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], coords_in_tile[dim]))
+            p.PrintLine('for(int32_t %c = %d; %c < actual_tile_size_dim_%d-%d; ++%c)' % (COORDS_IN_TILE[dim], overall_stencil_offset[dim], COORDS_IN_TILE[dim], dim, overall_stencil_dim[dim]-1-overall_stencil_offset[dim], COORDS_IN_TILE[dim]))
             p.DoScope()
 
-    p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(coords_tiled))
-    p.PrintLine('// (%s) is coordinates in original image' % ', '.join(coords_in_orig))
-    p.PrintLine('// (%s) is coordinates in a tile' % ', '.join(coords_in_tile))
-    offset_in_tile = '+'.join(['%c%s' % (coords_in_tile[x], ''.join(['*TILE_SIZE_DIM_%d'%xx for xx in range(x)])) for x in range(stencil.dim)])
+    p.PrintLine('// (%s) is coordinates in tiled image' % ', '.join(COORDS_TILED))
+    p.PrintLine('// (%s) is coordinates in original image' % ', '.join(COORDS_IN_ORIG))
+    p.PrintLine('// (%s) is coordinates in a tile' % ', '.join(COORDS_IN_TILE))
+    offset_in_tile = '+'.join(['%c%s' % (COORDS_IN_TILE[x], ''.join(['*TILE_SIZE_DIM_%d'%xx for xx in range(x)])) for x in range(stencil.dim)])
     p.PrintLine('int32_t burst_index = (%s+STENCIL_OFFSET)/(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);' % offset_in_tile)
     p.PrintLine('int32_t burst_residue = (%s+STENCIL_OFFSET)%%(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);' % offset_in_tile)
     for dim in range(stencil.dim-1):
-        p.PrintLine('int32_t %c = tile_index_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)+%c;' % (coords_in_orig[dim], dim, dim, dim, coords_in_tile[dim]))
-    p.PrintLine('int32_t %c = %c;' % (coords_in_orig[stencil.dim-1], coords_in_tile[stencil.dim-1]))
+        p.PrintLine('int32_t %c = tile_index_dim_%d*(TILE_SIZE_DIM_%d-STENCIL_DIM_%d+1)+%c;' % (COORDS_IN_ORIG[dim], dim, dim, dim, COORDS_IN_TILE[dim]))
+    p.PrintLine('int32_t %c = %c;' % (COORDS_IN_ORIG[stencil.dim-1], COORDS_IN_TILE[stencil.dim-1]))
     p.PrintLine('int64_t tiled_offset = (%s)*tile_size_linearized_o+burst_index*(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank)+burst_residue;' % '+'.join(['%stile_index_dim_%d' % (''.join(['tile_num_dim_%d*'%xx for xx in range(x)]), x) for x in range(stencil.dim-1)]))
-    p.PrintLine('int64_t original_offset = %s;' % '+'.join(['%c*var_%s_stride_%d' % (coords_in_orig[x], stencil.output.name, x) for x in range(stencil.dim)]))
+    p.PrintLine('int64_t original_offset = %s;' % '+'.join(['%c*var_%s_stride_%d' % (COORDS_IN_ORIG[x], stencil.output.name, x) for x in range(stencil.dim)]))
     p.PrintLine('switch(tiled_offset%dram_bank)')
     p.DoScope()
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine('case %d:' % i)
         p.DoIndent()
         for c in range(stencil.output.chan):
@@ -601,7 +601,7 @@ def PrintWrapped(p, stencil):
     for dim in range(stencil.dim*2):
         p.UnScope()
 
-    for i in range(max_dram_bank):
+    for i in range(MAX_DRAM_BANK):
         p.PrintLine()
         p.PrintLine('if(dram_bank>%d)' % i)
         p.DoScope()
@@ -656,10 +656,10 @@ def PrintUnloadBuffer(p, buffer_name, buffer_type):
     p.PrintLine('(void)var_%s_elem_size;' % buffer_name)
 
 def PrintCheckElemSize(p, buffer_name, buffer_type):
-    p.PrintLine('bool %s = var_%s_elem_size == %d;' % (p.NewVar(), buffer_name, type_width[buffer_type]/8))
+    p.PrintLine('bool %s = var_%s_elem_size == %d;' % (p.NewVar(), buffer_name, TYPE_WIDTH[buffer_type]/8))
     p.PrintLine('if(!%s)' % p.LastVar())
     p.DoScope()
-    p.PrintLine('int32_t %s = halide_error_bad_elem_size(nullptr, "Buffer %s", "%s", var_%s_elem_size, %d);' % (p.NewVar(), buffer_name, buffer_type, buffer_name, type_width[buffer_type]/8))
+    p.PrintLine('int32_t %s = halide_error_bad_elem_size(nullptr, "Buffer %s", "%s", var_%s_elem_size, %d);' % (p.NewVar(), buffer_name, buffer_type, buffer_name, TYPE_WIDTH[buffer_type]/8))
     p.PrintLine('return %s;' % p.LastVar())
     p.UnScope()
 
@@ -714,16 +714,16 @@ def PrintTest(p, stencil):
     p.PrintLine('// initialization can be parallelized with -fopenmp')
     p.PrintLine('#pragma omp parallel for', 0)
     if stencil.input.chan>1:
-        p.PrintLine('for(int32_t %c = 0; %c<%d; ++%c)' % (coords_in_orig[stencil.dim], coords_in_orig[stencil.dim], stencil.input.chan, coords_in_orig[stencil.dim]))
+        p.PrintLine('for(int32_t %c = 0; %c<%d; ++%c)' % (COORDS_IN_ORIG[stencil.dim], COORDS_IN_ORIG[stencil.dim], stencil.input.chan, COORDS_IN_ORIG[stencil.dim]))
         p.DoScope()
     for d in range(0, stencil.dim):
         dim = stencil.dim-d-1
-        p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, coords_in_orig[dim]))
+        p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (COORDS_IN_ORIG[dim], COORDS_IN_ORIG[dim], dim, COORDS_IN_ORIG[dim]))
         p.DoScope()
-    init_val = '+'.join(coords_in_orig[0:input_dim])
+    init_val = '+'.join(COORDS_IN_ORIG[0:input_dim])
     if IsFloat(stencil.input.type):
         init_val = '%s(%s)/%s(%s%s)' % (stencil.input.type, init_val, stencil.input.type, '%d+' % stencil.input.chan if stencil.input.chan>1 else '', '+'.join('dims[%d]' % d for d in range(stencil.dim)))
-    p.PrintLine('%s_img[%s] = %s;' % (stencil.input.name, '+'.join('%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(input_dim)), init_val))
+    p.PrintLine('%s_img[%s] = %s;' % (stencil.input.name, '+'.join('%c*%s.stride[%d]' % (COORDS_IN_ORIG[d], stencil.input.name, d) for d in range(input_dim)), init_val))
     for d in range(0, input_dim):
         p.UnScope()
     p.PrintLine()
@@ -731,9 +731,9 @@ def PrintTest(p, stencil):
     for param in stencil.extra_params.values():
         p.PrintLine('#pragma omp parallel for', 0)
         for dim, size in enumerate(param.size):
-            p.PrintLine('for(int32_t %c = 0; %c<%d; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], size, coords_in_orig[dim]))
+            p.PrintLine('for(int32_t %c = 0; %c<%d; ++%c)' % (COORDS_IN_ORIG[dim], COORDS_IN_ORIG[dim], size, COORDS_IN_ORIG[dim]))
             p.DoScope()
-        p.PrintLine('%s_img%s = %s;' % (param.name, reduce(operator.add, ['[%c]' % (coords_in_orig[d]) for d in range(len(param.size))]), '+'.join(coords_in_orig[0:len(param.size)])))
+        p.PrintLine('%s_img%s = %s;' % (param.name, reduce(operator.add, ['[%c]' % (COORDS_IN_ORIG[d]) for d in range(len(param.size))]), '+'.join(COORDS_IN_ORIG[0:len(param.size)])))
         for d in param.size:
             p.UnScope()
         p.PrintLine()
@@ -744,8 +744,8 @@ def PrintTest(p, stencil):
     p.PrintLine('int error_count = 0;')
     p.PrintLine()
 
-    LoadPrinter = lambda node: '%s_img%s' % (node.name, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['(%c%+d)*%s.stride[%d]' % (coords_in_orig[d], node.idx[d] - s.idx[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
-    StorePrinter = lambda node: '%s result_chan_%d' % (stencil.output.type, node.chan) if node.name == stencil.output.name else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
+    LoadPrinter = lambda node: '%s_img%s' % (node.name, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['(%c%+d)*%s.stride[%d]' % (COORDS_IN_ORIG[d], node.idx[d] - s.idx[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
+    StorePrinter = lambda node: '%s result_chan_%d' % (stencil.output.type, node.chan) if node.name == stencil.output.name else '%s_img[%s+%d*%s.stride[%d]]' % (node.name, '+'.join(['%c*%s.stride[%d]' % (COORDS_IN_ORIG[d], stencil.input.name, d) for d in range(stencil.dim)]), node.chan, node.name, stencil.dim)
 
     for s in stencil.GetStagesChronologically():
         logger.debug('emit code to produce %s_img' % s.output.name)
@@ -771,14 +771,14 @@ def PrintTest(p, stencil):
         output_idx = GetStencilWindowOffset(stencil_window)
         for d in range(0, stencil.dim):
             dim = stencil.dim-d-1
-            p.PrintLine('for(int32_t %c = %d; %c<dims[%d]-%d; ++%c)' % (coords_in_orig[dim], output_idx[dim], coords_in_orig[dim], dim, stencil_dim[dim]-output_idx[dim]-1, coords_in_orig[dim]))
+            p.PrintLine('for(int32_t %c = %d; %c<dims[%d]-%d; ++%c)' % (COORDS_IN_ORIG[dim], output_idx[dim], COORDS_IN_ORIG[dim], dim, stencil_dim[dim]-output_idx[dim]-1, COORDS_IN_ORIG[dim]))
             p.DoScope()
         for e in s.expr:
             e.PrintCode(p, stencil.tensors, LoadPrinter, StorePrinter)
         p.PrintLine()
         if len(s.output.children)==0:
             for c in range(stencil.output.chan):
-                run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
+                run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (COORDS_IN_ORIG[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
                 p.PrintLine('%s val_fpga = %s;' % (stencil.output.type, run_result))
                 p.PrintLine('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
                 if IsFloat(stencil.output.type):
@@ -790,12 +790,12 @@ def PrintTest(p, stencil):
                     p.PrintLine('threshold *= threshold;')
                     p.PrintLine('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > threshold)')
                     p.DoScope()
-                    params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                    params = (c, ', '.join(['%d']*stencil.dim), ', '.join(COORDS_IN_ORIG[:stencil.dim]))
                     p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(val_fpga), double(val_cpu), %s);' % params)
                 else:
                     p.PrintLine('if(val_fpga!=val_cpu)')
                     p.DoScope()
-                    params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                    params = (c, ', '.join(['%d']*stencil.dim), ', '.join(COORDS_IN_ORIG[:stencil.dim]))
                     p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(val_fpga), int64_t(val_cpu), %s);' % params)
                 p.PrintLine('++error_count;')
                 p.UnScope()
@@ -812,16 +812,16 @@ def PrintTest(p, stencil):
             output_idx = GetStencilWindowOffset(stencil_window)
             for d in range(0, stencil.dim):
                 dim = stencil.dim-d-1
-                p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (coords_in_orig[dim], coords_in_orig[dim], dim, coords_in_orig[dim]))
+                p.PrintLine('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (COORDS_IN_ORIG[dim], COORDS_IN_ORIG[dim], dim, COORDS_IN_ORIG[dim]))
                 p.DoScope()
-            p.PrintLine('if(!(%s))' % ' && '.join('%c>=%d && %c<dims[%d]-%d' % (coords_in_orig[d], output_idx[d], coords_in_orig[d], d, stencil_dim[d]-output_idx[d]-1) for d in range(stencil.dim)))
+            p.PrintLine('if(!(%s))' % ' && '.join('%c>=%d && %c<dims[%d]-%d' % (COORDS_IN_ORIG[d], output_idx[d], COORDS_IN_ORIG[d], d, stencil_dim[d]-output_idx[d]-1) for d in range(stencil.dim)))
             p.DoScope()
-            GroudTruth = lambda c: '%s_img[%s+%d*%s.stride[%d]]' % (bb.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], bb.name, d) for d in range(stencil.dim)]), c, bb.name, stencil.dim)
+            GroudTruth = lambda c: '%s_img[%s+%d*%s.stride[%d]]' % (bb.name, '+'.join(['%c*%s.stride[%d]' % (COORDS_IN_ORIG[d], bb.name, d) for d in range(stencil.dim)]), c, bb.name, stencil.dim)
             for e in s.expr:
                 p.PrintLine('%s = %s;' % (StorePrinter(e), GroudTruth(e.chan)))
             if len(s.output.children)==0:
                 for c in range(stencil.output.chan):
-                    run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (coords_in_orig[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
+                    run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (COORDS_IN_ORIG[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
                     p.PrintLine('%s val_fpga = %s;' % (stencil.output.type, run_result))
                     p.PrintLine('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
                     if IsFloat(stencil.output.type):
@@ -833,12 +833,12 @@ def PrintTest(p, stencil):
                         p.PrintLine('threshold *= threshold;')
                         p.PrintLine('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > threshold)')
                         p.DoScope()
-                        params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                        params = (c, ', '.join(['%d']*stencil.dim), ', '.join(COORDS_IN_ORIG[:stencil.dim]))
                         p.PrintLine('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(val_fpga), double(val_cpu), %s);' % params)
                     else:
                         p.PrintLine('if(val_fpga!=val_cpu)')
                         p.DoScope()
-                        params = (c, ', '.join(['%d']*stencil.dim), ', '.join(coords_in_orig[:stencil.dim]))
+                        params = (c, ', '.join(['%d']*stencil.dim), ', '.join(COORDS_IN_ORIG[:stencil.dim]))
                         p.PrintLine('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(val_fpga), int64_t(val_cpu), %s);' % params)
                     p.PrintLine('++error_count;')
                     p.UnScope()
@@ -872,8 +872,8 @@ def PrintCode(stencil, host_file):
     p.PrintLine()
 
     PrintDefine(p, 'BURST_WIDTH', stencil.burst_width)
-    PrintDefine(p, 'PIXEL_WIDTH_I', type_width[stencil.input.type])
-    PrintDefine(p, 'PIXEL_WIDTH_O', type_width[stencil.output.type])
+    PrintDefine(p, 'PIXEL_WIDTH_I', TYPE_WIDTH[stencil.input.type])
+    PrintDefine(p, 'PIXEL_WIDTH_O', TYPE_WIDTH[stencil.output.type])
 
     if stencil.preserve_border:
         overall_stencil_window = GetOverallStencilWindow(

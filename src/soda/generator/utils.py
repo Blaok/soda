@@ -13,11 +13,22 @@ from soda.generator.dataflow import *
 import soda.grammar
 
 # constants
-coords_tiled = 'xyzw'
-coords_in_tile = 'ijkl'
-coords_in_orig = 'pqrs'
-type_width = {'uint8_t':8, 'uint16_t':16, 'uint32_t':32, 'uint64_t':64, 'int8_t':8, 'int16_t':16, 'int32_t':32, 'int64_t':64, 'float':32, 'double':64}
-max_dram_bank = 4
+COORDS_TILED = 'xyzw'
+COORDS_IN_TILE = 'ijkl'
+COORDS_IN_ORIG = 'pqrs'
+TYPE_WIDTH = {
+    'uint8_t':8,
+    'uint16_t':16,
+    'uint32_t':32,
+    'uint64_t':64,
+    'int8_t':8,
+    'int16_t':16,
+    'int32_t':32,
+    'int64_t':64,
+    'float':32,
+    'double':64
+}
+MAX_DRAM_BANK = 4
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -390,8 +401,8 @@ class Stencil(object):
                 _logger.debug('stage.delay: %s <- %s delayed %d' % (s.name, n, d))
 
         # parameters generated from the above parameters
-        self.pixel_width_i = type_width[self.input.type]
-        self.pixel_width_o = type_width[self.output.type]
+        self.pixel_width_i = TYPE_WIDTH[self.input.type]
+        self.pixel_width_o = TYPE_WIDTH[self.output.type]
         self.input_partition  = self.burst_width/self.pixel_width_i*self.dram_bank/2 if self.burst_width/self.pixel_width_i*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
         self.output_partition = self.burst_width/self.pixel_width_o*self.dram_bank/2 if self.burst_width/self.pixel_width_o*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
 
