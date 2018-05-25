@@ -1,13 +1,9 @@
-from collections import deque, namedtuple
+from collections import namedtuple
 import copy
 import logging
 import math
-import operator
-import os
-import sys
 
-import soda.generator.utils
-from soda.generator.utils import SemanticError, SemanticWarn
+from soda import core
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -412,7 +408,7 @@ class Operand(object):
 
 class Input(object):
     def __init__(self, **kwargs):
-        self.type = soda.generator.utils.get_c_type(kwargs.pop('type'))
+        self.type = core.get_c_type(kwargs.pop('type'))
         self.name = kwargs.pop('name')
         self.chan = string_to_integer(kwargs.pop('chan'), 1)
         if(self.chan<1):
@@ -424,7 +420,7 @@ class Input(object):
 
 class ExtraParam(object):
     def __init__(self, **kwargs):
-        self.type = soda.generator.utils.get_c_type(kwargs.pop('type'))
+        self.type = core.get_c_type(kwargs.pop('type'))
         self.name = kwargs.pop('name')
         self.size = kwargs.pop('size')
         attrs = kwargs.pop('attrs')
@@ -456,7 +452,7 @@ class ExtraParam(object):
 
 class Output(object):
     def __init__(self, **kwargs):
-        self.type = soda.generator.utils.get_c_type(kwargs.pop('type'))
+        self.type = core.get_c_type(kwargs.pop('type'))
         self.expr = kwargs.pop('expr')
         for e in self.expr:
             if hasattr(self, 'name'):
@@ -523,7 +519,7 @@ class Local(object):
             self.border = output_node.border
             self.expr = copy.deepcopy(output_node.expr)
             return
-        self.type = soda.generator.utils.get_c_type(kwargs.pop('type'))
+        self.type = core.get_c_type(kwargs.pop('type'))
         self.expr = kwargs.pop('expr')
         for e in self.expr:
             if hasattr(self, 'name'):

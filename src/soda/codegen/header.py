@@ -1,19 +1,12 @@
-from fractions import Fraction
-from functools import reduce
-import json
 import logging
-import math
-import operator
-import os
-import sys
-sys.path.append(os.path.dirname(__file__))
-from utils import Stencil, Printer
+
+from soda import core
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
 def print_code(stencil, header_file):
     logger.info('generate host header code as %s' % header_file.name)
-    p = Printer(header_file)
+    p = core.Printer(header_file)
     p.println('#ifndef HALIDE_%s_H_' % stencil.app_name.upper())
     p.println('#define HALIDE_%s_H_' % stencil.app_name.upper())
     p.println()

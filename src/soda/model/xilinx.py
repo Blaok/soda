@@ -3,8 +3,9 @@ import logging
 import math
 import subprocess
 
-from soda.generator.utils import *
-from soda.model.resource import *
+from soda import core
+from soda import dataflow
+from soda.model import resource
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -54,35 +55,35 @@ def print_estimation(stencil, model_file, output_file):
 
     # these modules appear and only appear once
     for module in ('Block_proc', 'control_s_axi', 'entry', 'top_level'):
-        accumulate_resources(estimation_hls, model[module])
+        resource.accum_res(estimation_hls, model[module])
 
     # axi master
-    accumulate_resources(estimation_hls, model['m_axi'],
+    resource.accum_res(estimation_hls, model['m_axi'],
                          stencil.dram_bank*2)
 
     # load/store
-    accumulate_resources(estimation_hls, model['load'],
+    resource.accum_res(estimation_hls, model['load'],
                          stencil.input.chan*stencil.dram_bank)
-    accumulate_resources(estimation_hls, model['store'],
+    resource.accum_res(estimation_hls, model['store'],
                          stencil.output.chan*stencil.dram_bank)
 
     # unpack/pack
-    accumulate_resources(estimation_hls,
+    resource.accum_res(estimation_hls,
                          model['pack_'+stencil.output.type]['base'],
                          stencil.output.chan*stencil.dram_bank)
-    accumulate_resources(estimation_hls,
+    resource.accum_res(estimation_hls,
                          model['pack_'+stencil.output.type]['directly'],
                          stencil.output.chan*stencil.unroll_factor)
-    accumulate_resources(estimation_hls,
+    resource.accum_res(estimation_hls,
                          model['pack_'+stencil.output.type]['inversely'],
                          stencil.output.chan/stencil.unroll_factor)
-    accumulate_resources(estimation_hls,
+    resource.accum_res(estimation_hls,
                          model['unpack_'+stencil.input.type]['base'],
                          stencil.input.chan*stencil.dram_bank)
-    accumulate_resources(estimation_hls,
+    resource.accum_res(estimation_hls,
                          model['unpack_'+stencil.input.type]['directly'],
                          stencil.input.chan*stencil.unroll_factor)
-    accumulate_resources(estimation_hls,
+    resource.accum_res(estimation_hls,
                          model['unpack_'+stencil.input.type]['inversely'],
                          stencil.input.chan/stencil.unroll_factor)
 
@@ -91,20 +92,20 @@ def print_estimation(stencil, model_file, output_file):
     repli = stencil.replication_factor if stencil.replication_factor is not None else 1
     for node in super_source.bfs_node_generator():
         # forward modules
-        if isinstance(node, ForwardNode):
+        if isinstance(node, dataflow.ForwardNode):
             forward_key = 'forward_'+node.tensor.type
             if forward_key not in model:
                 msg = 'forward<%s> not found in model %s' % (node.tensor.type,
                                                              model_file.name)
                 raise SemanticError(msg)
-            accumulate_resources(estimation_hls, model[forward_key]['base'], repli)
-            accumulate_resources(estimation_hls,
+            resource.accum_res(estimation_hls, model[forward_key]['base'], repli)
+            resource.accum_res(estimation_hls,
                                  model[forward_key]['overhead_per_dst'],
                                  len(node.children)*repli)
             if node.depth > 0:
-                accumulate_resources(estimation_hls,
+                resource.accum_res(estimation_hls,
                                      model[forward_key]['overhead_of_depth'], repli)
-        elif isinstance(node, ComputeNode):
+        elif isinstance(node, dataflow.ComputeNode):
             if node.stage.name in (stencil.output.name,):
                 stage_name = node.stage.name
             elif stencil.input.name+'_iter' in node.stage.name:
@@ -114,7 +115,7 @@ def print_estimation(stencil, model_file, output_file):
             else:
                 msg = 'unknown dataflow compute node: %s' % node.stage.name
                 raise SemanticError(msg)
-            accumulate_resources(estimation_hls,
+            resource.accum_res(estimation_hls,
                                  model['compute'][stencil.app_name][stage_name], repli)
 
     performance = stencil.unroll_factor*model['target_freq']/10**3  # pixel/ns
@@ -122,14 +123,14 @@ def print_estimation(stencil, model_file, output_file):
     if stencil.dram_separate:
         performance = min(performance,
             dram_bandwidth*stencil.dram_bank/
-                (stencil.input.chan*TYPE_WIDTH[stencil.input.type]/8),
+                (stencil.input.chan*core.TYPE_WIDTH[stencil.input.type]/8),
             dram_bandwidth*stencil.dram_bank/
-                (stencil.output.chan*TYPE_WIDTH[stencil.output.type]/8))
+                (stencil.output.chan*core.TYPE_WIDTH[stencil.output.type]/8))
     else:
         performance = min(performance,
             dram_bandwidth*stencil.dram_bank/(
-                stencil.input.chan*TYPE_WIDTH[stencil.input.type]/8+
-                stencil.output.chan*TYPE_WIDTH[stencil.output.type]/8))
+                stencil.input.chan*core.TYPE_WIDTH[stencil.input.type]/8+
+                stencil.output.chan*core.TYPE_WIDTH[stencil.output.type]/8))
     performance *= stencil.iterate
 
     estimation_routed = estimation['resource_routed']
@@ -142,17 +143,17 @@ def print_estimation(stencil, model_file, output_file):
 
     # BRAMs
     for src_node, dst_node in super_source.bfs_edge_generator():
-        if isinstance(dst_node, ForwardNode):
+        if isinstance(dst_node, dataflow.ForwardNode):
             for c in range(dst_node.tensor.chan*repli):
                 accumulate_fifo(estimation_routed,
-                                TYPE_WIDTH[dst_node.tensor.type],
+                                core.TYPE_WIDTH[dst_node.tensor.type],
                                 max(dst_node.depth, 1))
-        elif (isinstance(src_node, ForwardNode) and
-              isinstance(dst_node, ComputeNode)):
+        elif (isinstance(src_node, dataflow.ForwardNode) and
+              isinstance(dst_node, dataflow.ComputeNode)):
             extra_depth = super_source.get_extra_depth((src_node, dst_node))
             for c in range(src_node.tensor.chan*repli):
                 accumulate_fifo(estimation_routed,
-                                TYPE_WIDTH[src_node.tensor.type],
+                                core.TYPE_WIDTH[src_node.tensor.type],
                                 max(extra_depth+1, 2))
 
     estimation_routed['BRAM'] = math.ceil(estimation_routed['BRAM']/2)

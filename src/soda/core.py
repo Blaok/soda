@@ -1,16 +1,12 @@
-from collections import deque, namedtuple
-from fractions import Fraction
+from collections import deque
 from functools import reduce
 import copy
-import json
 import logging
-import math
 import operator
-import os
 import sys
 
-from soda.generator.dataflow import *
-import soda.grammar
+from soda import dataflow
+from soda import grammar
 
 # constants
 COORDS_TILED = 'xyzw'
@@ -54,12 +50,12 @@ class Tensor(object):
         self.name = node.name
         self.type = node.type
         self.chan = node.chan
-        if isinstance(node, soda.grammar.Output):
+        if isinstance(node, grammar.Output):
             self.idx = next(iter(node.expr)).idx
             for e in node.expr:
                 if e.idx != self.idx:
                     raise InternalError('Normalization went wrong')
-        elif isinstance(node, soda.grammar.Local):
+        elif isinstance(node, grammar.Local):
             self.idx = next(iter(node.expr)).idx
             for e in node.expr:
                 if e.idx != self.idx:
@@ -169,7 +165,7 @@ class Stencil(object):
         LocalLoadCallBack = lambda n: NameFromIter(n, iteration) if n == input_node.name else NameFromIter(n, iteration) if n in local_names else n
         OutputLoadCallBack = lambda n: NameFromIter(n, iteration-1) if n == input_node.name or n in local_names else n
         for iteration in range(1, self.iterate):
-            new_local = soda.grammar.Local(output_node=output_node)
+            new_local = grammar.Local(output_node=output_node)
             new_local.mutate_load(OutputLoadCallBack)
             new_local.mutate_store(lambda n: NameFromIter(input_node.name, iteration))
             if self.preserve_border:
@@ -403,7 +399,7 @@ class Stencil(object):
         self.input_partition  = self.burst_width/self.pixel_width_i*self.dram_bank/2 if self.burst_width/self.pixel_width_i*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
         self.output_partition = self.burst_width/self.pixel_width_o*self.dram_bank/2 if self.burst_width/self.pixel_width_o*self.dram_bank/2 > self.unroll_factor/2 else self.unroll_factor/2
 
-        self.dataflow_super_source = create_dataflow_graph(self)
+        self.dataflow_super_source = dataflow.create_dataflow_graph(self)
 
     def get_producer_tensors(self):
         return [b for b in self.tensors.values() if len(b.children)>0]
@@ -428,9 +424,9 @@ class Stencil(object):
 
     # return [StageExpr, ...]
     def _get_expr_for(self, node):
-        if isinstance(node, soda.grammar.Output):
+        if isinstance(node, grammar.Output):
             return node.expr
-        if isinstance(node, soda.grammar.Local):
+        if isinstance(node, grammar.Local):
             return node.expr
         raise SemanticError('cannot get expression for %s' % str(type(node)))
 

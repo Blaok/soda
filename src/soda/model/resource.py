@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+from collections import OrderedDict
 import json
 import sys
-from collections import OrderedDict
 
 class XilinxHLSReport(object):
     def __init__(self, rpt_file):
@@ -140,26 +140,26 @@ class XilinxHLSReport(object):
             resources_used[resource] = 0
         for module in ('Block_proc', 'entry', 'control_s_axi'):
             if module in self.instances:
-                accumulate_resources(resources_used,
+                accum_res(resources_used,
                                      self.instances[module])
         for module in ('m_axi',):
-            accumulate_resources_iterative(resources_used,
+            accum_res_iter(resources_used,
                                            self.instances[module].values())
         for module in ('load', 'store'):
-            accumulate_resources_iterative(resources_used,
+            accum_res_iter(resources_used,
                                            self.instances[module])
         for module in ('unpack', 'pack'):
             for degree in self.instances[module].values():
                 for data_type in degree.values():
-                    accumulate_resources_iterative(resources_used, data_type)
+                    accum_res_iter(resources_used, data_type)
         for module in ('compute',):
             for var in self.instances[module].values():
-                accumulate_resources_iterative(resources_used, var.values())
+                accum_res_iter(resources_used, var.values())
         for module in ('forward',):
             for degree in self.instances[module].values():
                 for data_type in degree.values():
                     for fifo_depth in data_type.values():
-                        accumulate_resources_iterative(resources_used,
+                        accum_res_iter(resources_used,
                                                        fifo_depth)
         for resource in resources:
             total = resources_used[resource]
@@ -191,12 +191,12 @@ class XilinxPostRoutingReport(object):
 class ReportSemanticError(Exception):
     pass
 
-def accumulate_resources(total, delta, coefficient=1):
+def accum_res(total, delta, coefficient=1):
     for resource in total:
         total[resource] += delta[resource] * coefficient
-def accumulate_resources_iterative(total, deltas, coefficient=1):
+def accum_res_iter(total, deltas, coefficient=1):
     for delta in deltas:
-        accumulate_resources(total, delta, coefficient)
+        accum_res(total, delta, coefficient)
 
 def main():
     for file_name in sys.argv[1:]:

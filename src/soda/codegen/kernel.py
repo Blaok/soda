@@ -1,16 +1,8 @@
-from collections import deque
-from fractions import Fraction
 from functools import reduce
-import itertools
-import json
 import logging
-import math
 import operator
-import os
-import sys
 
-from soda.generator.utils import *
-from soda.grammar import ExtraParam
+from soda import core
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -183,15 +175,15 @@ def print_compute_stage(printer, stencil, stage):
     all_points = stencil.get_all_points()
     next_fifo = stencil.get_next_fifo()
     reuse_buffers = stencil.get_reuse_buffers()
-    stencil_window = get_overall_stencil_window(stage.preserve_border_from() if stage.preserve_border_from() else stencil.input, stage.output)
-    overall_idx = get_stencil_window_offset(stencil_window)
+    stencil_window = core.get_overall_stencil_window(stage.preserve_border_from() if stage.preserve_border_from() else stencil.input, stage.output)
+    overall_idx = core.get_stencil_window_offset(stencil_window)
     iteration = 1
     parent_tensor = stage.preserve_border_from()
     tensor = stage.output
     while parent_tensor is not None and parent_tensor.parent is not None:
         parent_tensor = parent_tensor.parent.preserve_border_from()
         iteration += 1
-    delay = (get_stencil_distance(stencil_window, stencil.tile_size) - serialize(overall_idx, stencil.tile_size))*iteration
+    delay = (core.get_stencil_distance(stencil_window, stencil.tile_size) - core.serialize(overall_idx, stencil.tile_size))*iteration
 
     for pe_id in range(1 if stencil.cluster == 'none' else unroll_factor):
         if stencil.cluster == 'none':
@@ -234,7 +226,7 @@ def print_compute_stage(printer, stencil, stage):
                             (stage.output.type, param, c))
 
         # inputs
-        for param in [(stencil.tensors[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, get_indices_id(indices))) for input_name, input_window in stage.window.items() for indices in input_window for c in range(stencil.tensors[input_name].chan)]:
+        for param in [(stencil.tensors[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, core.get_indices_id(indices))) for input_name, input_window in stage.window.items() for indices in input_window for c in range(stencil.tensors[input_name].chan)]:
             printer.println('/*  input */ hls::stream<%s>& %s,' % param)
 
         # params
@@ -281,7 +273,7 @@ def print_compute_stage(printer, stencil, stage):
             for indices in input_window:
                 for c in range(stencil.tensors[input_name].chan):
                     params.append('%s_chan_%d_at_%s' %
-                        (input_name, c, get_indices_id(indices)))
+                        (input_name, c, core.get_indices_id(indices)))
         printer.println('if(not (%s))' % ' or '.join(
             '%s.empty()' % param for param in params))
         printer.do_scope()
@@ -297,7 +289,7 @@ def print_compute_stage(printer, stencil, stage):
 
             IndexTile = lambda d: '%c' % (COORDS_IN_TILE[d])
             IndexOrig = lambda d: '%c' % (COORDS_IN_ORIG[d])
-            output_idx = get_stencil_window_offset(stencil_window)
+            output_idx = core.get_stencil_window_offset(stencil_window)
             stencil_dim = get_stencil_dim(stencil_window)
             MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
             printer.println('bool margin_conditions[%d];' % stencil.dim)
@@ -314,7 +306,7 @@ def print_compute_stage(printer, stencil, stage):
             params = []
             for indices in input_window:
                 for c in range(stencil.tensors[input_name].chan):
-                    params.append((stencil.tensors[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, get_indices_id(indices))))
+                    params.append((stencil.tensors[input_name].type, '%s_chan_%d_at_%s' % (input_name, c, core.get_indices_id(indices))))
 
             for param in params:
                 printer.println('%s load_%s = %s.read();' % (param[0], param[1], param[1]))
@@ -324,13 +316,13 @@ def print_compute_stage(printer, stencil, stage):
             printer.println('if(%s)' % (' || '.join('margin_conditions[%d]' % d for d in range(stencil.dim))))
             printer.do_scope()
             preserve_border_from = stage.preserve_border_from()
-            printer.println('%s_chan_%d<<load_%s_chan_%d_at_%s;' % (stage.name, c, preserve_border_from.name, c, get_indices_id(stage.idx)))
-            #printer.println('printf("bypass: epoch%%d pe%%d %s %s val=%%d\\n", epoch, pe_id, %s, %s load_%s_chan_%d_at_%s);' % (' '.join('%c=%%d' % COORDS_IN_TILE[d] for d in range(stencil.dim)), ' '.join('%c=%%d' % COORDS_IN_ORIG[d] for d in range(stencil.dim)), ', '.join(COORDS_IN_TILE[:stencil.dim]), ', '.join(COORDS_IN_ORIG[:stencil.dim]), preserve_border_from.name, c, get_indices_id(stage.idx)))
+            printer.println('%s_chan_%d<<load_%s_chan_%d_at_%s;' % (stage.name, c, preserve_border_from.name, c, core.get_indices_id(stage.idx)))
+            #printer.println('printf("bypass: epoch%%d pe%%d %s %s val=%%d\\n", epoch, pe_id, %s, %s load_%s_chan_%d_at_%s);' % (' '.join('%c=%%d' % COORDS_IN_TILE[d] for d in range(stencil.dim)), ' '.join('%c=%%d' % COORDS_IN_ORIG[d] for d in range(stencil.dim)), ', '.join(COORDS_IN_TILE[:stencil.dim]), ', '.join(COORDS_IN_ORIG[:stencil.dim]), preserve_border_from.name, c, core.get_indices_id(stage.idx)))
             printer.un_scope()
             printer.println('else')
             printer.do_scope()
 
-        LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if stencil.extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else 'load_%s_chan_%d_at_%s' % (node.name, node.chan, get_indices_id(node.idx))
+        LoadPrinter = lambda node: 'param_%s%s[unroll_index]%s' % (node.name, '' if stencil.extra_params[node.name].dup is None else '[%d]' % node.chan, ''.join(['[%d]'%x for x in node.idx])) if node.name in stencil.extra_params else 'load_%s_chan_%d_at_%s' % (node.name, node.chan, core.get_indices_id(node.idx))
         StorePrinter = lambda node: '%s store_%s_chan_%d' % (stage.output.type, node.name, node.chan)
 
         for expr in stage.expr:
@@ -389,7 +381,7 @@ def print_compute_stage(printer, stencil, stage):
         printer.println()
 
 def print_increment_coordinates(printer, stencil, stage):
-    overall_stencil_window = get_overall_stencil_window(*([stage.preserve_border_from(), stage.output] if stencil.preserve_border else [stencil.input, stencil.output]))
+    overall_stencil_window = core.get_overall_stencil_window(*([stage.preserve_border_from(), stage.output] if stencil.preserve_border else [stencil.input, stencil.output]))
     overall_stencil_dim = get_stencil_dim(overall_stencil_window)
 
     PrintIfTile = lambda d: printer.println('if(%c>=TILE_SIZE_DIM_%d)' % (COORDS_IN_TILE[d], d))
@@ -490,7 +482,7 @@ def print_interface(p, stencil):
     reuse_buffers = stencil.get_reuse_buffers()
     all_points = stencil.get_all_points()
     next_fifo = stencil.get_next_fifo()
-    overall_stencil_window = get_overall_stencil_window(stencil.input, stencil.output)
+    overall_stencil_window = core.get_overall_stencil_window(stencil.input, stencil.output)
 
     p.println('extern "C"')
     p.println('{')
@@ -621,7 +613,7 @@ def print_interface(p, stencil):
     extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
 
     p.println('uint64_t epoch_num = coalesced_data_num*%d/%d;' % (
-        stencil.burst_width*stencil.dram_bank/TYPE_WIDTH[stencil.input.type],
+        stencil.burst_width*stencil.dram_bank/core.TYPE_WIDTH[stencil.input.type],
         unroll_factor))
     p.println()
 
@@ -717,7 +709,7 @@ def print_interface(p, stencil):
             p.println('load(input_stream_chan_%d_bank_%d, var_input_chan_%d_bank_%d, coalesced_data_num);' % ((c, i)*2))
     for c in range(input_chan):
         for i in range(dram_bank):
-            p.println('unpack_%s(' % get_soda_type(stencil.input.type))
+            p.println('unpack_%s(' % core.get_soda_type(stencil.input.type))
             p.do_indent()
             for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
                 p.println('%s,' % GetTensorAt(stencil.input.name, stencil.input.offset+unroll_index, c))
@@ -813,7 +805,7 @@ def print_interface(p, stencil):
 
     for c in range(output_chan):
         for i in range(dram_bank):
-            p.println('pack_%s(output_stream_chan_%d_bank_%d,' % (get_soda_type(stencil.output.type), c, i))
+            p.println('pack_%s(output_stream_chan_%d_bank_%d,' % (core.get_soda_type(stencil.output.type), c, i))
             p.do_indent()
             for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
                 p.println('%s,' % GetTensorAt(stencil.output.name, unroll_index, c))
@@ -844,33 +836,33 @@ def print_load(printer):
     printer.un_scope()
 
 def print_unpack(printer, burst_width, data_type, unroll_factor):
-    coalesced_size = burst_width//TYPE_WIDTH[data_type]
+    coalesced_size = burst_width//core.TYPE_WIDTH[data_type]
     ii = 1
     if coalesced_size > unroll_factor:
         ii = coalesced_size/unroll_factor
     GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
     GetDstName = lambda i: ('to_%0'+str(len(str(unroll_factor-1)))+'d') % i
-    printer.println('void unpack_%s(' % get_soda_type(data_type))
+    printer.println('void unpack_%s(' % core.get_soda_type(data_type))
     printer.do_indent()
     for unroll_index in range(unroll_factor):
         printer.println(('hls::stream<%s>& %s,') % (data_type, GetDstName(unroll_index)))
     printer.println('hls::stream<ap_uint<%d> >& from, uint64_t data_num)' % burst_width)
     printer.un_indent()
     printer.do_scope()
-    printer.println('unpack_%s_epoch:' % get_soda_type(data_type), 0)
+    printer.println('unpack_%s_epoch:' % core.get_soda_type(data_type), 0)
     printer.println('for(uint64_t i = 0; i < data_num; ++i)')
     printer.do_scope()
     printer.println('#pragma HLS pipeline II=%d' % ii, 0)
     printer.println('ap_uint<%d> tmp;' % burst_width)
     printer.println('from>>tmp;')
-    if is_float(data_type):
-        printer.println('uint%d_t raw_bits;' % TYPE_WIDTH[data_type])
+    if core.is_float(data_type):
+        printer.println('uint%d_t raw_bits;' % core.TYPE_WIDTH[data_type])
     if coalesced_size >= unroll_factor:
         for i in range(coalesced_size):
-            if is_float(data_type):
-                printer.println('raw_bits = tmp(%s*%d-1, %s*%d); %s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i%unroll_factor), data_type))
+            if core.is_float(data_type):
+                printer.println('raw_bits = tmp(%s*%d-1, %s*%d); %s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type], GetDstName(i%unroll_factor), data_type))
             else:
-                printer.println('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type]))
+                printer.println('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type]))
     else:
         printer.println('switch(i&%d)' % (unroll_factor//coalesced_size-1))
         printer.do_scope()
@@ -878,10 +870,10 @@ def print_unpack(printer, burst_width, data_type, unroll_factor):
             printer.println('case %d:' % batch)
             printer.do_scope()
             for i in range(coalesced_size):
-                if is_float(data_type):
-                    printer.println('raw_bits = tmp(%s*%d-1, %s*%d);%s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size), data_type))
+                if core.is_float(data_type):
+                    printer.println('raw_bits = tmp(%s*%d-1, %s*%d);%s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size), data_type))
                 else:
-                    printer.println('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type]))
+                    printer.println('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type]))
             printer.println('break;')
             printer.un_scope()
         printer.un_scope()
@@ -889,32 +881,32 @@ def print_unpack(printer, burst_width, data_type, unroll_factor):
     printer.un_scope()
 
 def print_pack(printer, burst_width, data_type, unroll_factor):
-    coalesced_size = burst_width//TYPE_WIDTH[data_type]
+    coalesced_size = burst_width//core.TYPE_WIDTH[data_type]
     ii = 1
     if coalesced_size > unroll_factor:
         ii = coalesced_size/unroll_factor
     GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
     GetDstName = lambda i: ('from_%0'+str(len(str(unroll_factor-1)))+'d') % i
-    printer.println('void pack_%s(hls::stream<ap_uint<%d> >& to,' % (get_soda_type(data_type), burst_width))
+    printer.println('void pack_%s(hls::stream<ap_uint<%d> >& to,' % (core.get_soda_type(data_type), burst_width))
     printer.do_indent()
     for unroll_index in range(unroll_factor):
         printer.println(('hls::stream<%s>& %s,') % (data_type, GetDstName(unroll_index)))
     printer.println('uint64_t data_num)')
     printer.un_indent()
     printer.do_scope()
-    printer.println('pack_%s_epoch:' % get_soda_type(data_type), 0)
+    printer.println('pack_%s_epoch:' % core.get_soda_type(data_type), 0)
     printer.println('for(uint64_t i = 0; i < data_num; ++i)')
     printer.do_scope()
     printer.println('#pragma HLS pipeline II=%d' % ii, 0)
     printer.println('ap_uint<%d> tmp;' % burst_width)
-    if is_float(data_type):
+    if core.is_float(data_type):
         printer.println('%s raw_bits;' % data_type)
     if coalesced_size >= unroll_factor:
         for i in range(coalesced_size):
-            if is_float(data_type):
-                printer.println('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], TYPE_WIDTH[data_type]))
+            if core.is_float(data_type):
+                printer.println('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type], core.TYPE_WIDTH[data_type]))
             else:
-                printer.println('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i%unroll_factor)))
+                printer.println('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type], GetDstName(i%unroll_factor)))
     else:
         printer.println('switch(i&%d)' % (unroll_factor//coalesced_size-1))
         printer.do_scope()
@@ -922,10 +914,10 @@ def print_pack(printer, burst_width, data_type, unroll_factor):
             printer.println('case %d:' % batch)
             printer.do_scope()
             for i in range(coalesced_size):
-                if is_float(data_type):
-                    printer.println('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], TYPE_WIDTH[data_type]))
+                if core.is_float(data_type):
+                    printer.println('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type], core.TYPE_WIDTH[data_type]))
                 else:
-                    printer.println('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), TYPE_WIDTH[data_type], GetCoalescedIdx(i), TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size)))
+                    printer.println('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), core.TYPE_WIDTH[data_type], GetCoalescedIdx(i), core.TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size)))
             printer.println('break;')
             printer.un_scope()
         printer.un_scope()
@@ -972,7 +964,7 @@ def print_forward_func_with_border(printer, stencil, forwarder_with_border):
     src_name = forwarder_with_border[0]
     forwarder = forwarder_with_border[1]
     stage = stencil.stages[src_name]
-    stencil_window = get_overall_stencil_window(stage.preserve_border_from(), stage.output)
+    stencil_window = core.get_overall_stencil_window(stage.preserve_border_from(), stage.output)
 
     params = ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]
     params += ['hls::stream<T>& src']
@@ -1000,7 +992,7 @@ def print_forward_func_with_border(printer, stencil, forwarder_with_border):
 
     IndexTile = lambda d: '%c' % (COORDS_IN_TILE[d])
     IndexOrig = lambda d: '%c' % (COORDS_IN_ORIG[d])
-    output_idx = get_stencil_window_offset(stencil_window)
+    output_idx = core.get_stencil_window_offset(stencil_window)
     stencil_dim = get_stencil_dim(stencil_window)
     MarginCondition = lambda d: ('%s<%d || ' % (IndexOrig(d), output_idx[d]) if output_idx[d]>0 else '') + '%s>input_size_dim_%d-%d+%d' % (IndexOrig(d), d, stencil_dim[d], output_idx[d])
     printer.println('bool margin_conditions[%d];' % stencil.dim)
@@ -1064,19 +1056,19 @@ def print_forward_call(printer, stencil, src_name):
 
 def print_code(stencil, output_file):
     logger.info('generate kernel code as %s' % output_file.name)
-    printer = Printer(output_file)
+    printer = core.Printer(output_file)
 
     print_header(printer)
 
     printer.println()
 
-    print_define(printer, 'BURST_WIDTH', stencil.burst_width)
+    core.print_define(printer, 'BURST_WIDTH', stencil.burst_width)
     printer.println()
 
-    print_guard(printer, 'UNROLL_FACTOR', stencil.unroll_factor)
+    core.print_guard(printer, 'UNROLL_FACTOR', stencil.unroll_factor)
     for i in range(len(stencil.tile_size)-1):
-        print_guard(printer, 'TILE_SIZE_DIM_%d' % i, stencil.tile_size[i])
-    print_guard(printer, 'BURST_WIDTH', stencil.burst_width)
+        core.print_guard(printer, 'TILE_SIZE_DIM_%d' % i, stencil.tile_size[i])
+    core.print_guard(printer, 'BURST_WIDTH', stencil.burst_width)
     printer.println()
 
     print_load(printer)
@@ -1251,7 +1243,7 @@ def _generate_code(printer, stencil):
                 for chan in range(stencil.input.chan):
                     for bank in range(stencil.dram_bank):
                         printer.println('unpack_%s(' %
-                            get_soda_type(stencil.input.type))
+                            core.get_soda_type(stencil.input.type))
                         printer.do_indent()
                         for replica_id in range(
                                 stencil.dram_bank-1-bank,
@@ -1313,7 +1305,7 @@ def _generate_code(printer, stencil):
                 for chan in range(stencil.output.chan):
                     for bank in range(stencil.dram_bank):
                         printer.println('pack_%s(output_stream_chan_%d_'
-                            'bank_%d,' % (get_soda_type(stencil.output.type),
+                            'bank_%d,' % (core.get_soda_type(stencil.output.type),
                                 chan, bank))
                         printer.do_indent()
                         for replica_id in range(

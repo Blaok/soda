@@ -1,18 +1,18 @@
 #!/usr/bin/python3.6
-from textx import metamodel_from_str
-from textx.exceptions import TextXSyntaxError
 import argparse
 import logging
-import operator
 import os
 import sys
 
-from soda.grammar import *
-import soda.generator.kernel
-import soda.generator.host
-import soda.generator.header
-import soda.generator.utils
-import soda.model.xilinx
+from textx import metamodel_from_str
+from textx.exceptions import TextXSyntaxError
+
+from soda import core
+from soda import grammar
+from soda.codegen import header
+from soda.codegen import host
+from soda.codegen import kernel
+from soda.model import xilinx as model
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ def main():
     logger.info('set log level to '+logging.getLevelName(logging_level))
     # TODO: check tile size
 
-    soda_mm = metamodel_from_str(SODA_GRAMMAR, classes=SODA_GRAMMAR_CLASSES)
+    soda_mm = metamodel_from_str(grammar.SODA_GRAMMAR, classes=grammar.SODA_GRAMMAR_CLASSES)
     logger.info('build metamodel')
     try:
         if args.soda_src=='-':
@@ -132,7 +132,7 @@ def main():
                 soda_file_name = soda_file.name
         logger.info('%s parsed as soda file' % soda_file_name)
 
-        stencil = soda.generator.utils.Stencil(
+        stencil = core.Stencil(
             burst_width = args.burst_width if args.burst_width is not None else soda_model.burst_width,
             dram_bank = args.dram_bank if args.dram_bank is not None else soda_model.dram_bank,
             border = args.border if args.border is not None else soda_model.border,
@@ -167,24 +167,24 @@ def main():
 
         if args.kernel_file is not None:
             if args.kernel_file=='-':
-                soda.generator.kernel.print_code(stencil, sys.stdout)
+                kernel.print_code(stencil, sys.stdout)
             else:
                 with open(args.kernel_file, 'w') as kernel_file:
-                    soda.generator.kernel.print_code(stencil, kernel_file)
+                    kernel.print_code(stencil, kernel_file)
 
         if args.host_file is not None:
             if args.host_file=='-':
-                soda.generator.host.print_code(stencil, sys.stdout)
+                host.print_code(stencil, sys.stdout)
             else:
                 with open(args.host_file, 'w') as host_file:
-                    soda.generator.host.print_code(stencil, host_file)
+                    host.print_code(stencil, host_file)
 
         if args.header_file is not None:
             if args.header_file=='-':
-                soda.generator.header.print_code(stencil, sys.stdout)
+                header.print_code(stencil, sys.stdout)
             else:
                 with open(args.header_file, 'w') as header_file:
-                    soda.generator.header.print_code(stencil, header_file)
+                    header.print_code(stencil, header_file)
 
         if args.estimation_file is not None:
             if args.model_file is None:
@@ -198,9 +198,9 @@ def main():
 
             def print_estimation():
                 def print_estimation():
-                    soda.model.xilinx.print_estimation(stencil,
-                                                       model_file,
-                                                       estimation_file)
+                    model.print_estimation(stencil,
+                                           model_file,
+                                           estimation_file)
                 if args.estimation_file == '-':
                     estimation_file = sys.stdout
                     print_estimation()
@@ -229,13 +229,13 @@ def main():
                         soda_model.unroll_factor, soda_model.dram_bank,
                         '-separated' if soda_model.dram_separate else '')),
                     'w') as kernel_file:
-                    soda.generator.kernel.print_code(stencil, kernel_file)
+                    kernel.print_code(stencil, kernel_file)
             if args.host_file is None:
                 with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % soda_model.app_name), 'w') as host_file:
-                    soda.generator.host.print_code(stencil, host_file)
+                    host.print_code(stencil, host_file)
             if args.header_file is None:
                 with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.h' % soda_model.app_name), 'w') as header_file:
-                    soda.generator.header.print_code(stencil, header_file)
+                    header.print_code(stencil, header_file)
     except TextXSyntaxError as e:
         logger.error(e)
         sys.exit(1)
