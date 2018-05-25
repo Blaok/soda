@@ -167,24 +167,24 @@ def main():
 
         if args.kernel_file is not None:
             if args.kernel_file=='-':
-                soda.generator.kernel.PrintCode(stencil, sys.stdout)
+                soda.generator.kernel.print_code(stencil, sys.stdout)
             else:
                 with open(args.kernel_file, 'w') as kernel_file:
-                    soda.generator.kernel.PrintCode(stencil, kernel_file)
+                    soda.generator.kernel.print_code(stencil, kernel_file)
 
         if args.host_file is not None:
             if args.host_file=='-':
-                soda.generator.host.PrintCode(stencil, sys.stdout)
+                soda.generator.host.print_code(stencil, sys.stdout)
             else:
                 with open(args.host_file, 'w') as host_file:
-                    soda.generator.host.PrintCode(stencil, host_file)
+                    soda.generator.host.print_code(stencil, host_file)
 
         if args.header_file is not None:
             if args.header_file=='-':
-                soda.generator.header.PrintCode(stencil, sys.stdout)
+                soda.generator.header.print_code(stencil, sys.stdout)
             else:
                 with open(args.header_file, 'w') as header_file:
-                    soda.generator.header.PrintCode(stencil, header_file)
+                    soda.generator.header.print_code(stencil, header_file)
 
         if args.estimation_file is not None:
             if args.model_file is None:
@@ -229,13 +229,13 @@ def main():
                         soda_model.unroll_factor, soda_model.dram_bank,
                         '-separated' if soda_model.dram_separate else '')),
                     'w') as kernel_file:
-                    soda.generator.kernel.PrintCode(stencil, kernel_file)
+                    soda.generator.kernel.print_code(stencil, kernel_file)
             if args.host_file is None:
                 with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % soda_model.app_name), 'w') as host_file:
-                    soda.generator.host.PrintCode(stencil, host_file)
+                    soda.generator.host.print_code(stencil, host_file)
             if args.header_file is None:
                 with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.h' % soda_model.app_name), 'w') as header_file:
-                    soda.generator.header.PrintCode(stencil, header_file)
+                    soda.generator.header.print_code(stencil, header_file)
     except TextXSyntaxError as e:
         logger.error(e)
         sys.exit(1)

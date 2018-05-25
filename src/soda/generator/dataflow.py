@@ -221,7 +221,7 @@ def create_dataflow_graph(stencil):
 
         add_fwd_nodes(stencil.input.name)
 
-        for stage in stencil.GetStagesChronologically():
+        for stage in stencil.get_stages_chronologically():
             cpt_node = ComputeNode(stage = stage, pe_id = 0)
             _logger.debug('create %s' % repr(cpt_node))
             super_source.cpt_nodes[(stage.name, 0)] = cpt_node
@@ -234,15 +234,15 @@ def create_dataflow_graph(stencil):
                     fwd_node = super_source.fwd_nodes[(input_name, offset)]
                     _logger.debug('  access %s' % repr(fwd_node))
                     fwd_node.add_child(cpt_node)
-            if stage.IsOutput():
+            if stage.is_output():
                 super_source.cpt_nodes[stage.name, 0].add_child(super_sink)
             else:
                 add_fwd_nodes(stage.name)
 
     else:
-        next_fifo = stencil.GetNextFIFO()
-        all_points = stencil.GetAllPoints()
-        reuse_buffers = stencil.GetReuseBuffers()
+        next_fifo = stencil.get_next_fifo()
+        all_points = stencil.get_all_points()
+        reuse_buffers = stencil.get_reuse_buffers()
 
         def add_fwd_nodes(src_name):
             dsts = all_points[src_name]
@@ -255,7 +255,7 @@ def create_dataflow_graph(stencil):
                     fwd_node = ForwardNode(
                         tensor = stencil.tensors[src_name],
                         offset = offset,
-                        depth = stencil.GetReuseBufferLength(src_name, offset))
+                        depth = stencil.get_reuse_buffer_length(src_name, offset))
                     _logger.debug('create %s' % repr(fwd_node))
                     init_offsets = [start
                         for start, end in reuse_buffer if start == end]
@@ -276,7 +276,7 @@ def create_dataflow_graph(stencil):
 
         add_fwd_nodes(stencil.input.name)
 
-        for stage in stencil.GetStagesChronologically():
+        for stage in stencil.get_stages_chronologically():
             for unroll_index in range(stencil.unroll_factor):
                 pe_id = stencil.unroll_factor-1-unroll_index
                 cpt_node = ComputeNode(stage = stage, pe_id = pe_id)
@@ -290,7 +290,7 @@ def create_dataflow_graph(stencil):
                         fwd_node = super_source.fwd_nodes[(input_name, offset)]
                         _logger.debug('  access %s' % repr(fwd_node))
                         fwd_node.add_child(cpt_node)
-            if stage.IsOutput():
+            if stage.is_output():
                 for pe_id in range(stencil.unroll_factor):
                     (super_source.cpt_nodes[stage.name, pe_id]
                         .add_child(super_sink))
