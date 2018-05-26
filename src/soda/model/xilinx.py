@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+import os
 import subprocess
 
 from soda import core
@@ -16,9 +17,12 @@ def accumulate_fifo(estimation_routed, width, depth):
     if fifo_size > 1024:
         inc = 16*1024//width
         modulo_depth = math.ceil(depth/inc)*inc
-        query_proc = subprocess.Popen([os.environ['XILINX_BRAM_MODEL_PATH'] + '/query', str(width), str(modulo_depth)], stdout=subprocess.PIPE, bufsize=0)
+        query_proc = subprocess.Popen([
+            os.environ['XILINX_BRAM_MODEL_PATH'] + '/query',
+            str(width), str(modulo_depth)], stdout=subprocess.PIPE, bufsize=0)
         delta = json.loads(query_proc.stdout.read())
-        delta = delta['fifo_w%d_d%d' % (width, modulo_depth)]['BRAM_18K'] + delta['fifo_w%d_d%d' % (width, modulo_depth)]['BRAM_36K']*2
+        delta = (delta['fifo_w%d_d%d' % (width, modulo_depth)]['BRAM_18K'] +
+                 delta['fifo_w%d_d%d' % (width, modulo_depth)]['BRAM_36K']*2)
 
         estimation_routed['BRAM'] += delta
         record.setdefault((width, depth, delta), 0)
@@ -32,10 +36,10 @@ def print_estimation(stencil, model_file, output_file):
     if stencil.app_name not in model['compute']:
         msg = ('stencil app %s not found in model %s' %
             (stencil.app_name, model_file.name))
-        raise SemanticError(msg)
+        raise core.SemanticError(msg)
     if model['vendor'] != 'xilinx':
         msg = 'cannot find a model for Xilinx in model %s' % model_file.name
-        raise SemanticError(msg)
+        raise core.SemanticError(msg)
     estimation = {
         'resource_hls': {
             'BRAM_18K': 0,
@@ -89,7 +93,10 @@ def print_estimation(stencil, model_file, output_file):
 
     # modules in the dataflow graph
     super_source = stencil.dataflow_super_source
-    repli = stencil.replication_factor if stencil.replication_factor is not None else 1
+    if stencil.replication_factor is not None:
+        repli = stencil.replication_factor
+    else:
+        repli = 1
     for node in super_source.bfs_node_generator():
         # forward modules
         if isinstance(node, dataflow.ForwardNode):
@@ -97,14 +104,16 @@ def print_estimation(stencil, model_file, output_file):
             if forward_key not in model:
                 msg = 'forward<%s> not found in model %s' % (node.tensor.type,
                                                              model_file.name)
-                raise SemanticError(msg)
-            resource.accum_res(estimation_hls, model[forward_key]['base'], repli)
+                raise core.SemanticError(msg)
+            resource.accum_res(estimation_hls, model[forward_key]['base'],
+                               repli)
             resource.accum_res(estimation_hls,
-                                 model[forward_key]['overhead_per_dst'],
-                                 len(node.children)*repli)
+                               model[forward_key]['overhead_per_dst'],
+                               len(node.children)*repli)
             if node.depth > 0:
                 resource.accum_res(estimation_hls,
-                                     model[forward_key]['overhead_of_depth'], repli)
+                                   model[forward_key]['overhead_of_depth'],
+                                   repli)
         elif isinstance(node, dataflow.ComputeNode):
             if node.stage.name in (stencil.output.name,):
                 stage_name = node.stage.name
@@ -114,9 +123,10 @@ def print_estimation(stencil, model_file, output_file):
                 stage_name = node.stage.name.split('_iter')[0]
             else:
                 msg = 'unknown dataflow compute node: %s' % node.stage.name
-                raise SemanticError(msg)
+                raise core.SemanticError(msg)
             resource.accum_res(estimation_hls,
-                                 model['compute'][stencil.app_name][stage_name], repli)
+                               model['compute'][stencil.app_name][stage_name],
+                               repli)
 
     performance = stencil.unroll_factor*model['target_freq']/10**3  # pixel/ns
     dram_bandwidth = model['dram_bandwidth']
@@ -137,8 +147,12 @@ def print_estimation(stencil, model_file, output_file):
 
     estimation_routed['DSP'] = estimation_hls['DSP48E']
     estimation_routed['BRAM'] = estimation_hls['BRAM_18K']
-    estimation_routed['REG'] = estimation_hls['FF']*model['ff_coeff']+model['ff_base']
-    estimation_routed['LUT'] = estimation_hls['LUT']*model['lut_coeff']+model['lut_base']
+    estimation_routed['REG'] = (estimation_hls['FF'] *
+                                model['ff_coeff'] +
+                                model['ff_base'])
+    estimation_routed['LUT'] = (estimation_hls['LUT'] *
+                                model['lut_coeff'] +
+                                model['lut_base'])
     estimation_routed['LUTMem'] = estimation_hls['LUT']*model['lutmem_coeff']
 
     # BRAMs
