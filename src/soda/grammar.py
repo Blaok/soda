@@ -7,7 +7,7 @@ from soda import core
 
 logger = logging.getLogger('__main__').getChild(__name__)
 
-SODA_GRAMMAR = '''
+SODA_GRAMMAR = r'''
 SodaProgram:
 (
     ('burst' 'width' ':' burst_width=INT)
@@ -60,7 +60,7 @@ Type: 'int8'|'int16'|'int32'|'int64'|'uint8'|'uint16'|'uint32'|'uint64'|'float'|
 YesOrNo: 'yes'|'no';
 '''
 
-def string_to_integer(s, none_val=None):
+def str2int(s, none_val=None):
     if s is None:
         return none_val
     if s[0:2] == '0x' or s[0:2] == '0X':
@@ -74,10 +74,13 @@ def string_to_integer(s, none_val=None):
 Load = namedtuple('Load', ['name', 'chan', 'idx'])
 
 def get_result_type(operand1, operand2, operator):
-    for t in ('double', 'float') + sum([('int%d_t'%w, 'uint%d_t'%w) for w in (64, 32, 16, 8)], tuple()):
+    for t in ('double', 'float') + sum([('int%d_t'%w, 'uint%d_t'%w)
+                                        for w in (64, 32, 16, 8)],
+                                       tuple()):
         if t in (operand1, operand2):
             return t
-    raise SemanticError('cannot parse type: %s %s %s' % (operand1, operator, operand2))
+    raise core.SemanticError('cannot parse type: %s %s %s' %
+        (operand1, operator, operand2))
 
 class SodaProgram(object):
     def __init__(self, **kwargs):
@@ -85,14 +88,15 @@ class SodaProgram(object):
         self.dram_bank = kwargs.pop('dram_bank')
         self.app_name = kwargs.pop('app_name')
         extra_params = kwargs.pop('extra_params')
-        self.extra_params = {} if extra_params is None else {p.name: p for p in extra_params}
+        self.extra_params = ({} if extra_params is None
+                                else {p.name: p for p in extra_params})
         self.input = kwargs.pop('input')
         self.output = kwargs.pop('output')
         self.tile_size = self.input.tile_size
         self.dim = len(self.tile_size)
         self.locals = kwargs.pop('locals')
         self.unroll_factor = kwargs.pop('unroll_factor')
-        self.dram_separate = kwargs.pop('dram_separate')=='yes'
+        self.dram_separate = kwargs.pop('dram_separate') == 'yes'
         self.iterate = kwargs.pop('iterate')
         self.border = kwargs.pop('border')
         self.cluster = kwargs.pop('cluster')
@@ -103,14 +107,13 @@ class SodaProgram(object):
             local.normalize(self.extra_params)
 
     def __str__(self):
-        return \
-            ('burst width: %d\n' % self.burst_width) + \
-            ('dram bank: %d\n' % self.dram_bank) + \
-            ('kernel: %d\n' % self.app_name) + \
-            ('dram separate: %s\n' % ('yes' if self.dram_separate else 'no')) + \
-            ('%s\n' % self.input) + \
-            ('%s\n' % self.output) + \
-            ''
+        return (
+            'burst width: %d\n' % self.burst_width +
+            'dram bank: %d\n' % self.dram_bank +
+            'kernel: %d\n' % self.app_name +
+            'dram separate: %s\n' % ('yes' if self.dram_separate else 'no') +
+            '%s\n' % self.input +
+            '%s\n' % self.output)
 
 class Expression(object):
     def __init__(self, **kwargs):
@@ -118,29 +121,39 @@ class Expression(object):
         self.operator = kwargs.pop('operator')
 
     def __str__(self):
-        return '%s%s' % \
-            (''.join([
-                str(operand)+' '+str(operator)+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), str(self.operand[-1]))
+        return '%s%s' % (''.join([
+            str(operand)+' '+str(operator)+' ' for operand, operator in zip(
+                self.operand, self.operator)]), str(self.operand[-1]))
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+                   add_latency=False):
         last_operand = next(iter(self.operand))
-        last_var = last_operand.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+        last_var = last_operand.print_code(printer, tensors, LoadPrinter,
+                                           StorePrinter, add_latency)
         last_type = last_operand.get_type(tensors)
         for this_operand, operator in zip(self.operand[1:], self.operator):
-            this_type = get_result_type(last_type, this_operand.get_type(tensors), operator)
-            this_var = this_operand.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+            this_type = get_result_type(
+                last_type, this_operand.get_type(tensors), operator)
+            this_var = this_operand.print_code(printer, tensors, LoadPrinter,
+                                               StorePrinter, add_latency)
             if add_latency:
                 printer.println('%s %s[1];' % (this_type, printer.new_var()))
                 new_var = printer.last_var()
-                printer.println('#pragma HLS resource variable=%s latency=1 core=RAM_2P_LUTRAM' % new_var, 0)
+                printer.println('#pragma HLS resource variable=%s latency=1 '
+                    'core=RAM_2P_LUTRAM' % new_var, 0)
                 printer.do_scope()
                 printer.println('#pragma HLS latency min=1', 0)
-                printer.println('%s[0] = %s %s %s;' % (new_var, last_var, operator, this_var))
+                printer.println('%s[0] = %s %s %s;' % (new_var, last_var,
+                                                       operator, this_var))
                 printer.un_scope()
-                printer.println('%s %s = %s[0];' % (this_type, printer.new_var(), new_var))
+                printer.println('%s %s = %s[0];' % (this_type,
+                                                    printer.new_var(),
+                                                    new_var))
             else:
-                printer.println('%s %s = %s %s %s;' % (this_type, printer.new_var(), last_var, operator, this_var))
+                printer.println('%s %s = %s %s %s;' % (this_type,
+                                                       printer.new_var(),
+                                                       last_var, operator,
+                                                       this_var))
             last_operand = this_operand
             last_var = printer.last_var()
             last_type = this_type
@@ -151,7 +164,9 @@ class Expression(object):
             last_operand = next(iter(self.operand))
             last_type = last_operand.get_type(tensors)
             for this_operand, operator in zip(self.operand[1:], self.operator):
-                this_type = get_result_type(last_type, this_operand.get_type(tensors), operator)
+                this_type = get_result_type(last_type,
+                                            this_operand.get_type(tensors),
+                                            operator)
                 last_operand = this_operand
                 last_type = this_type
             self.type = last_type
@@ -179,29 +194,41 @@ class Term(object):
         self.operator = kwargs.pop('operator')
 
     def __str__(self):
-        return '%s%s' % \
-            (''.join([
-                str(operand)+' '+str(operator)+' ' for operand, operator
-                    in zip(self.operand, self.operator)]), str(self.operand[-1]))
+        return '%s%s' % (''.join([
+            str(operand)+' '+str(operator)+' ' for operand, operator in zip(
+                self.operand, self.operator)]), str(self.operand[-1]))
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+                   add_latency=False):
         last_operand = next(iter(self.operand))
-        last_var = last_operand.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+        last_var = last_operand.print_code(printer, tensors, LoadPrinter,
+                                           StorePrinter, add_latency)
         last_type = last_operand.get_type(tensors)
         for this_operand, operator in zip(self.operand[1:], self.operator):
-            this_type = get_result_type(last_type, this_operand.get_type(tensors), operator)
-            this_var = this_operand.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+            this_type = get_result_type(last_type,
+                                        this_operand.get_type(tensors),
+                                        operator)
+            this_var = this_operand.print_code(printer, tensors, LoadPrinter,
+                                               StorePrinter, add_latency)
             if add_latency:
                 printer.println('%s %s[1];' % (this_type, printer.new_var()))
                 new_var = printer.last_var()
-                printer.println('#pragma HLS resource variable=%s latency=1 core=RAM_2P_LUTRAM' % new_var, 0)
+                printer.println('#pragma HLS resource variable=%s latency=1 '
+                                'core=RAM_2P_LUTRAM' % new_var, 0)
                 printer.do_scope()
                 printer.println('#pragma HLS latency min=10', 0)
-                printer.println('%s[0] = %s %s %s;' % (new_var, last_var, operator, this_var))
+                printer.println('%s[0] = %s %s %s;' % (new_var, last_var,
+                                                       operator, this_var))
                 printer.un_scope()
-                printer.println('%s %s = %s[0];' % (this_type, printer.new_var(), new_var))
+                printer.println('%s %s = %s[0];' % (this_type,
+                                                    printer.new_var(),
+                                                    new_var))
             else:
-                printer.println('%s %s = %s %s %s;' % (this_type, printer.new_var(), last_var, operator, this_var))
+                printer.println('%s %s = %s %s %s;' % (this_type,
+                                                       printer.new_var(),
+                                                       last_var,
+                                                       operator,
+                                                       this_var))
             last_operand = this_operand
             last_var = printer.last_var()
             last_type = this_type
@@ -212,7 +239,9 @@ class Term(object):
             last_operand = next(iter(self.operand))
             last_type = last_operand.get_type(tensors)
             for this_operand, operator in zip(self.operand[1:], self.operator):
-                this_type = get_result_type(last_type, this_operand.get_type(tensors), operator)
+                this_type = get_result_type(last_type,
+                                            this_operand.get_type(tensors),
+                                            operator)
                 last_operand = this_operand
                 last_type = this_type
             self.type = last_type
@@ -240,11 +269,16 @@ class Factor(object):
         self.sign = kwargs.pop('sign')
 
     def __str__(self):
-        return ('-%s' if self.sign=='-' else '%s') % str(self.operand)
+        return ('-%s' if self.sign == '-' else '%s') % str(self.operand)
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
-        this_var = self.operand.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
-        printer.println('%s %s = %s%s;' % (self.get_type(tensors), printer.new_var(), '-' if self.sign=='-' else '', this_var))
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+            add_latency=False):
+        this_var = self.operand.print_code(printer, tensors, LoadPrinter,
+                                           StorePrinter, add_latency)
+        printer.println('%s %s = %s%s;' % (self.get_type(tensors),
+                                           printer.new_var(),
+                                           '-' if self.sign == '-' else '',
+                                           this_var))
         return printer.last_var()
 
     def get_type(self, tensors):
@@ -274,27 +308,37 @@ class Func(object):
     def __str__(self):
         return '%s(%s)' % (self.name, ', '.join(str(op) for op in self.operand))
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+                   add_latency=False):
         if add_latency:
-            operand_vars = [op.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency) for op in self.operand]
-            printer.println('%s %s[1];' % (self.get_type(tensors), printer.new_var()))
+            operand_vars = [op.print_code(printer, tensors, LoadPrinter,
+                                          StorePrinter, add_latency)
+                            for op in self.operand]
+            printer.println('%s %s[1];' % (self.get_type(tensors),
+                                           printer.new_var()))
             new_var = printer.last_var()
-            printer.println('#pragma HLS resource variable=%s latency=1 core=RAM_2P_LUTRAM' % new_var, 0)
+            printer.println('#pragma HLS resource variable=%s latency=1 '
+                            'core=RAM_2P_LUTRAM' % new_var, 0)
             printer.do_scope()
             printer.println('#pragma HLS latency min=1', 0)
-            printer.println('%s[0] = %s(%s);' % (new_var, self.name, ', '.join(operand_vars)))
+            printer.println('%s[0] = %s(%s);' % (new_var, self.name,
+                                                 ', '.join(operand_vars)))
             printer.un_scope()
-            printer.println('%s %s = %s[0];' % (self.get_type(tensors), printer.new_var(), new_var))
+            printer.println('%s %s = %s[0];' % (self.get_type(tensors),
+                                                printer.new_var(), new_var))
             return printer.last_var()
-        else:
-            return '%s(%s)' % (self.name, ', '.join(op.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency) for op in self.operand))
+        return '%s(%s)' % (self.name, ', '.join(
+            op.print_code(
+                printer, tensors, LoadPrinter, StorePrinter, add_latency)
+            for op in self.operand))
 
     def get_type(self, tensors):
         if not hasattr(self, 'type'):
             if self.name in ('sqrt',):   # TODO: complete function type mapping
                 self.type = next(iter(self.operand)).get_type(tensors)
             else:
-                raise SemanticError('cannot get result type of function %s' % self.name)
+                raise core.SemanticError(
+                    'cannot get result type of function %s' % self.name)
         return self.type
 
     def get_loads(self):
@@ -317,7 +361,7 @@ class Operand(object):
     def __init__(self, **kwargs):
         self.func = kwargs.pop('func')
         self.name = kwargs.pop('name')
-        self.chan = string_to_integer(kwargs.pop('chan'), 0)
+        self.chan = str2int(kwargs.pop('chan'), 0)
         self.idx = tuple(kwargs.pop('idx'))
         self.num = kwargs.pop('num')
         self.expr = kwargs.pop('expr')
@@ -326,21 +370,27 @@ class Operand(object):
         if self.func:
             return str(self.func)
         if self.name:
-            return '%s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx)))
+            return '%s[%d](%s)' % (self.name, self.chan,
+                                   ', '.join(map(str, self.idx)))
         if self.num:
             return str(self.num)
         if self.expr:
             return '(%s)' % str(self.expr)
+        raise core.InternalError('unknown %s' % __class__)
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+            add_latency=False):
         if self.func:
-            return self.func.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+            return self.func.print_code(printer, tensors, LoadPrinter,
+                                        StorePrinter, add_latency)
         if self.name:
             return LoadPrinter(self)
         if self.num:
             return str(self.num)
         if self.expr:
-            return '(%s)' % self.expr.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+            return '(%s)' % self.expr.print_code(
+                printer, tensors, LoadPrinter, StorePrinter, add_latency)
+        raise core.InternalError('unknown %s' % __class__)
 
     def get_type(self, tensors):
         if not hasattr(self, 'type'):
@@ -355,18 +405,19 @@ class Operand(object):
                     else:
                         self.type = 'double'
                 else:
+                    fabs, ceil, log2 = math.fabs, math.ceil, math.log2
                     if self.num[0] == '+' or 'u' in self.num or 'U' in self.num:
                         self.type = 'u'
-                        width = 2**math.ceil(math.log2(math.log2(string_to_integer(self.num))))
+                        width = 2**ceil(log2(log2(str2int(self.num))))
                     else:
                         self.type = ''
-                        width = 2**math.ceil(math.log2(math.log2(2*math.fabs(string_to_integer(self.num)))))
+                        width = 2**ceil(log2(log2(2*fabs(str2int(self.num)))))
                     width = 8 if width < 8 else 64 if width > 64 else width
                     self.type += 'int%d_t' % width
             elif self.expr:
                 self.type = self.expr.get_type(tensors)
             else:
-                raise SemanticError('invalid Operand %s' % str(self))
+                raise core.SemanticError('invalid Operand %s' % str(self))
         return self.type
 
     def get_loads(self):
@@ -378,10 +429,11 @@ class Operand(object):
             elif self.num:
                 self.loads = []
             elif self.name:
-                logger.debug('load at %s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx))))
+                logger.debug('load at %s[%d](%s)' % (
+                    self.name, self.chan, ', '.join(map(str, self.idx))))
                 self.loads = [Load(self.name, self.chan, self.idx)]
             else:
-                raise SemanticError('invalid Operand %s' % str(self))
+                raise core.SemanticError('invalid Operand %s' % str(self))
         return self.loads
 
     def normalize(self, norm_offset, extra_params):
@@ -391,9 +443,11 @@ class Operand(object):
         elif self.num:
             pass
         elif self.name:
-            msg = '%s[%d](%s)' % (self.name, self.chan, ', '.join(map(str, self.idx)))
+            msg = '%s[%d](%s)' % (self.name, self.chan,
+                                  ', '.join(map(str, self.idx)))
             self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
-            logger.debug('load at %s normalized to %s[%d](%s)' % (msg, self.name, self.chan, ', '.join(map(str, self.idx))))
+            logger.debug('load at %s normalized to %s[%d](%s)' % (
+                msg, self.name, self.chan, ', '.join(map(str, self.idx))))
             del self.loads
 
     def mutate_load(self, cb):
@@ -410,13 +464,15 @@ class Input(object):
     def __init__(self, **kwargs):
         self.type = core.get_c_type(kwargs.pop('type'))
         self.name = kwargs.pop('name')
-        self.chan = string_to_integer(kwargs.pop('chan'), 1)
-        if(self.chan<1):
-            raise SemanticError('input %s has 0 channels' % self.name)
+        self.chan = str2int(kwargs.pop('chan'), 1)
+        if self.chan < 1:
+            raise core.SemanticError('input %s has 0 channels' % self.name)
         self.tile_size = kwargs.pop('tile_size')+[0]
 
     def __str__(self):
-        return ('input %s: %s[%d](%s)' % (self.type, self.name, self.chan, ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
+        return ('input %s: %s[%d](%s)' % (
+            self.type, self.name, self.chan,
+            ', '.join([str(x) for x in self.tile_size[0:-1]] + [''])))
 
 class ExtraParam(object):
     def __init__(self, **kwargs):
@@ -429,12 +485,14 @@ class ExtraParam(object):
         for attr in attrs:
             if attr.dup is not None:
                 if self.dup is not None:
-                    warn_msg = 'parameter duplication factor redefined as %d, previously defined as %d' % (string_to_integer(attr.dup), self.dup)
-                    raise SemanticWarn(warn_msg)
-                self.dup = string_to_integer(attr.dup)
+                    warn_msg = ('parameter duplication factor redefined as %d, '
+                                'previously defined as %d' %
+                                (str2int(attr.dup), self.dup))
+                    raise core.SemanticWarn(warn_msg)
+                self.dup = str2int(attr.dup)
             if attr.partitioning is not None:
-                attr.partitioning.dim = string_to_integer(attr.partitioning.dim)
-                attr.partitioning.factor = string_to_integer(attr.partitioning.factor)
+                attr.partitioning.dim = str2int(attr.partitioning.dim)
+                attr.partitioning.factor = str2int(attr.partitioning.factor)
                 self.partitioning.append(attr.partitioning)
 
     def __str__(self):
@@ -457,8 +515,9 @@ class Output(object):
         for e in self.expr:
             if hasattr(self, 'name'):
                 if self.name != e.name:
-                    err_msg = 'output had name %s but now renamed to %s' % (self.name, e.name)
-                    raise SemanticError(err_msg)
+                    err_msg = 'output had name %s but now renamed to %s' % (
+                        self.name, e.name)
+                    raise core.SemanticError(err_msg)
             else:
                 self.name = e.name
                 logger.debug('output named as %s' % e.name)
@@ -470,20 +529,22 @@ class Output(object):
                 self.chan = {e.chan}
         if self.chan != set(range(len(self.chan))):
             err_msg = ('output channel poorly-defined: %s' % str(self.chan))
-            raise SemanticError(err_msg)
+            raise core.SemanticError(err_msg)
         self.chan = len(self.chan)
         self.border = None
 
     def __str__(self):
-        return ('output %s: %s' % (self.type, self.expr))
+        return 'output %s: %s' % (self.type, self.expr)
 
     def preserve_border_from(self, node_name):
         self.preserve_border = node_name
         self.border = ('preserve', node_name)
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+                   add_latency=False):
         for e in self.expr:
-            e.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+            e.print_code(printer, tensors, LoadPrinter, StorePrinter,
+                         add_latency)
 
     def get_loads(self):
         if not hasattr(self, 'loads'):
@@ -492,9 +553,12 @@ class Output(object):
 
     def normalize(self, extra_params):
         dim = range(len(next(iter(self.expr)).idx))
-        norm_offset = tuple(min(min(load.idx[d]-e.idx[d] for load in e.get_loads() if load.name not in extra_params) for e in self.expr) for d in dim)
+        norm_offset = tuple(min(min(
+            load.idx[d]-e.idx[d] for load in e.get_loads()
+            if load.name not in extra_params) for e in self.expr) for d in dim)
         for e in self.expr:
-            e.normalize(tuple(norm_offset[d]+e.idx[d] for d in dim), extra_params)
+            e.normalize(tuple(norm_offset[d]+e.idx[d] for d in dim),
+                        extra_params)
 
     def mutate_load(self, cb):
         for e in self.expr:
@@ -524,8 +588,9 @@ class Local(object):
         for e in self.expr:
             if hasattr(self, 'name'):
                 if self.name != e.name:
-                    err_msg = 'local had name %s but now renamed to %s' % (self.name, e.name)
-                    raise SemanticError(err_msg)
+                    err_msg = 'local had name %s but now renamed to %s' % (
+                        self.name, e.name)
+                    raise core.SemanticError(err_msg)
             else:
                 self.name = e.name
                 logger.debug('local named as %s' % e.name)
@@ -537,20 +602,24 @@ class Local(object):
                 self.chan = {e.chan}
         if self.chan != set(range(len(self.chan))):
             err_msg = ('local channel poorly-defined: %s' % str(self.chan))
-            raise SemanticError(err_msg)
+            raise core.SemanticError(err_msg)
         self.chan = len(self.chan)
         self.border = None
 
     def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items() if k[0]!='_'))
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(
+            '%s = %s' % (k, v) for k, v in self.__dict__.items()
+            if k[0] != '_'))
 
     def preserve_border_from(self, node_name):
         self.preserve_border = node_name
         self.border = ('preserve', node_name)
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+                   add_latency=False):
         for e in self.expr:
-            e.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)
+            e.print_code(printer, tensors, LoadPrinter, StorePrinter,
+                         add_latency)
 
     def get_loads(self):
         if not hasattr(self, 'loads'):
@@ -559,9 +628,12 @@ class Local(object):
 
     def normalize(self, extra_params):
         dim = range(len(next(iter(self.expr)).idx))
-        norm_offset = tuple(min(min(load.idx[d]-e.idx[d] for load in e.get_loads() if load.name not in extra_params) for e in self.expr) for d in dim)
+        norm_offset = tuple(min(min(
+            load.idx[d]-e.idx[d] for load in e.get_loads()
+            if load.name not in extra_params) for e in self.expr) for d in dim)
         for e in self.expr:
-            e.normalize(tuple(norm_offset[d]+e.idx[d] for d in dim), extra_params)
+            e.normalize(tuple(norm_offset[d]+e.idx[d] for d in dim),
+                        extra_params)
         if hasattr(self, 'loads'):
             del self.loads
 
@@ -581,22 +653,27 @@ class Local(object):
 class StageExpr(object):
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
-        self.chan = string_to_integer(kwargs.pop('chan'), 0)
+        self.chan = str2int(kwargs.pop('chan'), 0)
         self.idx = tuple(kwargs.pop('idx'))
         self.expr = kwargs.pop('expr')
-        self.depth = string_to_integer(kwargs.pop('depth'))
+        self.depth = str2int(kwargs.pop('depth'))
         logger.debug('store at %s[%d](%s)%s' % (self.name, self.chan,
             ', '.join(map(str, self.idx)),
             '' if self.depth is None else ' with depth %d' % self.depth))
 
     def __str__(self):
-        return ('%s[%d](%s) = %s' % (self.name, self.chan, ', '.join(map(str, self.idx)), self.expr))
+        return '%s[%d](%s) = %s' % (
+            self.name, self.chan, ', '.join(map(str, self.idx)), self.expr)
 
     def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items() if k[0]!='_'))
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(
+            '%s = %s' % (k, v) for k, v in self.__dict__.items()
+            if k[0] != '_'))
 
-    def print_code(self, printer, tensors, LoadPrinter, StorePrinter, add_latency=False):
-        printer.println('%s = %s;' % (StorePrinter(self), self.expr.print_code(printer, tensors, LoadPrinter, StorePrinter, add_latency)))
+    def print_code(self, printer, tensors, LoadPrinter, StorePrinter,
+                   add_latency=False):
+        printer.println('%s = %s;' % (StorePrinter(self), self.expr.print_code(
+            printer, tensors, LoadPrinter, StorePrinter, add_latency)))
 
     def get_loads(self):
         if not hasattr(self, 'loads'):
@@ -604,7 +681,8 @@ class StageExpr(object):
         return self.loads
 
     def normalize(self, norm_offset, extra_params):
-        logger.debug('norm offset of %s[%d]: %s' % (self.name, self.chan, norm_offset))
+        logger.debug('norm offset of %s[%d]: %s' % (
+            self.name, self.chan, norm_offset))
         self.idx = tuple(x-o for x, o in zip(self.idx, norm_offset))
         self.expr.normalize(norm_offset, extra_params)
         del self.loads
@@ -627,4 +705,3 @@ SODA_GRAMMAR_CLASSES = [
     StageExpr,
     Term
 ]
-
