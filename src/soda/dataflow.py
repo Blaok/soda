@@ -34,7 +34,7 @@ class _Node(object):
     def bfs_node_generator(self):
         node_queue = deque([self])
         seen_nodes = {self}
-        while len(node_queue)>0:
+        while node_queue:
             node = node_queue.popleft()
             yield node
             for child in node.children:
@@ -45,7 +45,7 @@ class _Node(object):
     def dfs_node_generator(self):
         node_stack = [self]
         seen_nodes = {self}
-        while len(node_stack)>0:
+        while node_stack:
             node = node_stack.pop()
             yield node
             for child in node.children:
@@ -57,17 +57,21 @@ class _Node(object):
         nodes = {}
         for node in self.bfs_node_generator():
             nodes[node] = len(node.parents)
-        while len(nodes) > 0:
-            node = next(node for node in nodes if nodes[node]==0)
-            yield node
-            for child in node.children:
-                nodes[child] -= 1
-            del nodes[node]
+        while nodes:
+            for node in nodes:
+                if nodes[node] == 0:
+                    yield node
+                    for child in node.children:
+                        nodes[child] -= 1
+                    del nodes[node]
+                    break
+            else:
+                return
 
     def bfs_edge_generator(self):
         node_queue = deque([self])
         seen_nodes = {self}
-        while len(node_queue)>0:
+        while node_queue:
             node = node_queue.popleft()
             for child in node.children:
                 yield node, child
@@ -78,7 +82,7 @@ class _Node(object):
     def dfs_edge_generator(self):
         node_stack = [self]
         seen_nodes = {self}
-        while len(node_stack)>0:
+        while node_stack:
             node = node_stack.pop()
             for child in node.children:
                 yield node, child
@@ -198,9 +202,9 @@ def create_dataflow_graph(stencil):
                     if (src_name, offset) in super_source.fwd_nodes:
                         continue
                     fwd_node = ForwardNode(
-                        tensor = stencil.tensors[src_name],
-                        offset = offset,
-                        depth = stencil.get_replicated_reuse_buffer_length(
+                        tensor=stencil.tensors[src_name],
+                        offset=offset,
+                        depth=stencil.get_replicated_reuse_buffer_length(
                             src_name, offset))
                     _logger.debug('create %s' % repr(fwd_node))
                     init_offsets = [start
@@ -222,7 +226,7 @@ def create_dataflow_graph(stencil):
         add_fwd_nodes(stencil.input.name)
 
         for stage in stencil.get_stages_chronologically():
-            cpt_node = ComputeNode(stage = stage, pe_id = 0)
+            cpt_node = ComputeNode(stage=stage, pe_id=0)
             _logger.debug('create %s' % repr(cpt_node))
             super_source.cpt_nodes[(stage.name, 0)] = cpt_node
             for input_name, input_window in stage.window.items():
@@ -253,9 +257,9 @@ def create_dataflow_graph(stencil):
                     if (src_name, offset) in super_source.fwd_nodes:
                         continue
                     fwd_node = ForwardNode(
-                        tensor = stencil.tensors[src_name],
-                        offset = offset,
-                        depth = stencil.get_reuse_buffer_length(src_name, offset))
+                        tensor=stencil.tensors[src_name],
+                        offset=offset,
+                        depth=stencil.get_reuse_buffer_length(src_name, offset))
                     _logger.debug('create %s' % repr(fwd_node))
                     init_offsets = [start
                         for start, end in reuse_buffer if start == end]
@@ -279,7 +283,7 @@ def create_dataflow_graph(stencil):
         for stage in stencil.get_stages_chronologically():
             for unroll_index in range(stencil.unroll_factor):
                 pe_id = stencil.unroll_factor-1-unroll_index
-                cpt_node = ComputeNode(stage = stage, pe_id = pe_id)
+                cpt_node = ComputeNode(stage=stage, pe_id=pe_id)
                 _logger.debug('create %s' % repr(cpt_node))
                 super_source.cpt_nodes[(stage.name, pe_id)] = cpt_node
                 for input_name, input_window in stage.window.items():
@@ -310,6 +314,7 @@ def create_dataflow_graph(stencil):
         elif node.__class__ is ComputeNode:
             return ('\033[31mcompute %s #%d\033[0m' %
                     (node.stage.name, node.pe_id))
+        return 'unknown node'
 
     def color_attr(node):
         result = []
@@ -337,4 +342,3 @@ def create_dataflow_graph(stencil):
         else:
             _logger.debug(color_print(node))
     return super_source
-
