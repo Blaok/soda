@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+from collections import OrderedDict
 import json
 import sys
-from collections import OrderedDict
 
 class XilinxHLSReport(object):
     def __init__(self, rpt_file):
@@ -19,7 +19,7 @@ class XilinxHLSReport(object):
                 self.resources_available = OrderedDict()
                 self.resources_instances = OrderedDict()
             elif (hasattr(self, 'resources_used') and
-                    len(self.resources_used) == 0 and 'Name' in line):
+                    not self.resources_used and 'Name' in line):
                 for resource in line.split('|')[2:-1]:
                     resource = resource.strip()
                     self.resources_used[resource] = None
@@ -140,26 +140,26 @@ class XilinxHLSReport(object):
             resources_used[resource] = 0
         for module in ('Block_proc', 'entry', 'control_s_axi'):
             if module in self.instances:
-                accumulate_resources(resources_used,
+                accum_res(resources_used,
                                      self.instances[module])
         for module in ('m_axi',):
-            accumulate_resources_iterative(resources_used,
+            accum_res_iter(resources_used,
                                            self.instances[module].values())
         for module in ('load', 'store'):
-            accumulate_resources_iterative(resources_used,
+            accum_res_iter(resources_used,
                                            self.instances[module])
         for module in ('unpack', 'pack'):
             for degree in self.instances[module].values():
                 for data_type in degree.values():
-                    accumulate_resources_iterative(resources_used, data_type)
+                    accum_res_iter(resources_used, data_type)
         for module in ('compute',):
             for var in self.instances[module].values():
-                accumulate_resources_iterative(resources_used, var.values())
+                accum_res_iter(resources_used, var.values())
         for module in ('forward',):
             for degree in self.instances[module].values():
                 for data_type in degree.values():
                     for fifo_depth in data_type.values():
-                        accumulate_resources_iterative(resources_used,
+                        accum_res_iter(resources_used,
                                                        fifo_depth)
         for resource in resources:
             total = resources_used[resource]
@@ -182,8 +182,8 @@ class XilinxPostRoutingReport(object):
                   len(line_splited) == len(self.resources_used)+3 and
                   'Used Resources' in line):
                 iterator = iter(line_splited[2:-1])
-                for resource in self.resources_used:
-                    self.resources_used[resource] = next(iterator).strip().split()[0]
+                for res in self.resources_used:
+                    self.resources_used[res] = next(iterator).strip().split()[0]
 
     def __str__(self):
         return json.dumps(self.__dict__, indent=2, sort_keys=True)
@@ -191,12 +191,12 @@ class XilinxPostRoutingReport(object):
 class ReportSemanticError(Exception):
     pass
 
-def accumulate_resources(total, delta, coefficient=1):
+def accum_res(total, delta, coefficient=1):
     for resource in total:
         total[resource] += delta[resource] * coefficient
-def accumulate_resources_iterative(total, deltas, coefficient=1):
+def accum_res_iter(total, deltas, coefficient=1):
     for delta in deltas:
-        accumulate_resources(total, delta, coefficient)
+        accum_res(total, delta, coefficient)
 
 def main():
     for file_name in sys.argv[1:]:
@@ -207,8 +207,8 @@ def main():
             elif file_name.endswith('_csynth.rpt'):
                 rpt = XilinxHLSReport(f)
                 rpt.check()
-                print(json.dumps({'resources_hls_used': rpt.resources_used}, indent=2))
+                print(json.dumps({'resources_hls_used': rpt.resources_used},
+                                 indent=2))
 
 if __name__ == '__main__':
     main()
-

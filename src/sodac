@@ -1,18 +1,18 @@
 #!/usr/bin/python3.6
-from textx import metamodel_from_str
-from textx.exceptions import TextXSyntaxError
 import argparse
 import logging
-import operator
 import os
 import sys
 
-from soda.grammar import *
-import soda.generator.kernel
-import soda.generator.host
-import soda.generator.header
-import soda.generator.utils
-import soda.model.xilinx
+from textx import metamodel_from_str
+from textx.exceptions import TextXSyntaxError
+
+from soda import core
+from soda import grammar
+from soda.codegen import header
+from soda.codegen import host
+from soda.codegen import kernel
+from soda.model import xilinx as model
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 def main():
     if (sys.version_info.major, sys.version_info.minor) < (3, 6):
         raise Exception('Python 3.6+ is needed for correct result')
-    parser = argparse.ArgumentParser(prog='sodac', description='Stencil with Unrolling and Pipelining Optimization (SODA) compiler')
+    parser = argparse.ArgumentParser(
+        prog='sodac',
+        description='Stencil with Optimized Dataflow Architecture '
+                    '(SODA) compiler')
     parser.add_argument('--verbose', '-v',
                         action='count',
                         dest='verbose',
@@ -48,7 +51,8 @@ def main():
                         nargs='+',
                         metavar='TILE_SIZE',
                         dest='tile_size',
-                        help='override tile size; 0 means no overriding on that dimension')
+                        help='override tile size; '
+                             '0 means no overriding on that dimension')
     parser.add_argument('--dram-bank',
                         type=int,
                         dest='dram_bank',
@@ -62,7 +66,8 @@ def main():
                         type=int,
                         metavar='#ITERATION',
                         dest='iterate',
-                        help='override iterate directive; repeat execution multiple times iteratively')
+                        help='override iterate directive; '
+                        'repeat execution multiple times iteratively')
     parser.add_argument('--border',
                         type=str,
                         metavar='(ignore|preserve)',
@@ -72,7 +77,11 @@ def main():
                         type=str,
                         metavar='(none|fine|coarse|full)',
                         dest='cluster',
-                        help='module clustering level, `none` generates standalone compute / forward modules, `fine` fuses forwarders into compute modules, `coarse` fuses each stage together, `full` fuses everything together')
+                        help='module clustering level, `none` generates '
+                             'standalone compute / forward modules, `fine` '
+                             'fuses forwarders into compute modules, `coarse` '
+                             'fuses each stage together, `full` fuses '
+                             'everything together')
     parser.add_argument(type=str,
                         dest='soda_src',
                         metavar='file',
@@ -81,12 +90,16 @@ def main():
                         type=str,
                         dest='output_dir',
                         metavar='dir',
-                        help='directory to generate kernel, source, and header; default names used; default to the current working directory; may be overridden by --kernel-file, --source-file, or --header-file')
+                        help='directory to generate kernel, source, and '
+                             'header; default names used; default to the '
+                             'current working directory; may be overridden by '
+                             '--kernel-file, --source-file, or --header-file')
     parser.add_argument('--kernel-file',
                         type=str,
                         dest='kernel_file',
                         metavar='file',
-                        help='Vivado HLS C++ kernel code; overrides --output-dir')
+                        help='Vivado HLS C++ kernel code; '
+                             'overrides --output-dir')
     parser.add_argument('--source-file',
                         type=str,
                         dest='host_file',
@@ -106,7 +119,8 @@ def main():
                         type=str,
                         dest='estimation_file',
                         metavar='file',
-                        help='report resource and performance estimation as json file')
+                        help='report resource and performance estimation as '
+                             'json file')
 
     args = parser.parse_args()
     verbose = 0 if args.verbose is None else args.verbose
@@ -117,74 +131,108 @@ def main():
     if logging_level < logging.DEBUG:
         logging_level = logging.DEBUG
     logger.setLevel(logging_level)
-    logger.info('set log level to '+logging.getLevelName(logging_level))
+    logger.info('set log level to %s', logging.getLevelName(logging_level))
     # TODO: check tile size
 
-    soda_mm = metamodel_from_str(soda_grammar, classes=soda_grammar_classes)
+    soda_mm = metamodel_from_str(grammar.SODA_GRAMMAR,
+                                 classes=grammar.SODA_GRAMMAR_CLASSES)
     logger.info('build metamodel')
     try:
-        if args.soda_src=='-':
+        if args.soda_src == '-':
             soda_file_name = sys.stdin.name
             soda_model = soda_mm.model_from_str(sys.stdin.read())
         else:
             with open(args.soda_src, 'r') as soda_file:
                 soda_model = soda_mm.model_from_str(soda_file.read())
                 soda_file_name = soda_file.name
-        logger.info('%s parsed as soda file' % soda_file_name)
+        logger.info('%s parsed as soda file', soda_file_name)
 
-        stencil = soda.generator.utils.Stencil(
-            burst_width = args.burst_width if args.burst_width is not None else soda_model.burst_width,
-            dram_bank = args.dram_bank if args.dram_bank is not None else soda_model.dram_bank,
-            border = args.border if args.border is not None else soda_model.border,
-            iterate = args.iterate if args.iterate is not None else soda_model.iterate,
-            cluster = args.cluster if args.cluster is not None else soda_model.cluster,
-            app_name = soda_model.app_name,
-            input = soda_model.input,
-            output = soda_model.output,
-            intermediates = soda_model.intermediates,
-            dim = soda_model.dim,
-            extra_params = soda_model.extra_params,
-            tile_size = [args.tile_size[i] if args.tile_size is not None and i<len(args.tile_size) and args.tile_size[i] > 0 else soda_model.tile_size[i] for i in range(soda_model.dim-1)]+[0],
-            unroll_factor = (args.unroll_factor if args.unroll_factor is not None else soda_model.unroll_factor) if args.replication_factor is None else args.replication_factor,
-            replication_factor = args.replication_factor if args.replication_factor is not None else 1,
-            dram_separate = args.dram_separate=='yes' if args.dram_separate is not None else soda_model.dram_separate)
+        tile_size = []
+        for dim in range(soda_model.dim-1):
+            if (args.tile_size is not None and
+                    dim < len(args.tile_size) and
+                    args.tile_size[dim] > 0):
+                tile_size.append(args.tile_size[dim])
+            else:
+                tile_size.append(soda_model.tile_size[dim])
+        tile_size.append(0)
 
-        logger.debug('kernel        : %s' % stencil.app_name)
-        logger.debug('burst width   : %d' % stencil.burst_width)
-        logger.debug('dram bank  : %d' % ((stencil.dram_bank*2) if stencil.dram_separate else stencil.dram_bank))
-        logger.debug('dram separate : %s' % ('yes' if stencil.dram_separate else 'no'))
-        logger.debug('unroll factor : %d' % stencil.unroll_factor)
-        logger.debug('tile size     : (%s,)' % ', '.join([str(x) for x in stencil.tile_size[:-1]]))
-        logger.debug('dimension     : %d' % stencil.dim)
-        logger.debug('input name    : %s' % stencil.input.name)
-        logger.debug('input type    : %s' % stencil.input.type)
-        logger.debug('input channel : %d' % stencil.input.chan)
-        logger.debug('output name   : %s' % stencil.output.name)
-        logger.debug('output type   : %s' % stencil.output.type)
-        logger.debug('output channel: %d' % stencil.output.chan)
+        if args.replication_factor is None:
+            if args.unroll_factor is not None:
+                unroll_factor = args.unroll_factor
+            else:
+                unroll_factor = soda_model.unroll_factor
+            replication_factor = 1
+        else:
+            unroll_factor = args.replication_factor
+            replication_factor = args.replication_factor
+
+        if args.dram_separate is not None:
+            dram_separate = args.dram_separate == 'yes'
+        else:
+            dram_separate = soda_model.dram_separate
+
+        stencil = core.Stencil(
+            burst_width=args.burst_width if args.burst_width is not None
+                                         else soda_model.burst_width,
+            dram_bank=args.dram_bank if args.dram_bank is not None
+                                     else soda_model.dram_bank,
+            border=args.border if args.border is not None
+                               else soda_model.border,
+            iterate=args.iterate if args.iterate is not None
+                                 else soda_model.iterate,
+            cluster=args.cluster if args.cluster is not None
+                                 else soda_model.cluster,
+            app_name=soda_model.app_name,
+            input=soda_model.input,
+            output=soda_model.output,
+            locals=soda_model.locals,
+            dim=soda_model.dim,
+            extra_params=soda_model.extra_params,
+            tile_size=tile_size,
+            unroll_factor=unroll_factor,
+            replication_factor=replication_factor,
+            dram_separate=dram_separate)
+
+        logger.debug('kernel        : %s', stencil.app_name)
+        logger.debug('burst width   : %d', stencil.burst_width)
+        logger.debug('dram bank     : %d', ((stencil.dram_bank*2)
+            if stencil.dram_separate else stencil.dram_bank))
+        logger.debug('dram separate : %s', ('yes'
+            if stencil.dram_separate else 'no'))
+        logger.debug('unroll factor : %d', stencil.unroll_factor)
+        logger.debug('tile size     : (%s,)', ', '.join(
+            [str(x) for x in stencil.tile_size[:-1]]))
+        logger.debug('dimension     : %d', stencil.dim)
+        logger.debug('input name    : %s', stencil.input.name)
+        logger.debug('input type    : %s', stencil.input.type)
+        logger.debug('input channel : %d', stencil.input.chan)
+        logger.debug('output name   : %s', stencil.output.name)
+        logger.debug('output type   : %s', stencil.output.type)
+        logger.debug('output channel: %d', stencil.output.chan)
         for p in stencil.extra_params:
-            logger.debug('extra params  : %s' % str(p))
+            logger.debug('extra params  : %s', str(p))
 
         if args.kernel_file is not None:
-            if args.kernel_file=='-':
-                soda.generator.kernel.PrintCode(stencil, sys.stdout)
+            if args.kernel_file == '-':
+                kernel.print_code(stencil, sys.stdout)
             else:
                 with open(args.kernel_file, 'w') as kernel_file:
-                    soda.generator.kernel.PrintCode(stencil, kernel_file)
+                    kernel.print_code(stencil, kernel_file)
 
         if args.host_file is not None:
-            if args.host_file=='-':
-                soda.generator.host.PrintCode(stencil, sys.stdout)
+            if args.host_file == '-':
+                host.print_code(stencil, sys.stdout)
             else:
                 with open(args.host_file, 'w') as host_file:
-                    soda.generator.host.PrintCode(stencil, host_file)
+                    host.print_code(stencil, host_file)
 
         if args.header_file is not None:
-            if args.header_file=='-':
-                soda.generator.header.PrintCode(stencil, sys.stdout)
+            if args.header_file == '-':
+                header.print_code(stencil, sys.stdout)
             else:
                 with open(args.header_file, 'w') as header_file:
-                    soda.generator.header.PrintCode(stencil, header_file)
+                    header.print_code(stencil, header_file)
 
         if args.estimation_file is not None:
             if args.model_file is None:
@@ -198,9 +246,9 @@ def main():
 
             def print_estimation():
                 def print_estimation():
-                    soda.model.xilinx.print_estimation(stencil,
-                                                       model_file,
-                                                       estimation_file)
+                    model.print_estimation(stencil,
+                                           model_file,
+                                           estimation_file)
                 if args.estimation_file == '-':
                     estimation_file = sys.stdout
                     print_estimation()
@@ -229,21 +277,31 @@ def main():
                         soda_model.unroll_factor, soda_model.dram_bank,
                         '-separated' if soda_model.dram_separate else '')),
                     'w') as kernel_file:
-                    soda.generator.kernel.PrintCode(stencil, kernel_file)
+                    kernel.print_code(stencil, kernel_file)
             if args.host_file is None:
-                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.cpp' % soda_model.app_name), 'w') as host_file:
-                    soda.generator.host.PrintCode(stencil, host_file)
+                if args.output_dir is not None:
+                    host_file_dir = args.output_dir
+                    header_file_dir = args.output_dir
+                else:
+                    host_file_dir = ''
+                    header_file_dir = ''
+                host_file_name = soda_model.app_name+'.cpp'
+                header_file_name = soda_model.app_name+'.h'
+                with open(os.path.join(host_file_dir, host_file_name),
+                          'w') as host_file:
+                    host.print_code(stencil, host_file)
             if args.header_file is None:
-                with open(os.path.join(args.output_dir if args.output_dir is not None else '', '%s.h' % soda_model.app_name), 'w') as header_file:
-                    soda.generator.header.PrintCode(stencil, header_file)
+                with open(os.path.join(header_file_dir, header_file_name),
+                          'w') as header_file:
+                    header.print_code(stencil, header_file)
     except TextXSyntaxError as e:
         logger.error(e)
         sys.exit(1)
-    except SemanticError as e:
+    except core.SemanticError as e:
         logger.error(e)
         sys.exit(1)
-    except SemanticWarn as w:
-        logger.warn(w)
+    except core.SemanticWarn as w:
+        logger.warning(w)
 
 if __name__ == '__main__':
     main()

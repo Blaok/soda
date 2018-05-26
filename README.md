@@ -14,7 +14,7 @@
     input uint16: input[1](2000,)
     
     # specify an intermediate stage of computation, may appear 0 or more times
-    buffer uint16: tmp[0](0,0) = (input[0](-1,0)+input[0](0,0)+input[0](1,0))/3
+    local uint16: tmp[0](0,0) = (input[0](-1,0)+input[0](0,0)+input[0](1,0))/3
     
     # specify the output
     # channel field is optional and defaults to channel 0
@@ -38,7 +38,7 @@
 
 ## Design Considerations
 
-+ All keywords are mandatory except intermediate `buffer` and extra `param` are optional
++ All keywords are mandatory except intermediate `local` and extra `param` are optional
 + If `dram separate: no`, the same DRAM bank will be used for read and write at the same time, bandwidth will be slightly less than `dram separate: yes`, but in the case where input and output doesn't have the same data width, using the same bank can alleviate the imbalance
 + For non-iterative stencil, `unroll factor` shall be determined by the DRAM bandwidth, i.e. saturate the external bandwidth, since the resource is usually not the bottleneck
 + For iterative stencil, to use more PEs in a single iteration or to implement more iterations is yet to be explored
@@ -47,7 +47,7 @@
 + Currently `math.h` functions can be parsed but type induction is not fully implemented
 + Note that `2.0` will be a `double` number. To generate `float`, use `2.0f`. This may help reduce DSP usage
 + SODA is tiling-based and the size of the tile is specified in the `input` keyword. The last dimension is omitted because it is not needed in the reuse buffer generation
-+ The input, output, or the intermediate buffer can have more than 1 channels, which is helpful when dealing with things like RGB images
++ The input, output, or local can have more than 1 channels, which is helpful when dealing with things like RGB images
 
 
 ## Getting Started
