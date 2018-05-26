@@ -19,7 +19,7 @@ class XilinxHLSReport(object):
                 self.resources_available = OrderedDict()
                 self.resources_instances = OrderedDict()
             elif (hasattr(self, 'resources_used') and
-                    len(self.resources_used) == 0 and 'Name' in line):
+                    not self.resources_used and 'Name' in line):
                 for resource in line.split('|')[2:-1]:
                     resource = resource.strip()
                     self.resources_used[resource] = None
@@ -182,8 +182,8 @@ class XilinxPostRoutingReport(object):
                   len(line_splited) == len(self.resources_used)+3 and
                   'Used Resources' in line):
                 iterator = iter(line_splited[2:-1])
-                for resource in self.resources_used:
-                    self.resources_used[resource] = next(iterator).strip().split()[0]
+                for res in self.resources_used:
+                    self.resources_used[res] = next(iterator).strip().split()[0]
 
     def __str__(self):
         return json.dumps(self.__dict__, indent=2, sort_keys=True)
@@ -207,8 +207,8 @@ def main():
             elif file_name.endswith('_csynth.rpt'):
                 rpt = XilinxHLSReport(f)
                 rpt.check()
-                print(json.dumps({'resources_hls_used': rpt.resources_used}, indent=2))
+                print(json.dumps({'resources_hls_used': rpt.resources_used},
+                                 indent=2))
 
 if __name__ == '__main__':
     main()
-
