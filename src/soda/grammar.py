@@ -31,7 +31,7 @@ Comment: /\s*#.*$/;
 Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Expression: operand=Term (operator=PlusOrMinus operand=Term)*;
 ExtraParam: 'param' type=Type (',' attrs=ExtraParamAttr)*  ':' name=ID ('[' size=INT ']')+;
-ExtraParamAttr: 'dup' dup=Number | partitioning=Partitioning;
+ExtraParamAttr: 'dup' dup=Integer | partitioning=Partitioning;
 Factor: (sign=PlusOrMinus)? operand=Operand;
 Float: /(((\d*\.\d+|\d+\.)([+-]?[Ee]\d+)?)|(\d+[+-]?[Ee]\d+))[FfLl]?/;
 Func: name=FuncName '(' operand=Expression (',' operand=Expression)* ')';
@@ -51,7 +51,7 @@ Number: Float|Integer;
 Oct: /0[0-7]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Operand: func=Func | name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')' | num=Number | '(' expr=Expression ')';
 Output: 'output' type=Type ':' (expr=StageExpr)+;
-Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Number)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Number ('dim' '=' dim=Number)?;
+Partitioning: 'partition' partition_type='complete' ('dim' '=' dim=Integer)? | 'partition' partition_type='cyclic' 'factor' '=' factor=Integer ('dim' '=' dim=Integer)?;
 PlusOrMinus: '+'|'-';
 StageExpr: name=ID ('[' chan=Integer ']')? '(' idx=INT (',' idx=INT)* ')'
     ('~' depth=Integer)? '=' expr=Expression;
@@ -63,6 +63,8 @@ YesOrNo: 'yes'|'no';
 def str2int(s, none_val=None):
     if s is None:
         return none_val
+    while s[-1] in 'UuLl':
+        s = s[:-1]
     if s[0:2] == '0x' or s[0:2] == '0X':
         return int(s, 16)
     if s[0:2] == '0b' or s[0:2] == '0B':
