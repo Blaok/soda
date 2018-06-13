@@ -63,6 +63,8 @@ YesOrNo: 'yes'|'no';
 def str2int(s, none_val=None):
     if s is None:
         return none_val
+    while s[-1] in 'UuLl':
+        s = s[:-1]
     if s[0:2] == '0x' or s[0:2] == '0X':
         return int(s, 16)
     if s[0:2] == '0b' or s[0:2] == '0B':
