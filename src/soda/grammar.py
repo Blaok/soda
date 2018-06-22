@@ -139,38 +139,38 @@ class Ref(_Node):
             result += ' ~{}'.format(self.lat)
         return result
 
-class _BinaryOperand(_Node):
+class _BinaryOp(_Node):
     def __str__(self):
         result = str(self.operand[0])
         for operator, operand in zip(self.operator, self.operand[1:]):
             result += ' {} {}'.format(operator, operand)
         return result
 
-class Expr(_BinaryOperand):
+class Expr(_BinaryOp):
     pass
 
-class LogicAnd(_BinaryOperand):
+class LogicAnd(_BinaryOp):
     pass
 
-class BinaryOr(_BinaryOperand):
+class BinaryOr(_BinaryOp):
     pass
 
-class Xor(_BinaryOperand):
+class Xor(_BinaryOp):
     pass
 
-class BinaryAnd(_BinaryOperand):
+class BinaryAnd(_BinaryOp):
     pass
 
-class EqCmp(_BinaryOperand):
+class EqCmp(_BinaryOp):
     pass
 
-class LtCmp(_BinaryOperand):
+class LtCmp(_BinaryOp):
     pass
 
-class AddSub(_BinaryOperand):
+class AddSub(_BinaryOp):
     pass
 
-class MulDiv(_BinaryOperand):
+class MulDiv(_BinaryOp):
     pass
 
 class Unary(_Node):
