@@ -82,7 +82,7 @@ MulDivOp: '*'|'/'|'%';
 Unary: (operator=UnaryOp)* operand=Operand;
 UnaryOp: '+'|'-'|'~'|'!';
 
-Operand: Cast | Call | Ref | Num | Var | '(' Expr ')';
+Operand: cast=Cast | call=Call | ref=Ref | num=Num | var=Var | '(' expr=Expr ')';
 Cast: soda_type=Type '(' expr=Expr ')';
 Call: name=FuncName '(' arg=Expr (',' arg=Expr)* ')';
 Var: name=ID ('[' idx=Int ']')*;
@@ -177,6 +177,14 @@ class Unary(_Node):
   def __str__(self):
     return ''.join(self.operator)+str(self.operand)
 
+class Operand(_Node):
+  def __str__(self):
+    for attr in ('cast', 'call', 'ref', 'num', 'var'):
+      if getattr(self, attr) is not None:
+        return str(getattr(self, attr))
+    else:
+      return '(%s)' % str(self.expr)
+
 class Cast(_Node):
   def __str__(self):
     return '{}({})'.format(self.soda_type, self.expr)
@@ -260,6 +268,7 @@ SODA_GRAMMAR_CLASSES = [
   AddSub,
   MulDiv,
   Unary,
+  Operand,
   Cast,
   Call,
   Var,
