@@ -45,11 +45,11 @@ FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
   'copysign'|'nan'|'nextafter'|'nexttoward'|'fdim'|'fmax'|'fmin'|'fabs'|'abs'|'fma'|
   'min'|'max'|'select';
 
-Input: 'input' type=Type ':' name=ID ('(' tile_size=INT ',' (tile_size=INT ',')* ')')?;
-Local: 'local' type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
-Output: 'output' type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
+Input: 'input' soda_type=Type ':' name=ID ('(' (tile_size=INT ',')* ')')?;
+Local: 'local' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
+Output: 'output' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
 
-Let: (type=Type)? name=ID '=' expr=Expr;
+Let: (soda_type=Type)? name=ID '=' expr=Expr;
 Ref: name=ID '(' idx=INT (',' idx=INT)* ')' ('~' lat=Int)?;
 
 Expr: operand=LogicAnd (operator=LogicOrOp operand=LogicAnd)*;
@@ -83,11 +83,11 @@ Unary: (operator=UnaryOp)* operand=Operand;
 UnaryOp: '+'|'-'|'~'|'!';
 
 Operand: Cast | Call | Ref | Num | Var | '(' Expr ')';
-Cast: type=Type '(' expr=Expr ')';
+Cast: soda_type=Type '(' expr=Expr ')';
 Call: name=FuncName '(' arg=Expr (',' arg=Expr)* ')';
 Var: name=ID ('[' idx=Int ']')*;
 
-Param: 'param' type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
+Param: 'param' soda_type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
 ParamAttr: 'dup' dup=Int | partitioning=Partitioning;
 Partitioning:
   'partition' strategy='complete' ('dim' '=' dim=Int)? |
@@ -105,7 +105,7 @@ class _Node(object):
 
 class Input(_Node):
   def __str__(self):
-    result = 'input {}: {}'.format(self.type, self.name)
+    result = 'input {}: {}'.format(self.soda_type, self.name)
     if self.tile_size:
       result += '({},)'.format(', '.join(map(str, self.tile_size)))
     return result
@@ -117,7 +117,7 @@ class _LocalOrOutput(_Node):
     else:
       let = ''
     return '{} {}:{} {} = {}'.format(
-      type(self).__name__.lower(), self.type, let, self.ref, self.expr)
+      type(self).__name__.lower(), self.soda_type, let, self.ref, self.expr)
 
 class Local(_LocalOrOutput):
   pass
@@ -128,8 +128,8 @@ class Output(_LocalOrOutput):
 class Let(_Node):
   def __str__(self):
     result = '{} = {}'.format(self.name, self.expr)
-    if self.type is not None:
-      result = '{} {}'.format(self.type, result)
+    if self.soda_type is not None:
+      result = '{} {}'.format(self.soda_type, result)
     return result
 
 class Ref(_Node):
@@ -179,7 +179,7 @@ class Unary(_Node):
 
 class Cast(_Node):
   def __str__(self):
-    return '{}({})'.format(self.type, self.expr)
+    return '{}({})'.format(self.soda_type, self.expr)
 
 class Call(_Node):
   def __str__(self):
@@ -192,7 +192,7 @@ class Var(_Node):
 class Param(_Node):
   def __str__(self):
     return 'param {}{}: {}{}'.format(
-      self.type, ''.join(map(', {}'.format, self.attr)),
+      self.soda_type, ''.join(map(', {}'.format, self.attr)),
       self.name, ''.join(map('[{}]'.format, self.size)))
 
 class ParamAttr(_Node):
