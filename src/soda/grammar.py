@@ -15,10 +15,10 @@ SodaProgram:
   ('iterate' ':' iterate=INT)
   ('kernel' ':' app_name=ID)
   ('unroll' 'factor' ':' unroll_factor=INT)
-  (input=Input)+
-  (param=Param)*
-  (local=Local)*
-  (output=Output)+
+  (input_stmts=InputStmt)+
+  (param_stmts=ParamStmt)*
+  (local_stmts=LocalStmt)*
+  (output_stmts=OutputStmt)+
 )#;
 
 YesOrNo: 'yes'|'no';
@@ -45,9 +45,9 @@ FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
   'copysign'|'nan'|'nextafter'|'nexttoward'|'fdim'|'fmax'|'fmin'|'fabs'|'abs'|'fma'|
   'min'|'max'|'select';
 
-Input: 'input' soda_type=Type ':' name=ID ('(' (tile_size=INT ',')* ')')?;
-Local: 'local' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
-Output: 'output' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
+InputStmt: 'input' soda_type=Type ':' name=ID ('(' (tile_size=INT ',')* ')')?;
+LocalStmt: 'local' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
+OutputStmt: 'output' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
 
 Let: (soda_type=Type)? name=ID '=' expr=Expr;
 Ref: name=ID '(' idx=INT (',' idx=INT)* ')' ('~' lat=Int)?;
@@ -87,7 +87,7 @@ Cast: soda_type=Type '(' expr=Expr ')';
 Call: name=FuncName '(' arg=Expr (',' arg=Expr)* ')';
 Var: name=ID ('[' idx=Int ']')*;
 
-Param: 'param' soda_type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
+ParamStmt: 'param' soda_type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
 ParamAttr: 'dup' dup=Int | partitioning=Partitioning;
 Partitioning:
   'partition' strategy='complete' ('dim' '=' dim=Int)? |
@@ -103,26 +103,26 @@ class _Node(object):
     for key, val in kwargs.items():
       setattr(self, key, val)
 
-class Input(_Node):
+class InputStmt(_Node):
   def __str__(self):
     result = 'input {}: {}'.format(self.soda_type, self.name)
     if self.tile_size:
       result += '({},)'.format(', '.join(map(str, self.tile_size)))
     return result
 
-class _LocalOrOutput(_Node):
+class _LocalStmtOrOutputStmt(_Node):
   def __str__(self):
     if self.let:
       let = '\n  {}\n '.format('\n  '.join(map(str, self.let)))
     else:
       let = ''
     return '{} {}:{} {} = {}'.format(
-      type(self).__name__.lower(), self.soda_type, let, self.ref, self.expr)
+      type(self).__name__[:-4].lower(), self.soda_type, let, self.ref, self.expr)
 
-class Local(_LocalOrOutput):
+class LocalStmt(_LocalStmtOrOutputStmt):
   pass
 
-class Output(_LocalOrOutput):
+class OutputStmt(_LocalStmtOrOutputStmt):
   pass
 
 class Let(_Node):
@@ -189,7 +189,7 @@ class Var(_Node):
   def __str__(self):
     return self.name+''.join(map('[{}]'.format, self.idx))
 
-class Param(_Node):
+class ParamStmt(_Node):
   def __str__(self):
     return 'param {}{}: {}{}'.format(
       self.soda_type, ''.join(map(', {}'.format, self.attr)),
@@ -239,15 +239,15 @@ class SodaProgram(_Node):
       'iterate: {}'.format(self.iterate),
       'kernel: {}'.format(self.app_name),
       'unroll factor: {}'.format(self.unroll_factor),
-      '\n'.join(map(str, self.input)),
-      '\n'.join(map(str, self.param)),
-      '\n'.join(map(str, self.local)),
-      '\n'.join(map(str, self.output))))
+      '\n'.join(map(str, self.input_stmts)),
+      '\n'.join(map(str, self.param_stmts)),
+      '\n'.join(map(str, self.local_stmts)),
+      '\n'.join(map(str, self.output_stmts))))
 
 SODA_GRAMMAR_CLASSES = [
-  Input,
-  Local,
-  Output,
+  InputStmt,
+  LocalStmt,
+  OutputStmt,
   Let,
   Ref,
   Expr,
@@ -263,7 +263,7 @@ SODA_GRAMMAR_CLASSES = [
   Cast,
   Call,
   Var,
-  Param,
+  ParamStmt,
   ParamAttr,
   SodaProgram,
 ]

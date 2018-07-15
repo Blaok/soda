@@ -153,13 +153,16 @@ class Stencil(object):
         self.dram_bank = int(self.dram_bank/2)
     # stage-independent
     self.dim = kwargs.pop('dim')
-    self.extra_params = kwargs.pop('extra_params')
+    self.param_stmts = kwargs.pop('param_stmts')
     # stage-specific
-    input_node = kwargs.pop('input')
-    output_node = kwargs.pop('output')
+    input_stmts = kwargs.pop('input_stmts')
+    output_stmts = kwargs.pop('output_stmts')
+
+    input_types = [tensor.soda_type for tensor in input_stmts]
+    output_types = [tensor.soda_type for tensor in output_stmts]
 
     if self.iterate > 1:
-      if input_node.type != output_node.type:
+      if len(input_stmts) != len(output_stmts):
         raise SemanticError(
           'input must have the same type as output if iterate > 1 '
           'times, current input has type %s but output has type %s' %
