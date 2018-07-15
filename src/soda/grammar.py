@@ -270,7 +270,7 @@ class SodaProgram(_Node):
       self.dim = len(self.tile_size)
 
   def __str__(self):
-    return '\n'.join((
+    return '\n'.join(filter(None, (
       'border: {}'.format(self.border),
       'burst width: {}'.format(self.burst_width),
       'cluster: {}'.format(self.cluster),
@@ -282,7 +282,7 @@ class SodaProgram(_Node):
       '\n'.join(map(str, self.input_stmts)),
       '\n'.join(map(str, self.param_stmts)),
       '\n'.join(map(str, self.local_stmts)),
-      '\n'.join(map(str, self.output_stmts))))
+      '\n'.join(map(str, self.output_stmts)))))
 
 SODA_GRAMMAR_CLASSES = [
   InputStmt,
