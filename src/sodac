@@ -144,7 +144,8 @@ def main():
         soda_model = soda_mm.model_from_str(soda_file.read())
         soda_file_name = soda_file.name
     logger.info('%s parsed as soda file', soda_file_name)
-    logger.debug('soda program parsed:\n%s', soda_model)
+    logger.debug('soda program parsed:\n  %s',
+                 str(soda_model).replace('\n', '\n  '))
 
     tile_size = []
     for dim in range(soda_model.dim-1):
