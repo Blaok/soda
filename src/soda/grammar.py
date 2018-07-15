@@ -104,13 +104,28 @@ class _Node(object):
       setattr(self, key, val)
 
 class InputStmt(_Node):
+  """Node for input statement, represents a tiled input tensor.
+
+  Attributes:
+    type: Type of this input tensor.
+    name: str, name of this input tensor.
+    tile_size: list of tile sizes. The last dimension should be 0.
+  """
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    self.tile_size += [0]
+
   def __str__(self):
     result = 'input {}: {}'.format(self.soda_type, self.name)
-    if self.tile_size:
-      result += '({},)'.format(', '.join(map(str, self.tile_size)))
+    if self.tile_size[:-1]:
+      result += '({},)'.format(', '.join(map(str, self.tile_size[:-1])))
     return result
 
 class _LocalStmtOrOutputStmt(_Node):
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    self.name = self.ref.name
+
   def __str__(self):
     if self.let:
       let = '\n  {}\n '.format('\n  '.join(map(str, self.let)))
@@ -237,13 +252,30 @@ def get_result_type(operand1, operand2, operator):
     (operand1, operator, operand2))
 
 class SodaProgram(_Node):
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    for node in self.input_stmts:
+      if hasattr(self, 'tile_size'):
+        if self.tile_size != node.tile_size:
+          msg = ('tile size %s doesn\'t match previous one %s' %
+               (node.tile_size, self.tile_size))
+          raise core.SemanticError(msg)
+      elif node.tile_size[:-1]:
+        self.tile_size = node.tile_size
+        self.dim = len(self.tile_size)
+    self.dram_separate = self.dram_separate == 'yes'
+    # deal with 1D case
+    if not hasattr(self, 'tile_size'):
+      self.tile_size = node.tile_size
+      self.dim = len(self.tile_size)
+
   def __str__(self):
     return '\n'.join((
       'border: {}'.format(self.border),
       'burst width: {}'.format(self.burst_width),
       'cluster: {}'.format(self.cluster),
       'dram bank: {}'.format(self.dram_bank),
-      'dram separate: {}'.format(self.dram_separate),
+      'dram separate: {}'.format('yes' if self.dram_separate else 'no'),
       'iterate: {}'.format(self.iterate),
       'kernel: {}'.format(self.app_name),
       'unroll factor: {}'.format(self.unroll_factor),
