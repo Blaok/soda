@@ -1,6 +1,8 @@
+from collections import OrderedDict
 from collections import deque
 from functools import reduce
 import copy
+import itertools
 import logging
 import operator
 import sys
@@ -37,96 +39,88 @@ class SemanticError(Exception):
 class SemanticWarn(Exception):
   pass
 
-# Tensor.name: str
-# Tensor.type: str
-# Tensor.chan: int
-# Tensor.idx: (int, ...)
-# Tensor.parent: Stage
-# Tensor.children: {Stage, ...}
-# Tensor.offset: int
-# Tensor.border: ('preserve', {Stage, ...})
 class Tensor(object):
-  def __init__(self, node):
-    self.name = node.name
-    self.type = node.type
-    self.chan = node.chan
-    if isinstance(node, grammar.Output):
-      self.idx = next(iter(node.expr)).idx
-      for e in node.expr:
-        if e.idx != self.idx:
-          raise InternalError('Normalization went wrong')
-    elif isinstance(node, grammar.Local):
-      self.idx = next(iter(node.expr)).idx
-      for e in node.expr:
-        if e.idx != self.idx:
-          raise InternalError('Normalization went wrong')
+  """A tensor that corresponse to an input, local, or output.
+
+  This class is used in the high-level DAG for stencil dependency analysis.
+  Each tensor either is an input tensor, or has at least 1 parent tensor, which
+  will be used to generate this tensor. Meanwhile, each tensor either is an
+  output tensor, or has at least 1 child tensor, which will be computed using
+  this tensor.
+
+  Attributes:
+    name: str, unique in each SODA program.
+    soda_type: str, type of the tensor element.
+    parents: Dict from str of name of Tensor to Tensor.
+    children: Dict from str of name of Tensor to Tensor.
+    st_ref: Ref, name, index, and latency stored.
+    st_idx, Tuple of int, the index referenced by its parent stage.
+    st_offset: int, stencil offset in terms of data elements.
+    expr: Expr of computation.
+    ld_refs: Dict from str of name to list of Ref loaded.
+    ld_indices: Dict from str of name to list of accessed indices of the input.
+    ld_offsets: Dict from str of name to list of offsets of the input.
+    ld_delays: Dict from str of name to extra delay of the input.
+  """
+  def __init__(self, stmt):
+    self.name = stmt.name
+    self.soda_type = stmt.soda_type
+    self.parents = {}
+    self.children = {}
+    if issubclass(type(stmt), grammar._LocalStmtOrOutputStmt):
+      self.st_ref = stmt.ref
+      self.st_idx = self.st_ref.idx
+      self.expr = stmt.expr
+    elif isinstance(stmt, grammar.InputStmt):
+      self.st_ref = None
+      self.st_idx = None
+      self.expr = None
     else:
-      self.idx = None
-    self.parent = None
-    self.children = set()
-    self.offset = 0
-    self.border = None
+      raise InternalError('cannot initialize a Tensor from %s' % type(stmt))
+    _logger.debug('tensor initialized from stmt `%s`', stmt)
+    _logger.debug('                   at tx position %d', stmt._tx_position)
+    self.ld_refs = {}
+    self.ld_indices = {}
+    self.ld_offsets = {}
+    self.ld_delays = {}
 
   def __str__(self):
     return '%s(%s)' % (
       type(self).__name__,
       ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items()))
-
-  def preserve_border_to(self):
-    if self.border is not None and self.border[0] == 'preserve':
-      return self.border[1]
-    return None
-
-  def preserve_border_from(self):
-    return self.parent is not None and self.parent.preserve_border_from()
 
   def is_output(self):
     return len(self.children) == 0
 
   def is_input(self):
-    return self.parent is None or self.parent.is_input()
-
-# Stage.window: {str: [(int, ...), ...], ...}
-# Stage.offset: {str: [int, ...], ...}
-# Stage.delay: {str: int, ...}
-# Stage.expr: [StageExpr, ...]
-# Stage.inputs: {str: Tensor, ...}
-# Stage.output: Tensor
-# Stage.border: ('preserve', Tensor)
-class Stage(object):
-  def __init__(self, **kwargs):
-    self.window = kwargs.pop('window')
-    self.offset = kwargs.pop('offset')
-    self.delay = kwargs.pop('delay', {})
-    self.expr = kwargs.pop('expr')
-    self.inputs = kwargs.pop('inputs')
-    self.output = kwargs.pop('output')
-    self.border = None
-
-    # shortcuts
-    self.name = self.output.name
-    self.idx = self.output.idx
-
-  def __str__(self):
-    return '%s(%s)' % (
-      type(self).__name__,
-      ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items()))
-
-  def preserve_border_from(self):
-    if self.border is not None and self.border[0] == 'preserve':
-      return self.border[1]
-    return None
-
-  def preserve_border_to(self):
-    return self.output.preserve_border_from()
-
-  def is_output(self):
-    return self.output.is_output()
-
-  def is_input(self):
-    return len(self.inputs) == 0
+    return len(self.parents) == 0
 
 class Stencil(object):
+  """
+  Attributes:
+    iterate: int, number of iteration to implement.
+    border: Reserved.
+    preserve_border: Reserved.
+    cluster: Reserved.
+    burst_width: int, width of bits for DRAM burst access.
+    dram_bank: int, number of DRAM banks to use.
+    app_name: str, application's name.
+    tile_size: List of int.
+    unroll_factor: int.
+    replication_factor: int.
+    dram_separate: bool.
+    dim: int.
+    param_stmts: List of ParamStmt.
+    input_stmts: List of InputStmt.
+    local_stmts: List of LocalStmt.
+    output_stmts: List of OutputStmt.
+    input_names: Tuple of str, names of input tensors.
+    param_names: Set of str, names of param tensors.
+    local_names: Set of str, names of local tensors.
+    output_names: Tuple of str, names of output tensors.
+    input_tensors: Tuple of str of name of input tensors
+    tensors: Dict from str of name to Tensor.
+  """
   def __init__(self, **kwargs):
     self.iterate = kwargs.pop('iterate')
     if self.iterate < 1:
@@ -139,15 +133,14 @@ class Stencil(object):
     self.dram_bank = kwargs.pop('dram_bank')
     # application determined
     self.app_name = kwargs.pop('app_name')
-    # parameters can be explored
+    # parameters that can be explored
     self.tile_size = kwargs.pop('tile_size')
     self.unroll_factor = kwargs.pop('unroll_factor')
     self.replication_factor = kwargs.pop('replication_factor')
     self.dram_separate = kwargs.pop('dram_separate')
     if self.dram_separate:
       if self.dram_bank%2 != 0:
-        _logger.fatal('Number of DRAM banks has to be even when '
-                'separated')
+        _logger.fatal('Number of DRAM banks has to be even when separated')
         sys.exit(-1)
       else:
         self.dram_bank = int(self.dram_bank/2)
@@ -155,26 +148,102 @@ class Stencil(object):
     self.dim = kwargs.pop('dim')
     self.param_stmts = kwargs.pop('param_stmts')
     # stage-specific
-    input_stmts = kwargs.pop('input_stmts')
-    output_stmts = kwargs.pop('output_stmts')
+    self.input_stmts = kwargs.pop('input_stmts')
+    self.local_stmts = kwargs.pop('local_stmts')
+    self.output_stmts = kwargs.pop('output_stmts')
 
-    input_types = [tensor.soda_type for tensor in input_stmts]
-    output_types = [tensor.soda_type for tensor in output_stmts]
+    input_types = [tensor.soda_type for tensor in self.input_stmts]
+    output_types = [tensor.soda_type for tensor in self.output_stmts]
 
     if self.iterate > 1:
-      if len(input_stmts) != len(output_stmts):
+      if len(self.input_stmts) != len(self.output_stmts):
         raise SemanticError(
-          'input must have the same type as output if iterate > 1 '
-          'times, current input has type %s but output has type %s' %
-          (input_node.type, output_node.type))
-      if input_node.chan != output_node.chan:
+          'number of input tensors must be the same as output if iterate > 1 '
+          'times, currently there are %d input(s) but %d output(s)' %
+          (len(self.input_stmts), len(self.output_stmts)))
+      if input_types != output_types:
         raise SemanticError(
-          'input must have the same number of channel as output if '
-          'iterate > 1 times, current input has %d chanels but '
-          'output has %d channels' % (input_node.chan,
-                        output_node.chan))
-      _logger.debug('pipeline %d iterations of %s -> %s' %
-              (self.iterate, input_node.name, output_node.name))
+          'input must have the same type(s) as output if iterate > 1 '
+          'times, current input has type [%s] but output has type [%s]' %
+          (', '.join(map(str, input_types)),
+           ', '.join(map(str, output_types))))
+      _logger.debug('pipeline %d iterations of [%s] -> [%s]' % (self.iterate,
+        ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
+                  for stmt in self.input_stmts),
+        ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
+                  for stmt in self.output_stmts)))
+
+    # start constructing high-level DAG
+    # TODO: check for name conflicts
+    self.input_names = tuple(stmt.name for stmt in self.input_stmts)
+    self.param_names = {stmt.name for stmt in self.param_stmts}
+    self.local_names = {stmt.name for stmt in self.local_stmts}
+    self.output_names = tuple(stmt.name for stmt in self.output_stmts)
+
+    self.tensors = {}
+    for stmt in self.input_stmts:
+      tensor = Tensor(stmt)
+      self.tensors[stmt.name] = tensor
+
+    def name_in_iter(name, iteration):
+      if name in self.input_names:
+        if iteration > 0:
+          return name+'_iter%d' % iteration
+        else:
+          return name
+      elif name in self.output_names:
+        if iteration < self.iterate-1:
+          return (self.input_names[self.output_names.index(name)]+
+                  '_iter%d' % (iteration+1))
+        else:
+          return name
+      elif name in self.local_names:
+        if iteration > 0:
+          return name+'_iter%d' % iteration
+        else:
+          return name
+      elif name in self.param_names:
+        return name
+      else:
+        raise InternalError('unknown name: %s' % name)
+
+    for iteration in range(self.iterate):
+      def mutate_name_callback(obj, mutated):
+        obj = copy.copy(obj)
+        if isinstance(obj, grammar.Ref):
+          obj.name = name_in_iter(obj.name, iteration)
+        return obj
+      tensors = []
+      for stmt in itertools.chain(self.local_stmts, self.output_stmts):
+        self.tensors[tensor.name] = tensor
+        tensor = Tensor(stmt.visit(mutate_name_callback))
+        tensors.append(tensor)
+
+      def get_load_callback(obj, loads):
+        if isinstance(obj, grammar.Ref):
+          loads.setdefault(obj.name, []).append(obj)
+        return obj
+      for tensor in tensors:
+        loads = OrderedDict()
+        tensor.expr.visit(get_load_callback, loads)
+        for parent_name, ld_refs in loads.items():
+          ld_refs = {ref.idx: ref for ref in ld_refs}.values()
+          parent_tensor = self.tensors[parent_name]
+          parent_tensor.children[tensor.name] = tensor
+          tensor.parents[parent_name] = parent_tensor
+          tensor.ld_refs[parent_name] = ld_refs
+          tensor.ld_indices[parent_name] = {ref.idx: ref for ref in ld_refs}
+          tensor.ld_offsets[parent_name] = \
+            {serialize(ref.idx, self.tile_size): ref for ref in ld_refs}
+
+    # high-level DAG construction finished
+    for tensor in self.tensors.values():
+      if tensor.name in self.input_names:
+        _logger.debug('<input tensor>: %s', tensor)
+      elif tensor.name in self.output_names:
+        _logger.debug('<output tensor>: %s', tensor)
+      else:
+        _logger.debug('<local tensor>: %s', tensor)
 
     local_nodes = kwargs.pop('locals')
     local_names = set(x.name for x in local_nodes)
