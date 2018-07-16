@@ -103,6 +103,10 @@ class _Node(object):
     for key, val in kwargs.items():
       setattr(self, key, val)
 
+  def visit(self, callback, args=[]):
+    obj = callback(self, args)
+    return obj
+
 class InputStmt(_Node):
   """Node for input statement, represents a tiled input tensor.
 
@@ -134,6 +138,14 @@ class _LocalStmtOrOutputStmt(_Node):
     return '{} {}:{} {} = {}'.format(
       type(self).__name__[:-4].lower(), self.soda_type, let, self.ref, self.expr)
 
+  def visit(self, callback, args=[]):
+    obj = super().visit(callback, args)
+    obj.let = [let.visit(callback, args) for let in obj.let]
+    obj.ref = obj.ref.visit(callback, args)
+    obj.name = obj.ref.name
+    obj.expr = obj.expr.visit(callback, args)
+    return obj
+
 class LocalStmt(_LocalStmtOrOutputStmt):
   pass
 
@@ -148,6 +160,10 @@ class Let(_Node):
     return result
 
 class Ref(_Node):
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    self.idx = tuple(self.idx)
+
   def __str__(self):
     result = '{}({})'.format(self.name, ', '.join(map(str, self.idx)))
     if self.lat is not None:
@@ -160,6 +176,11 @@ class _BinaryOp(_Node):
     for operator, operand in zip(self.operator, self.operand[1:]):
       result += ' {} {}'.format(operator, operand)
     return result
+
+  def visit(self, callback, args=[]):
+    obj = super().visit(callback, args)
+    obj.operand = [operand.visit(callback, args) for operand in self.operand]
+    return obj
 
 class Expr(_BinaryOp):
   pass
@@ -192,6 +213,11 @@ class Unary(_Node):
   def __str__(self):
     return ''.join(self.operator)+str(self.operand)
 
+  def visit(self, callback, args=[]):
+    obj = super().visit(callback, args)
+    obj.operand = obj.operand.visit(callback, args)
+    return obj
+
 class Operand(_Node):
   def __str__(self):
     for attr in ('cast', 'call', 'ref', 'num', 'var'):
@@ -200,13 +226,30 @@ class Operand(_Node):
     else:
       return '(%s)' % str(self.expr)
 
+  def visit(self, callback, args=[]):
+    obj = super().visit(callback, args)
+    for attr in ('cast', 'call', 'ref', 'expr'):
+      if getattr(obj, attr) is not None:
+        setattr(obj, attr, getattr(obj, attr).visit(callback, args))
+    return obj
+
 class Cast(_Node):
   def __str__(self):
     return '{}({})'.format(self.soda_type, self.expr)
 
+  def visit(self, callback, args=[]):
+    obj = super().visit(callback, args)
+    obj.expr = obj.expr.visit(callback, args)
+    return obj
+
 class Call(_Node):
   def __str__(self):
     return '{}({})'.format(self.name, ', '.join(map(str, self.arg)))
+
+  def visit(self, callback, args=[]):
+    obj = super().visit(callback, args)
+    obj.arg = [arg.visit(callback, args) for arg in obj.arg]
+    return obj
 
 class Var(_Node):
   def __str__(self):
