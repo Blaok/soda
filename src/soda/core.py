@@ -310,7 +310,6 @@ class Stencil(object):
       tensor = self.tensors[processing_queue.popleft()]
       _logger.debug('inspecting tensor %s\'s children' % tensor.name)
       for child in tensor.children.values():
-        s = child
         if ({x.name for x in child.parents.values()} <= processed_tensors
           and child.name not in processed_tensors):
           # good, all inputs are processed
@@ -338,9 +337,10 @@ class Stencil(object):
                 loads.setdefault(obj.name, []).append(obj.idx)
               return obj
             tensor.visit_loads(get_load_list, loads)
-            _logger.debug('loads: [%s]', ', '.join(
-              ', '.join('%s(%s)' % (n, ', '.join(map(str, idx))) for idx in l)
-              for n, l in loads.items()))
+            _logger.debug(
+                'loads: %s', ', '.join('%s@[%s]' % (name, ', '.join(
+                  '(%s)' % ', '.join(map(str, idx)) for idx in indices))
+                    for name, indices in loads.items()))
             for n in loads:
               loads[n] = serialize_iter(loads[n], self.tile_size)
             for l in loads.values():
@@ -371,37 +371,35 @@ class Stencil(object):
             return offset
 
           _logger.debug('intend to generate tensor <%s> at offset %d',
-                        s.name, s.st_offset)
+                        child.name, child.st_offset)
           child.st_offset = sync(child, child.st_offset)
           _logger.debug('decide to generate tensor <%s> at offset %d',
-                        s.name, s.st_offset)
+                        child.name, child.st_offset)
 
           # add delay
-          for x in s.parents.values():
-            delay = s.st_offset - (x.st_offset +
-                           list(s.ld_offsets[x.name].keys())[-1] -
-                           stage_offset)
+          for sibling in child.parents.values():
+            delay = child.st_offset - (sibling.st_offset +
+                list(child.ld_offsets[sibling.name].keys())[-1] - stage_offset)
             if delay > 0:
               _logger.debug(
-                'tensor %s arrives at tensor <%s> '
-                'at offset %d < %d; add %d delay' % (
-                  x.name, s.name,
-                  x.st_offset+next(reversed(s.ld_offsets[x.name]))-stage_offset,
-                  s.st_offset, delay))
+                'tensor %s arrives at tensor <%s> at offset %d < %d; '
+                'add %d delay', sibling.name, child.name,
+                sibling.st_offset+next(reversed(
+                    child.ld_offsets[sibling.name]))-stage_offset,
+                child.st_offset, delay)
             else:
               _logger.debug(
-                'tensor %s arrives at tensor <%s> '
-                'at offset %d = %d; good' % (
-                  x.name, s.name,
-                  x.st_offset+next(reversed(s.ld_offsets[x.name]))-stage_offset,
-                  s.st_offset))
-            s.ld_delays[x.name] = max(delay, 0)
+                'tensor %s arrives at tensor <%s> at offset %d = %d; good',
+                sibling.name, child.name, sibling.st_offset+next(reversed(
+                  child.ld_offsets[sibling.name]))-stage_offset,
+                child.st_offset)
+            child.ld_delays[sibling.name] = max(delay, 0)
             _logger.debug('set delay of %s <- %s to %d' %
-              (s.name, x.name, s.ld_delays[x.name]))
+              (child.name, sibling.name, child.ld_delays[sibling.name]))
 
-          processing_queue.append(s.name)
-          processed_tensors.add(s.name)
-          self.chronological_tensors.append(s)
+          processing_queue.append(child.name)
+          processed_tensors.add(child.name)
+          self.chronological_tensors.append(child)
         else:
           for bb in s.inputs.values():
             if bb.name not in processed_tensors:
@@ -428,24 +426,24 @@ class Stencil(object):
       return '%s[%d](%s)' % (node.name, node.chan,
                    ', '.join(map(str, node.idx)))
 
-    for s in self.stages.values():
-      _logger.debug(
-        'stage: %s@(%s) <- [%s]' %
-        (s.name, ', '.join(map(str, s.idx)),
-         ', '.join('%s@%s' % (x.name, list(set(s.window[x.name])))
-                    for x in s.inputs.values())))
-    for s in self.stages.values():
-      for e in s.expr:
-        _logger.debug('stage.expr: %s' % e)
-    for s in self.stages.values():
-      for n, w in s.offset.items():
-        _logger.debug('stage.offset: %s@%d <- %s@[%s]' %
-                (s.name, serialize(s.output.idx, self.tile_size),
-                 n, ', '.join(map(str, w))))
-    for s in self.stages.values():
-      for n, d in s.delay.items():
-        _logger.debug('stage.delay: %s <- %s delayed %d' %
-                (s.name, n, d))
+    for tensor in self.tensors.values():
+      for name, indices in tensor.ld_indices.items():
+        _logger.debug('stage index: %s@%s <- %s@%s',
+                      tensor.name, idx2str(tensor.st_idx),
+                      name, lst2str(idx2str(idx) for idx in indices))
+    for tensor in self.tensors.values():
+      if tensor.is_input():
+        continue
+      _logger.debug('stage expr: %s = %s', tensor.st_ref, tensor.expr)
+    for tensor in self.tensors.values():
+      for name, offsets in tensor.ld_offsets.items():
+        _logger.debug('stage offset: %s@%d <- %s@%s',
+                      tensor.name, serialize(tensor.st_idx, self.tile_size),
+                      name, lst2str(offsets))
+    for tensor in self.tensors.values():
+      for name, delay in tensor.ld_delays.items():
+        _logger.debug('stage delay: %s <- %s delayed %d' %
+                (tensor.name, name, delay))
 
     # parameters generated from the above parameters
     self.pixel_width_i = TYPE_WIDTH[self.input.type]
@@ -1028,3 +1026,9 @@ def get_stencil_window_offset(stencil_window):
   # only works if window is normalized to store at 0
   return tuple(-min(p[d] for p in stencil_window)
          for d in range(len(next(iter(stencil_window)))))
+
+def idx2str(idx):
+  return '(%s)' % ', '.join(map(str, idx))
+
+def lst2str(idx):
+  return '[%s]' % ', '.join(map(str, idx))
