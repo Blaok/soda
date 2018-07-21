@@ -56,33 +56,54 @@ class Tensor(object):
     st_ref: Ref, name, index, and latency stored.
     st_idx, Tuple of int, the index referenced by its parent stage.
     st_offset: int, stencil offset in terms of data elements.
+    lets: Lets of computation.
     expr: Expr of computation.
     ld_refs: Dict from str of name to list of Ref loaded.
     ld_indices: Dict from str of name to list of accessed indices of the input.
     ld_offsets: Dict from str of name to list of offsets of the input.
     ld_delays: Dict from str of name to extra delay of the input.
   """
-  def __init__(self, stmt):
+  def __init__(self, stmt, tile_size):
     self.name = stmt.name
     self.soda_type = stmt.soda_type
     self.parents = {}
     self.children = {}
     if issubclass(type(stmt), grammar._LocalStmtOrOutputStmt):
-      self.st_ref = stmt.ref
+      self.st_ref = copy.copy(stmt.ref)
+      self.st_ref.parent = self
       self.st_idx = self.st_ref.idx
+      self.st_offset = serialize(self.st_idx, tile_size)
+      self.lets = stmt.let
       self.expr = stmt.expr
     elif isinstance(stmt, grammar.InputStmt):
+      if stmt.tile_size != tile_size:
+        raise InternalError('tile size doesn\'t match')
       self.st_ref = None
-      self.st_idx = None
+      self.st_idx = (0 for d in stmt.tile_size)
+      self.st_offset = 0
+      self.lets = []
       self.expr = None
     else:
       raise InternalError('cannot initialize a Tensor from %s' % type(stmt))
     _logger.debug('tensor initialized from stmt `%s`', stmt)
     _logger.debug('                   at tx position %d', stmt._tx_position)
+
+    # these fields are to be set externally
     self.ld_refs = {}
     self.ld_indices = {}
     self.ld_offsets = {}
     self.ld_delays = {}
+
+  def visit(self, callback, args=[]):
+    for let in self.lets:
+      let.visit(callback, args)
+    self.expr.visit(callback, args)
+    self.st_ref.visit(callback, args)
+
+  def visit_loads(self, callback, args=[]):
+    for let in self.lets:
+      let.visit(callback, args)
+    self.expr.visit(callback, args)
 
   def __str__(self):
     return '%s(%s)' % (
@@ -118,7 +139,6 @@ class Stencil(object):
     param_names: Set of str, names of param tensors.
     local_names: Set of str, names of local tensors.
     output_names: Tuple of str, names of output tensors.
-    input_tensors: Tuple of str of name of input tensors
     tensors: Dict from str of name to Tensor.
   """
   def __init__(self, **kwargs):
@@ -180,9 +200,9 @@ class Stencil(object):
     self.local_names = {stmt.name for stmt in self.local_stmts}
     self.output_names = tuple(stmt.name for stmt in self.output_stmts)
 
-    self.tensors = {}
+    self.tensors = OrderedDict()
     for stmt in self.input_stmts:
-      tensor = Tensor(stmt)
+      tensor = Tensor(stmt, self.tile_size)
       self.tensors[stmt.name] = tensor
 
     def name_in_iter(name, iteration):
@@ -213,28 +233,58 @@ class Stencil(object):
         if isinstance(obj, grammar.Ref):
           obj.name = name_in_iter(obj.name, iteration)
         return obj
+      def normalize_callback(obj, args):
+        if isinstance(obj, grammar.Ref):
+          norm_idx = args['norm_idx']
+          param_names = args['param_names']
+          if obj.name not in param_names:
+            new_idx = tuple(a-b for a, b in zip(obj.idx, norm_idx))
+            _logger.debug('reference %s(%s) normalized to %s(%s)',
+                          obj.name, ', '.join(map(str, obj.idx)),
+                          obj.name, ', '.join(map(str, new_idx)))
+            obj.idx = new_idx
+            if isinstance(obj.parent, Tensor):
+              obj.parent.st_idx = obj.idx
+              obj.parent.st_offset = serialize(obj.idx, self.tile_size)
+        return obj
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
+        tensor = Tensor(stmt.visit(mutate_name_callback), self.tile_size)
+        loads = []
+        def get_load_list(obj, loads):
+          if isinstance(obj, grammar.Ref):
+            loads.append(obj)
+          return obj
+        tensor.visit_loads(get_load_list, loads)
+        norm_idx = tuple(min(load.idx[d] for load in loads
+                             if load.name not in self.param_names)
+                         for d in range(self.dim))
+        if any(norm_idx):
+          _logger.debug('normalize index of %s: (%s)',
+                        tensor.name, ', '.join(map(str, norm_idx)))
+          norm_args = {'norm_idx': norm_idx, 'param_names': self.param_names}
+          tensor.visit(normalize_callback, norm_args)
         self.tensors[tensor.name] = tensor
-        tensor = Tensor(stmt.visit(mutate_name_callback))
         tensors.append(tensor)
 
-      def get_load_callback(obj, loads):
-        if isinstance(obj, grammar.Ref):
-          loads.setdefault(obj.name, []).append(obj)
-        return obj
       for tensor in tensors:
         loads = OrderedDict()
-        tensor.expr.visit(get_load_callback, loads)
+        def get_load_dict(obj, loads):
+          if isinstance(obj, grammar.Ref):
+            loads.setdefault(obj.name, []).append(obj)
+          return obj
+        tensor.visit_loads(get_load_dict, loads)
         for parent_name, ld_refs in loads.items():
-          ld_refs = {ref.idx: ref for ref in ld_refs}.values()
+          ld_refs = sorted(ld_refs,
+                           key=lambda ref: serialize(ref.idx, self.tile_size))
           parent_tensor = self.tensors[parent_name]
           parent_tensor.children[tensor.name] = tensor
           tensor.parents[parent_name] = parent_tensor
           tensor.ld_refs[parent_name] = ld_refs
-          tensor.ld_indices[parent_name] = {ref.idx: ref for ref in ld_refs}
-          tensor.ld_offsets[parent_name] = \
-            {serialize(ref.idx, self.tile_size): ref for ref in ld_refs}
+          tensor.ld_indices[parent_name] = OrderedDict(
+              (ref.idx, ref) for ref in ld_refs)
+          tensor.ld_offsets[parent_name] = OrderedDict(
+              (serialize(ref.idx, self.tile_size), ref) for ref in ld_refs)
 
     # high-level DAG construction finished
     for tensor in self.tensors.values():
@@ -245,266 +295,129 @@ class Stencil(object):
       else:
         _logger.debug('<local tensor>: %s', tensor)
 
-    local_nodes = kwargs.pop('locals')
-    local_names = set(x.name for x in local_nodes)
-
-    new_local_nodes = []
-    preserved_borders = {}  # {to: {from, ...}, ...}
-    NameFromIter = lambda n, i: n+'_iter%d' % i if i > 0 else n
-    def LocalLoadCallBack(n):
-      if n == input_node.name:
-        return NameFromIter(n, iteration)
-      if n in local_names:
-        return NameFromIter(n, iteration) if n in local_names else n
-      return n
-    def OutputLoadCallBack(n):
-      if n == input_node.name or n in local_names:
-        return NameFromIter(n, iteration-1)
-      return n
-    for iteration in range(1, self.iterate):
-      new_local = grammar.Local(output_node=output_node)
-      new_local.mutate_load(OutputLoadCallBack)
-      new_local.mutate_store(
-        lambda n: NameFromIter(input_node.name, iteration))
-      if self.preserve_border:
-        border_from = NameFromIter(input_node.name, iteration-1)
-        new_local.preserve_border_from(border_from)
-        preserved_borders.setdefault(
-          new_local.name, set()).add(border_from)
-      new_local_nodes.append(new_local)
-      for local in local_nodes:
-        new_local = copy.deepcopy(local)
-        new_local.mutate_load(LocalLoadCallBack)
-        new_local.mutate_store(lambda n: NameFromIter(n, iteration))
-        new_local_nodes.append(new_local)
-    if self.preserve_border:
-      border_from = NameFromIter(input_node.name, self.iterate-1)
-      output_node.preserve_border_from(border_from)
-      preserved_borders.setdefault(
-        output_node.name, set()).add(border_from)
-    output_node.mutate_load(lambda n: NameFromIter(n, self.iterate-1))
-    local_nodes += new_local_nodes
-
-    _logger.debug(input_node)
-    for local in local_nodes:
-      _logger.debug('Local(')
-      _logger.debug('  name: %s,' % local.name)
-      _logger.debug('  type: %s,' % local.type)
-      _logger.debug('  chan: %s,' % local.chan)
-      _logger.debug('  border: %s,' % local.border)
-      for e in local.expr:
-        _logger.debug('  expr  : [')
-        _logger.debug(
-          '  %s%s' % (e, '])' if e is local.expr[-1] else ''))
-    _logger.debug('Output(')
-    _logger.debug('   name: %s,' % output_node.name)
-    _logger.debug('   type: %s,' % output_node.type)
-    _logger.debug('   chan: %s,' % output_node.chan)
-    _logger.debug('   border: %s,' % output_node.border)
-    for e in output_node.expr:
-      _logger.debug('  expr  : [')
-      _logger.debug(
-        '  %s%s' % (e, '])' if e is output_node.expr[-1] else ','))
-
-    self.tensors = {i.name: Tensor(i) for i in local_nodes}
-    if input_node.name in local_names:
-      raise SemanticError('input name conflict with tensor: %s' %
-                input_node.name)
-    else:
-      self.input = Tensor(input_node)
-      self.tensors[self.input.name] = self.input
-    if output_node.name in local_names:
-      raise SemanticError('output name conflict with tensor: %s' %
-                output_node.name)
-    else:
-      self.output = Tensor(output_node)
-      self.tensors[self.output.name] = self.output
-
-    self.stages = {}
-    for local in local_nodes:
-      child_tensor = self.tensors[local.name]
-      parent_tensors = self._get_parent_tensors_for(local)
-      window = self._get_window_for(local)
-      this_stage = Stage(window=window,
-        offset={n: serialize_iter(w, self.tile_size)
-            for n, w in window.items()},
-        delay={},
-        expr=self._get_expr_for(local),
-        inputs=parent_tensors,
-        output=child_tensor,
-        border=local.border)
-      self.stages[local.name] = this_stage
-      child_tensor.parent = this_stage
-      for tensor in parent_tensors.values():
-        tensor.children.add(this_stage)
-
-    parent_tensors = self._get_parent_tensors_for(output_node)
-    window = self._get_window_for(output_node)
-    output_stage = Stage(window=window,
-      offset={n: serialize_iter(w, self.tile_size)
-          for n, w in window.items()},
-      delay={},
-      expr=self._get_expr_for(output_node),
-      inputs=parent_tensors,
-      output=self.output,
-      border=output_node.border)
-    self.stages[output_node.name] = output_stage
-    self.output.parent = output_stage
-    for tensor in parent_tensors.values():
-      tensor.children.add(output_stage)
-
-    # let tensor/stage remember which stages/tensors to send/recv as borders
-    for dst, srcs in preserved_borders.items():
-      for src in srcs:
-        _logger.debug('border from %s to %s' % (src, dst))
-        if self.tensors[src].border is None:
-          self.tensors[src].border = ('preserve', set())
-        self.tensors[src].border[1].add(self.stages[dst])
-        if self.stages[dst].border is None:
-          self.stages[dst].border = ('preserve', self.tensors[src])
-        else:
-          if self.stages[dst].border[1] != self.tensors[src]:
-            raise InternalError("Border isn't self-consistent")
-
     # now that we have global knowledge of the tensors we can calculate the
     # offsets of tensors
     _logger.info('calculate tensor offsets')
-    processing_queue = deque([self.input.name])
-    processed_tensors = {self.input.name}
-    self.chronological_tensors = [self.input]
-    _logger.debug('tensor %s is at offset %d' %
-            (self.input.name, self.input.offset))
+    processing_queue = deque(list(self.input_names))
+    processed_tensors = set(self.input_names)
+    self.chronological_tensors = list(map(self.tensors.get, self.input_names))
+    for tensor in self.chronological_tensors:
+      _logger.debug('tensor <%s> is at offset %d' %
+                    (tensor.name, tensor.st_offset))
+    _logger.debug('processing queue: %s', processing_queue)
+    _logger.debug('processed_tensors: %s', processed_tensors)
     while processing_queue:
-      b = self.tensors[processing_queue.popleft()]
-      _logger.debug('inspecting tensor %s\'s children' % b.name)
-      for s in b.children:
-        if ({x.name for x in s.inputs.values()} <= processed_tensors
-          and s.name not in processed_tensors):
+      tensor = self.tensors[processing_queue.popleft()]
+      _logger.debug('inspecting tensor %s\'s children' % tensor.name)
+      for child in tensor.children.values():
+        s = child
+        if ({x.name for x in child.parents.values()} <= processed_tensors
+          and child.name not in processed_tensors):
           # good, all inputs are processed
           # can determine offset of current tensor
           _logger.debug(
-            'input%s for tensor %s (i.e. %s) %s processed' % (
-              '' if len(s.inputs) == 1 else 's',
-              s.name,
-              ', '.join([x.name for x in s.inputs.values()]),
-              'is' if len(s.inputs) == 1 else 'are'))
-          stage_offset = serialize(s.expr[0].idx, self.tile_size)
+            'input%s for tensor <%s> (i.e. %s) %s processed',
+              '' if len(child.parents) == 1 else 's',
+              child.name,
+              ', '.join([x.name for x in child.parents.values()]),
+              'is' if len(child.parents) == 1 else 'are')
+          stage_offset = serialize(child.st_idx, self.tile_size)
 
           # synchronization check
-          def sync(stage, offset):
-            if stage is None:
+          def sync(tensor, offset):
+            if tensor is None:
               return offset
-            stage_offset = serialize(stage.expr[0].idx,
-                         self.tile_size)
+            _logger.debug('index of tensor <%s>: %s',
+                          tensor.name, tensor.st_idx)
+            tensor_offset = serialize(tensor.st_idx, self.tile_size)
+            _logger.debug('offset of tensor <%s>: %d',
+                          tensor.name, tensor_offset)
             loads = {}
-            for e in stage.expr:
-              for l in e.loads:
-                loads.setdefault(l.name, []).append(l.idx)
+            def get_load_list(obj, loads):
+              if isinstance(obj, grammar.Ref):
+                loads.setdefault(obj.name, []).append(obj.idx)
+              return obj
+            tensor.visit_loads(get_load_list, loads)
+            _logger.debug('loads: [%s]', ', '.join(
+              ', '.join('%s(%s)' % (n, ', '.join(map(str, idx))) for idx in l)
+              for n, l in loads.items()))
             for n in loads:
-              loads[n] = serialize_iter(loads[n],
-                              self.tile_size)
+              loads[n] = serialize_iter(loads[n], self.tile_size)
             for l in loads.values():
-              l[0], l[-1] = (stage_offset - max(l),
-                       stage_offset - min(l))
+              l[0], l[-1] = (tensor_offset - max(l), tensor_offset - min(l))
               del l[1:-1]
-            _logger.debug(
-              'loads in tensor %s: %s' % (stage.name, loads))
-            for tensor in stage.inputs.values():
-              stage_distance = stage.offset[tensor.name][-1]
+            _logger.debug('load offset range in tensor %s: %s',
+                          tensor.name, '{%s}' % (', '.join(
+                            '%s: [%d:%d]' % (n, *v) for n, v in loads.items())))
+            for parent in tensor.parents.values():
+              tensor_distance = next(reversed(tensor.ld_offsets[parent.name]))
+              _logger.debug('tensor distance: %s', tensor_distance)
               _logger.debug(
-                'want to access tensor %s at offset [%d, %d] '
-                'to generate tensor %s at offset %d' % (
-                  tensor.name, offset+loads[tensor.name][0],
-                  offset+loads[tensor.name][-1], stage.name,
-                  offset))
-              tensor_offset = (tensor.offset +
-                       stage_distance -
-                       stage_offset)
-              if offset < tensor_offset:
+                'want to access tensor <%s> at offset [%d, %d] '
+                'to generate tensor <%s> at offset %d',
+                  parent.name, offset+loads[parent.name][0],
+                  offset+loads[parent.name][-1], tensor.name, offset)
+              parent_offset = (parent.st_offset+tensor_distance-tensor_offset)
+              if offset < parent_offset:
                 _logger.debug(
-                  'but tensor %s won\'t be available until '
-                  'offset %d' % (stage.name, tensor_offset))
-                offset = tensor_offset
-                _logger.debug(
-                  'need to access tensor %s at offset '
-                  '[%d, %d] to generate tensor %s at offset '
-                  '%d' % (tensor.name,
-                      offset+loads[tensor.name][0],
-                      offset+loads[tensor.name][-1],
-                      stage.name, offset))
+                  'but tensor <%s> won\'t be available until offset %d',
+                  tensor.name, parent_offset)
+                offset = parent_offset
+                _logger.debug('need to access tensor <%s> at offset [%d, %d] '
+                              'to generate tensor <%s> at offset %d',
+                              parent.name, offset+loads[parent.name][0],
+                              offset+loads[parent.name][-1], tensor.name,
+                              offset)
             return offset
-          _logger.debug('intend to generate tensor %s at offset %d'
-              % (s.name, s.output.offset))
-          s.output.offset = sync(s, s.output.offset)
-          _logger.debug('decide to generate tensor %s at offset %d'
-              % (s.name, s.output.offset))
+
+          _logger.debug('intend to generate tensor <%s> at offset %d',
+                        s.name, s.st_offset)
+          child.st_offset = sync(child, child.st_offset)
+          _logger.debug('decide to generate tensor <%s> at offset %d',
+                        s.name, s.st_offset)
 
           # add delay
-          for x in s.inputs.values():
-            delay = s.output.offset - (x.offset +
-                           s.offset[x.name][-1] -
+          for x in s.parents.values():
+            delay = s.st_offset - (x.st_offset +
+                           list(s.ld_offsets[x.name].keys())[-1] -
                            stage_offset)
             if delay > 0:
               _logger.debug(
-                'tensor %s arrives at tensor %s '
+                'tensor %s arrives at tensor <%s> '
                 'at offset %d < %d; add %d delay' % (
                   x.name, s.name,
-                  x.offset+s.offset[x.name][-1]-stage_offset,
-                  s.output.offset, delay))
+                  x.st_offset+next(reversed(s.ld_offsets[x.name]))-stage_offset,
+                  s.st_offset, delay))
             else:
               _logger.debug(
-                'tensor %s arrives at tensor %s '
+                'tensor %s arrives at tensor <%s> '
                 'at offset %d = %d; good' % (
                   x.name, s.name,
-                  x.offset+s.offset[x.name][-1]-stage_offset,
-                  s.output.offset))
-            s.delay[x.name] = max(delay, 0)
+                  x.st_offset+next(reversed(s.ld_offsets[x.name]))-stage_offset,
+                  s.st_offset))
+            s.ld_delays[x.name] = max(delay, 0)
             _logger.debug('set delay of %s <- %s to %d' %
-              (s.name, x.name, s.delay[x.name]))
+              (s.name, x.name, s.ld_delays[x.name]))
 
           processing_queue.append(s.name)
           processed_tensors.add(s.name)
-          self.chronological_tensors.append(s.output)
+          self.chronological_tensors.append(s)
         else:
           for bb in s.inputs.values():
             if bb.name not in processed_tensors:
               _logger.debug(
-                'tensor %s requires tensor %s as an input' %
+                'tensor %s requires tensor <%s> as an input' %
                 (s.name, bb.name))
               _logger.debug(
-                'but tensor %s isn\'t processed yet' % bb.name)
+                'but tensor <%s> isn\'t processed yet' % bb.name)
               _logger.debug(
                 'add %s to scheduling queue' % bb.name)
               processing_queue.append(bb.name)
 
-    # setup preserving borders, has to be done here because overall window
-    # cannot be generated before dependency graph is created
-    for node in local_nodes+[output_node]:
-      if hasattr(node, 'preserve_border'):
-        # preserve border from node.preserve_border to node.name
-        windows = self.stages[node.name].window
-        windows.setdefault(
-          node.preserve_border,
-          list(set(windows.get(node.preserve_border, set()))|
-             {next(iter(node.expr)).idx}))
-        stencil_window = get_overall_stencil_window(
-          self.tensors[node.preserve_border],
-          self.tensors[node.name])
-        self.stages[node.name].delay.setdefault(
-          node.preserve_border,
-          get_stencil_distance(stencil_window, self.tile_size)-
-            serialize(get_stencil_window_offset(stencil_window),
-                  self.tile_size))
-        _logger.debug(
-          'window for %s@%s is %s' %
-          (node.name,
-           ', '.join(map(str, node.expr[0].idx)), windows))
-        self.stages[node.name].inputs.setdefault(
-          node.preserve_border, self.tensors[node.preserve_border])
-        self.tensors[node.preserve_border].children.add(
-          self.stages[node.name])
-
-    _logger.debug('tensors: '+str(list(self.tensors.keys())))
+    _logger.debug('tensors in insertion order: [%s]',
+                  ', '.join(map(str, self.tensors)))
+    _logger.debug('tensors in chronological order: [%s]',
+                  ', '.join(t.name for t in self.chronological_tensors))
     def LoadPrinter(node):
       if node.name in self.extra_params:
         return '%s(%s)' % (node.name,
