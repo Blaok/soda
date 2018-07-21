@@ -7,6 +7,8 @@ import logging
 import operator
 import sys
 
+from cached_property import cached_property
+
 from soda import dataflow
 from soda import grammar
 
@@ -58,29 +60,24 @@ class Tensor(object):
     st_offset: int, stencil offset in terms of data elements.
     lets: Lets of computation.
     expr: Expr of computation.
-    ld_refs: Dict from str of name to list of Ref loaded.
-    ld_indices: Dict from str of name to list of accessed indices of the input.
-    ld_offsets: Dict from str of name to list of offsets of the input.
+    ld_refs: Dict from str of name to dict of Ref loaded.
+    ld_indices: Dict from str of name to dict of accessed indices of the input.
+    ld_offsets: Dict from str of name to dict of offsets of the input.
     ld_delays: Dict from str of name to extra delay of the input.
   """
   def __init__(self, stmt, tile_size):
     self.name = stmt.name
     self.soda_type = stmt.soda_type
-    self.parents = {}
-    self.children = {}
+    self._tile_size = tile_size
     if issubclass(type(stmt), grammar._LocalStmtOrOutputStmt):
       self.st_ref = copy.copy(stmt.ref)
       self.st_ref.parent = self
-      self.st_idx = self.st_ref.idx
-      self.st_offset = serialize(self.st_idx, tile_size)
       self.lets = stmt.let
       self.expr = stmt.expr
     elif isinstance(stmt, grammar.InputStmt):
       if stmt.tile_size != tile_size:
         raise InternalError('tile size doesn\'t match')
       self.st_ref = None
-      self.st_idx = (0 for d in stmt.tile_size)
-      self.st_offset = 0
       self.lets = []
       self.expr = None
     else:
@@ -89,10 +86,33 @@ class Tensor(object):
     _logger.debug('                   at tx position %d', stmt._tx_position)
 
     # these fields are to be set externally
-    self.ld_refs = {}
-    self.ld_indices = {}
-    self.ld_offsets = {}
-    self.ld_delays = {}
+    self.parents = OrderedDict()
+    self.children = OrderedDict()
+    self.ld_refs = OrderedDict()
+    self.ld_delays = OrderedDict()
+
+  @cached_property
+  def st_idx(self):
+    if self.st_ref is not None:
+      return self.st_ref.idx
+    else:
+      return (0,)*len(self._tile_size)
+
+  @cached_property
+  def st_offset(self):
+    return serialize(self.st_idx, self._tile_size)
+
+  @cached_property
+  def ld_indices(self):
+    return OrderedDict((name, OrderedDict((ref.idx, ref) for ref in refs))
+                       for name, refs in self.ld_refs.items())
+
+  @cached_property
+  def ld_offsets(self):
+    return OrderedDict(
+      (name, OrderedDict(
+        (serialize(ref.idx, self._tile_size), ref) for ref in refs))
+      for name, refs in self.ld_refs.items())
 
   def visit(self, callback, args=[]):
     for let in self.lets:
@@ -115,6 +135,12 @@ class Tensor(object):
 
   def is_input(self):
     return len(self.parents) == 0
+
+  def is_producer(self):
+    return not self.is_output()
+
+  def is_consumer(self):
+    return not self.is_input()
 
 class Stencil(object):
   """
@@ -172,34 +198,62 @@ class Stencil(object):
     self.local_stmts = kwargs.pop('local_stmts')
     self.output_stmts = kwargs.pop('output_stmts')
 
-    input_types = [tensor.soda_type for tensor in self.input_stmts]
-    output_types = [tensor.soda_type for tensor in self.output_stmts]
-
     if self.iterate > 1:
       if len(self.input_stmts) != len(self.output_stmts):
         raise SemanticError(
           'number of input tensors must be the same as output if iterate > 1 '
           'times, currently there are %d input(s) but %d output(s)' %
           (len(self.input_stmts), len(self.output_stmts)))
-      if input_types != output_types:
+      if self.input_types != self.output_types:
         raise SemanticError(
           'input must have the same type(s) as output if iterate > 1 '
-          'times, current input has type [%s] but output has type [%s]' %
-          (', '.join(map(str, input_types)),
-           ', '.join(map(str, output_types))))
+          'times, current input has type %s but output has type %s' %
+          (lst2str(self.input_types), lst2str(self.output_types)))
       _logger.debug('pipeline %d iterations of [%s] -> [%s]' % (self.iterate,
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.input_stmts),
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.output_stmts)))
 
+    _logger.debug('producer tensors: [%s]',
+                  ', '.join(tensor.name for tensor in self.producer_tensors))
+    _logger.debug('consumer tensors: [%s]',
+                  ', '.join(tensor.name for tensor in self.consumer_tensors))
+
+    _logger.debug('dataflow: %s', self.dataflow_super_source)
+
+  @cached_property
+  def dataflow_super_source(self):
+    return dataflow.create_dataflow_graph(self)
+
+  @cached_property
+  def input_types(self):
+    return tuple(tensor.soda_type for tensor in self.input_stmts)
+
+  @cached_property
+  def output_types(self):
+    return tuple(tensor.soda_type for tensor in self.output_stmts)
+
+  @cached_property
+  def input_names(self):
+    return tuple(stmt.name for stmt in self.input_stmts)
+
+  @cached_property
+  def param_names(self):
+    return {stmt.name for stmt in self.param_stmts}
+
+  @cached_property
+  def local_names(self):
+    return {stmt.name for stmt in self.local_stmts}
+
+  @cached_property
+  def output_names(self):
+    return tuple(stmt.name for stmt in self.output_stmts)
+
+  @cached_property
+  def tensors(self):
     # start constructing high-level DAG
     # TODO: check for name conflicts
-    self.input_names = tuple(stmt.name for stmt in self.input_stmts)
-    self.param_names = {stmt.name for stmt in self.param_stmts}
-    self.local_names = {stmt.name for stmt in self.local_stmts}
-    self.output_names = tuple(stmt.name for stmt in self.output_stmts)
-
     self.tensors = OrderedDict()
     for stmt in self.input_stmts:
       tensor = Tensor(stmt, self.tile_size)
@@ -281,10 +335,6 @@ class Stencil(object):
           parent_tensor.children[tensor.name] = tensor
           tensor.parents[parent_name] = parent_tensor
           tensor.ld_refs[parent_name] = ld_refs
-          tensor.ld_indices[parent_name] = OrderedDict(
-              (ref.idx, ref) for ref in ld_refs)
-          tensor.ld_offsets[parent_name] = OrderedDict(
-              (serialize(ref.idx, self.tile_size), ref) for ref in ld_refs)
 
     # high-level DAG construction finished
     for tensor in self.tensors.values():
@@ -294,7 +344,10 @@ class Stencil(object):
         _logger.debug('<output tensor>: %s', tensor)
       else:
         _logger.debug('<local tensor>: %s', tensor)
+    return self.tensors
 
+  @cached_property
+  def chronological_tensors(self):
     # now that we have global knowledge of the tensors we can calculate the
     # offsets of tensors
     _logger.info('calculate tensor offsets')
@@ -416,15 +469,6 @@ class Stencil(object):
                   ', '.join(map(str, self.tensors)))
     _logger.debug('tensors in chronological order: [%s]',
                   ', '.join(t.name for t in self.chronological_tensors))
-    def LoadPrinter(node):
-      if node.name in self.extra_params:
-        return '%s(%s)' % (node.name,
-                   ', '.join(map(str, node.idx)))
-      return '%s[%d](%s)' % (node.name, node.chan,
-                   ', '.join(map(str, node.idx)))
-    def StorePrinter(node):
-      return '%s[%d](%s)' % (node.name, node.chan,
-                   ', '.join(map(str, node.idx)))
 
     for tensor in self.tensors.values():
       for name, indices in tensor.ld_indices.items():
@@ -445,38 +489,39 @@ class Stencil(object):
         _logger.debug('stage delay: %s <- %s delayed %d' %
                 (tensor.name, name, delay))
 
-    # parameters generated from the above parameters
-    self.pixel_width_i = TYPE_WIDTH[self.input.type]
-    self.pixel_width_o = TYPE_WIDTH[self.output.type]
-    burst_width = self.burst_width
-    pixel_width_i = self.pixel_width_i
-    pixel_width_o = self.pixel_width_o
-    unroll_factor = self.unroll_factor
-    dram_bank = self.dram_bank
-    if (burst_width/pixel_width_i*dram_bank/2 >
-        unroll_factor/2):
-      self.input_partition = burst_width/pixel_width_i*dram_bank/2
+    return self.chronological_tensors
+
+  @cached_property
+  def input_partition(self):
+    pixel_width_i = sum(self.pixel_width_i)
+    if self.burst_width/pixel_width_i*self.dram_bank/2 > self.unroll_factor/2:
+      return int(self.burst_width/pixel_width_i*self.dram_bank/2)
     else:
-      self.input_partition = unroll_factor/2
-    if burst_width/pixel_width_o*dram_bank/2 > unroll_factor/2:
-      self.output_partition = burst_width/pixel_width_o*dram_bank/2
+      return int(self.unroll_factor/2)
+
+  @cached_property
+  def output_partition(self):
+    pixel_width_o = sum(self.pixel_width_o)
+    if self.burst_width/pixel_width_o*self.dram_bank/2 > self.unroll_factor/2:
+      return int(self.burst_width/pixel_width_o*self.dram_bank/2)
     else:
-      self.output_partition = unroll_factor/2
+      return int(self.unroll_factor/2)
 
-    self.dataflow_super_source = dataflow.create_dataflow_graph(self)
+  @cached_property
+  def pixel_width_i(self):
+    return list(map(get_width_in_bits, self.input_stmts))
 
-  def get_producer_tensors(self):
-    return [tensor for tensor in self.tensors.values()
-        if len(tensor.children) > 0]
+  @cached_property
+  def pixel_width_o(self):
+    return list(map(get_width_in_bits, self.output_stmts))
 
-  def get_consumer_tensors(self):
-    return [tensor for tensor in self.tensors.values()
-        if tensor.parent is not None]
+  @cached_property
+  def producer_tensors(self):
+    return tuple(filter(Tensor.is_producer, self.tensors.values()))
 
-  def get_stages_chronologically(self):
-    return [self.stages[tensor.name]
-        for tensor in self.chronological_tensors
-        if tensor.name in self.stages]
+  @cached_property
+  def consumer_tensors(self):
+    return tuple(filter(Tensor.is_consumer, self.tensors.values()))
 
   # return [Tensor, ...]
   def _get_parent_tensors_for(self, node):
@@ -509,7 +554,7 @@ class Stencil(object):
       unroll_factor = self.unroll_factor
       self.reuse_buffer_lengths = {}
       self.reuse_buffers = {}
-      for tensor in self.get_producer_tensors():
+      for tensor in self.producer_tensors():
         reuse_buffer = _get_reuse_buffer(self.tile_size,
                          tensor,
                          unroll_factor)
@@ -529,7 +574,7 @@ class Stencil(object):
   def get_all_points(self):
     if not hasattr(self, 'all_points'):
       self.all_points = {}
-      for tensor in self.get_producer_tensors():
+      for tensor in self.producer_tensors():
         self.all_points[tensor.name] = _get_points(self.tile_size,
                                tensor,
                                self.unroll_factor)
@@ -698,7 +743,7 @@ class Stencil(object):
       replication_factor = self.replication_factor
       self.replicated_reuse_buffer_lengths = {}
       self.replicated_reuse_buffers = {}
-      for tensor in self.get_producer_tensors():
+      for tensor in self.producer_tensors():
         reuse_buffer = _get_replicated_reuse_buffer(self.tile_size,
           tensor, replication_factor)
         self.replicated_reuse_buffers[tensor.name] = reuse_buffer
@@ -722,7 +767,7 @@ class Stencil(object):
   def get_replicated_all_points(self):
     if not hasattr(self, 'replicated_all_points'):
       self.replicated_all_points = {}
-      for tensor in self.get_producer_tensors():
+      for tensor in self.producer_tensors():
         self.replicated_all_points[tensor.name
           ] = _get_replicated_points(self.tile_size, tensor)
       _logger.debug('replicated_all_points: %s' %
@@ -958,6 +1003,18 @@ def get_c_type(soda_type):
 
 def get_soda_type(c_type):
   return c_type[:-2] if c_type[-2:] == '_t' else c_type
+
+def get_width_in_bits(soda_type):
+  if isinstance(soda_type, str):
+    if soda_type.startswith('uint') or soda_type.startswith('int'):
+      return int(soda_type.lstrip('uint').lstrip('int'))
+  else:
+    if hasattr(soda_type, 'soda_type'):
+      return get_width_in_bits(soda_type.soda_type)
+  raise InternalError('unknown soda type: %s', soda_type)
+
+def get_width_in_bytes(soda_type):
+  return (get_width_in_bits(soda_type)-1)//8+1
 
 def is_float(soda_type):
   return soda_type in {'float', 'double'}
