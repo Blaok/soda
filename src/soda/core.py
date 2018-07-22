@@ -215,6 +215,8 @@ class Stencil(object):
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.output_stmts)))
 
+    # force generating tensors
+    self.chronological_tensors
     _logger.debug('producer tensors: [%s]',
                   ', '.join(tensor.name for tensor in self.producer_tensors))
     _logger.debug('consumer tensors: [%s]',
@@ -549,46 +551,44 @@ class Stencil(object):
       return node.expr
     raise SemanticError('cannot get expression for %s' % str(type(node)))
 
-  def get_reuse_buffers(self):
-    if not hasattr(self, 'reuse_buffers'):
-      unroll_factor = self.unroll_factor
-      self.reuse_buffer_lengths = {}
-      self.reuse_buffers = {}
-      for tensor in self.producer_tensors():
-        reuse_buffer = _get_reuse_buffer(self.tile_size,
-                         tensor,
-                         unroll_factor)
-        reuse_buffer_length = {}
-        self.reuse_buffers[tensor.name] = reuse_buffer
-        self.reuse_buffer_lengths[tensor.name] = reuse_buffer_length
-        first = [True]*unroll_factor
-        for start, end in reuse_buffer[1:]:
-          if first[start%unroll_factor]:
-            first[start%unroll_factor] = False
-            if start >= unroll_factor:
-              reuse_buffer_length[end] = end//unroll_factor
-              continue
-          reuse_buffer_length[end] = (end-start)//unroll_factor
+  @cached_property
+  def reuse_buffers(self):
+    unroll_factor = self.unroll_factor
+    self.reuse_buffer_lengths = {}
+    self.reuse_buffers = {}
+    for tensor in self.producer_tensors:
+      reuse_buffer = _get_reuse_buffer(self.tile_size, tensor, unroll_factor)
+      reuse_buffer_length = {}
+      self.reuse_buffers[tensor.name] = reuse_buffer
+      self.reuse_buffer_lengths[tensor.name] = reuse_buffer_length
+      first = [True]*unroll_factor
+      for start, end in reuse_buffer[1:]:
+        if first[start%unroll_factor]:
+          first[start%unroll_factor] = False
+          if start >= unroll_factor:
+            reuse_buffer_length[end] = end//unroll_factor
+            continue
+        reuse_buffer_length[end] = (end-start)//unroll_factor
     return self.reuse_buffers
 
-  def get_all_points(self):
-    if not hasattr(self, 'all_points'):
-      self.all_points = {}
-      for tensor in self.producer_tensors():
-        self.all_points[tensor.name] = _get_points(self.tile_size,
-                               tensor,
-                               self.unroll_factor)
+  @cached_property
+  def all_points(self):
+    self.all_points = {}
+    for tensor in self.producer_tensors:
+      self.all_points[tensor.name] = _get_points(self.tile_size,
+                             tensor,
+                             self.unroll_factor)
     return self.all_points
 
-  def get_next_fifo(self):
-    if not hasattr(self, 'next_fifo'):
-      self.next_fifo = {}
-      for name, reuse_buffer in self.get_reuse_buffers().items():
-        self.next_fifo[name] = {}
-        for start, end in reuse_buffer[1:]:
-          if start < end:
-            self.next_fifo[name][start] = end
-      _logger.debug('next_fifo: %s' % self.next_fifo)
+  @cached_property
+  def next_fifo(self):
+    self.next_fifo = {}
+    for name, reuse_buffer in self.reuse_buffers.items():
+      self.next_fifo[name] = {}
+      for start, end in reuse_buffer[1:]:
+        if start < end:
+          self.next_fifo[name][start] = end
+    _logger.debug('next_fifo: %s' % self.next_fifo)
     return self.next_fifo
 
   def get_forwarders(self):
@@ -619,10 +619,10 @@ class Stencil(object):
       self.get_forwarders()
     return self.forwarders_with_border
 
-  def get_reuse_buffer_length(self, name, offset):
-    if not hasattr(self, 'reuse_buffer_lengths'):
-      self.get_reuse_buffers()
-    return self.reuse_buffer_lengths[name][offset]
+  @cached_property
+  def reuse_buffer_lengths(self):
+    self.reuse_buffers
+    return self.reuse_buffer_lengths
 
   def get_forwardings(self, src_name):
     if hasattr(self, 'forwardings'):
@@ -790,31 +790,30 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
     element of the tuple represents the offset from the lastest input.
   """
 
-  _logger.debug('get reuse chains of tensor %s' % tensor.name)
+  _logger.debug('get reuse chains of tensor %s', tensor.name)
 
   def unroll_offsets(offsets):
     unrolled_offsets = set()
     for unroll_idx in range(unroll_factor):
       for offset in offsets:
         unrolled_offsets.add(max(offsets) + unroll_idx - offset +
-                   stage.delay[tensor.name])
+                             child.ld_delays[tensor.name])
     return unrolled_offsets
 
   A_dag = set()
-  for stage in tensor.children:
-    A_dag |= unroll_offsets(serialize_iter(stage.window[tensor.name],
-                         tile_size))
-  _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
+  for child in tensor.children.values():
+    A_dag |= unroll_offsets(
+      serialize_iter(child.ld_indices[tensor.name], tile_size))
+  _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
   for chain_idx in reversed(range(unroll_factor)):
     chains.append(tuple(sorted(
       offset for offset in A_dag if offset % unroll_factor == chain_idx)))
-  _logger.debug(chains)
+  _logger.debug('reuse chains: %s', chains)
 
   for idx, chain in enumerate(chains):
-    _logger.debug('reuse chain %d of tensor %s: %s' %
-            (idx, tensor.name, chain))
+    _logger.debug('reuse chain %d of tensor %s: %s', idx, tensor.name, chain)
   return chains
 
 def _get_points(tile_size, tensor, unroll_factor):
@@ -834,23 +833,23 @@ def _get_points(tile_size, tensor, unroll_factor):
   """
 
   all_points = {} # {name: {offset: {unroll_idx: point_idx}}}
-  for stage in tensor.children:
-    all_points[stage.name] = {}
-    offsets = serialize_iter(stage.window[tensor.name], tile_size)
+  for child in tensor.children.values():
+    all_points[child.name] = {}
+    #offsets = serialize_iter(child.ld_indices[tensor.name], tile_size)
+    offsets = child.ld_offsets[tensor.name]
     for unroll_idx in range(unroll_factor):
       for idx, offset in enumerate(offsets):
-        all_points[stage.name].setdefault(
-          max(offsets) - offset + stage.delay[tensor.name] +
-            unroll_idx,
+        all_points[child.name].setdefault(
+          max(offsets) - offset + child.ld_delays[tensor.name] + unroll_idx,
           {})[unroll_factor-1-unroll_idx] = idx
-  for stage in tensor.children:
-    for offset, points in all_points[stage.name].items():
+  for child in tensor.children.values():
+    for offset, points in all_points[child.name].items():
       for unroll_idx, point in points.items():
         _logger.debug(
-          '%s <- %s @ offset=%d <=> (%s) @ unroll_idx=%d' %
-          (stage.name, tensor.name, offset,
-           ', '.join(map(str, stage.window[tensor.name][point])),
-           unroll_idx))
+          '%s <- %s @ offset=%d <=> %s @ unroll_idx=%d',
+          child.name, tensor.name, offset,
+          idx2str(list(child.ld_indices[tensor.name].values())[point].idx),
+          unroll_idx)
   return all_points
 
 def _get_reuse_buffer(tile_size, tensor, unroll_factor):
