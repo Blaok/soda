@@ -286,7 +286,10 @@ def create_dataflow_graph(stencil):
           for fifo_r in parent.fifos:
             if fifo_r.edge == (parent, src_node):
               break
-        expr = Delay(delay=delay, ref=fifo_r)
+        if delay > 0:
+          expr = Delay(delay=delay, ref=fifo_r)
+        else:
+          expr = fifo_r
       elif isinstance(src_node, ComputeNode):
         def replace_refs_callback(obj, args):
           obj = copy.copy(obj)
@@ -315,7 +318,8 @@ def create_dataflow_graph(stencil):
 
   for src_node in super_source.tpo_node_gen():
     for dst_node in src_node.children:
-      src_node.fifo(dst_node).depth += super_source.get_extra_depth((src_node, dst_node))
+      src_node.fifo(dst_node).depth += super_source.get_extra_depth(
+          (src_node, dst_node))
 
   for src_node, dst_node in super_source.bfs_edge_gen():
     fifo = src_node.fifo(dst_node)
@@ -327,5 +331,5 @@ def create_dataflow_graph(stencil):
       _logger.error('private object ir.Node(%s) shall not be found here', node)
     else:
       for fifo, expr in node.exprs.items():
-        _logger.debug('%s.exprs: %s', color_id(node), expr)
+        _logger.debug('%s writes %s with expr: %s', color_id(node), fifo, expr)
   return super_source
