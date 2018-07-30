@@ -1,10 +1,15 @@
+from collections import OrderedDict
+from collections import namedtuple
 from functools import reduce
+import copy
 import logging
 import operator
 
+from haoda import ir
 from soda import core
+from soda import grammar
 
-logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger('__main__').getChild(__name__)
 
 def print_compute_input(printer, stencil):
   unroll_factor = stencil.unroll_factor
@@ -241,7 +246,7 @@ def print_compute_stage(printer, stencil, stage):
 
     if stage.preserve_border_from():
       msg = 'aux parameters for %s' % stage.name
-      logger.debug('generate '+msg)
+      _logger.debug('generate '+msg)
       printer.println('// '+msg)
       printer.println('int32_t i = pe_id-%d;' % delay)
       for i in range(1, len(stencil.tile_size)):
@@ -478,7 +483,7 @@ def print_interface(p, stencil):
   output_chan = stencil.output.chan
   super_source = stencil.dataflow_super_source
 
-  logger.info('generate reuse buffers')
+  _logger.info('generate reuse buffers')
   reuse_buffers = stencil.get_reuse_buffers()
   all_points = stencil.get_all_points()
   next_fifo = stencil.get_next_fifo()
@@ -633,7 +638,7 @@ def print_interface(p, stencil):
     for name, reuse_buffer in reuse_buffers.items():
       pragmas = []
       msg = 'reuse buffers for %s' % name
-      logger.debug('generate %s' % msg)
+      _logger.debug('generate %s' % msg)
       p.println('// %s' % msg)
       for start, end in reuse_buffer[1:]:
         for c in range(stencil.tensors[name].chan):
@@ -660,7 +665,7 @@ def print_interface(p, stencil):
 
   # params
   msg = 'params'
-  logger.debug('generate %s' % msg)
+  _logger.debug('generate %s' % msg)
   p.println('// %s' % msg)
   pragmas = []
   for stage in stencil.get_stages_chronologically():
@@ -690,7 +695,7 @@ def print_interface(p, stencil):
 
   # border buffers
   msg = 'border buffers'
-  logger.debug('generate %s' % msg)
+  _logger.debug('generate %s' % msg)
   p.println('// %s' % msg)
   for stage in stencil.get_stages_chronologically():
     if stage.output.preserve_border_to():
@@ -1055,7 +1060,7 @@ def print_forward_call(printer, stencil, src_name):
         args[3], ';', 0)
 
 def print_code(stencil, output_file):
-  logger.info('generate kernel code as %s' % output_file.name)
+  _logger.info('generate kernel code as %s' % output_file.name)
   printer = core.Printer(output_file)
 
   print_header(printer)
@@ -1073,53 +1078,168 @@ def print_code(stencil, output_file):
 
   print_load(printer)
   printer.println()
-  for data_type in {stencil.input.type}:
+  for data_type in {core.get_c_type(stmt.soda_type)
+                    for stmt in stencil.input_stmts}:
     print_unpack(printer, stencil.burst_width, data_type, stencil.unroll_factor//stencil.dram_bank)
     printer.println()
-  for data_type in {stencil.output.type}:
+  for data_type in {core.get_c_type(stmt.soda_type)
+                    for stmt in stencil.output_stmts}:
     print_pack(printer, stencil.burst_width, data_type, stencil.unroll_factor//stencil.dram_bank)
     printer.println()
   print_store(printer)
   printer.println()
 
-  if stencil.cluster == 'none':
-    for forwarder in stencil.get_forwarders():
-      print_forward_func(printer, forwarder)
-      printer.println()
+  print_data_struct(printer)
+  print_read_data(printer)
+  print_write_data(printer)
 
-    for forwarder in stencil.get_forwarders_with_border():
-      print_forward_func_with_border(printer, stencil, forwarder)
-      printer.println()
-    for stage in stencil.stages.values():
-      print_compute_stage(printer, stencil, stage)
-      printer.println()
-  elif stencil.cluster == 'fine':
-    print_compute_input(printer, stencil)
-    for stage in stencil.get_stages_chronologically():
-      print_compute_stage(printer, stencil, stage)
+  node_signatures = OrderedDict()
+  for node in stencil.dataflow_super_source.tpo_node_gen():
+    node_signatures.setdefault(ir.NodeSignature(node), []).append(node)
 
-  if stencil.replication_factor > 1:
-    dst_lists = set()
-    super_source = stencil.dataflow_super_source
-    def add_dst_lists(tensor):
-      rf = stencil.replication_factor
-      dst_ids = [start%rf for start, end
-        in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
-        if start == end]
-      dst_ids = tuple(dst_id if dst_id in dst_ids else None
-        for dst_id in range(stencil.replication_factor))
-      dst_lists.add(dst_ids)
-    for node in super_source.tpo_node_generator():
-      if isinstance(node, SuperSourceNode):
-        add_dst_lists(stencil.input)
-      elif isinstance(node, ComputeNode):
-        if not node.stage.is_output():
-          add_dst_lists(node.stage.output)
-    for dst_list in dst_lists:
-      _print_reconnect_func(printer, dst_list)
-  printer.println()
+  for idx, node_signature in enumerate(node_signatures):
+    printer.println()
+    _print_node_definition(printer, node_signature, idx)
+
+
+#  if stencil.cluster == 'none':
+#    for forwarder in stencil.get_forwarders():
+#      print_forward_func(printer, forwarder)
+#      printer.println()
+#
+#    for forwarder in stencil.get_forwarders_with_border():
+#      print_forward_func_with_border(printer, stencil, forwarder)
+#      printer.println()
+#    for stage in stencil.stages.values():
+#      print_compute_stage(printer, stencil, stage)
+#      printer.println()
+#  elif stencil.cluster == 'fine':
+#    print_compute_input(printer, stencil)
+#    for stage in stencil.get_stages_chronologically():
+#      print_compute_stage(printer, stencil, stage)
+#
+#  if stencil.replication_factor > 1:
+#    dst_lists = set()
+#    super_source = stencil.dataflow_super_source
+#    def add_dst_lists(tensor):
+#      rf = stencil.replication_factor
+#      dst_ids = [start%rf for start, end
+#        in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
+#        if start == end]
+#      dst_ids = tuple(dst_id if dst_id in dst_ids else None
+#        for dst_id in range(stencil.replication_factor))
+#      dst_lists.add(dst_ids)
+#    for node in super_source.tpo_node_generator():
+#      if isinstance(node, SuperSourceNode):
+#        add_dst_lists(stencil.input)
+#      elif isinstance(node, ComputeNode):
+#        if not node.stage.is_output():
+#          add_dst_lists(node.stage.output)
+#    for dst_list in dst_lists:
+#      _print_reconnect_func(printer, dst_list)
+#  printer.println()
 
   print_interface(printer, stencil)
+
+def _print_node_definition(printer, node_signature, node_id):
+  println = printer.println
+  do_scope = printer.do_scope
+  un_scope = printer.un_scope
+  do_indent = printer.do_indent
+  un_indent = printer.un_indent
+  fifo_st_prefix = 'fifo_st_'
+  fifo_ref_prefix = 'fifo_ref_'
+  read_fifo_func = 'ReadFIFO'
+  func_name = 'Node%s' % node_id
+  func_lower_name = 'node_%s' % node_id
+
+  def get_delays(obj, delays):
+    if isinstance(obj, ir.DelayedRef):
+      delays.append(obj)
+    return obj
+  delays = []
+  for let in node_signature.lets:
+    let.visit(get_delays, delays)
+  for expr in node_signature.exprs:
+    expr.visit(get_delays, delays)
+  _logger.debug('delays: %s', delays)
+
+  fifo_loads = tuple(
+    '/* input*/ hls::stream<{_.c_type}>* {_.ld_name}'.format(**locals())
+    for _ in node_signature.loads)
+  fifo_stores = tuple(
+    '/*output*/ hls::stream<%s>* %s%s' % (expr.c_type, fifo_st_prefix, idx)
+    for idx, expr in enumerate(node_signature.exprs))
+  printer.print_func('void {func_name}'.format(**locals()),
+                     fifo_stores+fifo_loads, align=0)
+  do_scope(func_lower_name)
+  for delay in delays:
+    println(delay.c_buf_decl)
+    println(delay.c_ptr_decl)
+  println('{func_lower_name}_epoch:'.format(**locals()), indent=0)
+  println('for (bool enable = true; enable;)')
+  do_scope('for {func_lower_name}_epoch'.format(**locals()))
+  for fifo_in in node_signature.loads:
+    println('{fifo_in.c_type} {fifo_in.ref_name};'.format(**locals()))
+  println('if (%s)' % (' && '.join('!{_.ld_name}->empty()'.format(**locals())
+                                   for _ in node_signature.loads)))
+  do_scope('if not empty')
+  for fifo_in in node_signature.loads:
+    println('bool&& {fifo_in.ref_name}_enable = '
+      'ReadData(&{fifo_in.ref_name}, {fifo_in.ld_name});'.format(**locals()))
+  println('enable = %s;' % (
+    ' && '.join('{_.ref_name}_enable'.format(**locals())
+                for _ in node_signature.loads)))
+
+  for delay in delays:
+    println(delay.c_buf_load)
+    println(delay.c_buf_store)
+    println(delay.c_ptr_incr)
+
+  for let in node_signature.lets:
+    println(let.c_expr)
+  for idx, expr in enumerate(node_signature.exprs):
+    println('WriteData(%s%s, %s, true);' % (fifo_st_prefix, idx, expr.c_expr))
+  un_scope()
+  un_scope()
+  for idx, expr in enumerate(node_signature.exprs):
+    println('WriteData(%s%s, %s(0), false);' %
+            (fifo_st_prefix, idx, expr.c_type))
+  un_scope()
+  _logger.debug('printing: %s', node_signature)
+
+def print_data_struct(printer):
+  println = printer.println
+  println('template<typename T> struct Data')
+  printer.do_scope()
+  println('T data;')
+  println('bool ctrl;')
+  printer.un_scope()
+
+def print_read_data(printer):
+  println = printer.println
+  println('template<typename T> inline bool ReadData'
+          '(T* data, hls::stream<Data<T> >* from)')
+  printer.do_scope()
+  println('#pragma HLS inline', indent=0)
+  println('Data<T>&& tmp = from->read();')
+  println('#pragma HLS data_pack variable=tmp', indent=0)
+  println('*data = tmp.data;')
+  println('return tmp.ctrl;')
+  printer.un_scope()
+
+def print_write_data(printer):
+  println = printer.println
+  println('template<typename T> inline void WriteData'
+          '(hls::stream<Data<T> >* to, const T& data, bool ctrl)')
+  printer.do_scope()
+  println('#pragma HLS inline', indent=0)
+  println('Data<T> tmp;')
+  println('#pragma HLS data_pack variable=tmp', indent=0)
+  println('tmp.data = data;')
+  println('tmp.ctrl = ctrl;')
+  println('to->write(tmp);')
+  printer.un_scope()
 
 def _generate_code(printer, stencil):
   super_source = stencil.dataflow_super_source
@@ -1137,7 +1257,7 @@ def _generate_code(printer, stencil):
         pragmas.append((var_name, 2))
         hls_streams.add(var_name)
     for src_node, dst_node in super_source.bfs_edge_generator():
-      logger.debug('%s -> %s' % (repr(src_node), repr(dst_node)))
+      _logger.debug('%s -> %s' % (repr(src_node), repr(dst_node)))
       if isinstance(dst_node, ForwardNode):
         for chan in range(dst_node.tensor.chan):
           if isinstance(src_node, ComputeNode):
@@ -1237,7 +1357,7 @@ def _generate_code(printer, stencil):
           '%s<%s>' % (func_name, tensor.type), params, ';', align=0)
 
     for node in super_source.tpo_node_generator():
-      logger.debug('%s' % repr(node))
+      _logger.debug('%s' % repr(node))
       if isinstance(node, SuperSourceNode):
         _print_load_call(printer, stencil)
         for chan in range(stencil.input.chan):

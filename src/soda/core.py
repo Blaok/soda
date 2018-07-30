@@ -76,7 +76,7 @@ class Tensor(object):
       self.expr = stmt.expr
     elif isinstance(stmt, grammar.InputStmt):
       if stmt.tile_size != tile_size:
-        raise InternalError('tile size doesn\'t match')
+        raise InternalError("tile size doesn't match: %s %s")
       self.st_ref = None
       self.lets = []
       self.expr = None
@@ -91,14 +91,14 @@ class Tensor(object):
     self.ld_refs = OrderedDict()
     self.ld_delays = OrderedDict()
 
-  @cached_property
+  @property
   def st_idx(self):
     if self.st_ref is not None:
       return self.st_ref.idx
     else:
       return (0,)*len(self._tile_size)
 
-  @cached_property
+  @property
   def st_offset(self):
     return serialize(self.st_idx, self._tile_size)
 
@@ -180,7 +180,7 @@ class Stencil(object):
     # application determined
     self.app_name = kwargs.pop('app_name')
     # parameters that can be explored
-    self.tile_size = kwargs.pop('tile_size')
+    self.tile_size = tuple(kwargs.pop('tile_size'))
     self.unroll_factor = kwargs.pop('unroll_factor')
     self.replication_factor = kwargs.pop('replication_factor')
     self.dram_separate = kwargs.pop('dram_separate')
@@ -299,9 +299,9 @@ class Stencil(object):
                           obj.name, ', '.join(map(str, obj.idx)),
                           obj.name, ', '.join(map(str, new_idx)))
             obj.idx = new_idx
-            if isinstance(obj.parent, Tensor):
-              obj.parent.st_idx = obj.idx
-              obj.parent.st_offset = serialize(obj.idx, self.tile_size)
+            #if isinstance(obj.parent, Tensor):
+            #  obj.parent.st_idx = obj.idx
+            #  obj.parent.st_offset = serialize(obj.idx, self.tile_size)
         return obj
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
@@ -427,7 +427,7 @@ class Stencil(object):
 
           _logger.debug('intend to generate tensor <%s> at offset %d',
                         child.name, child.st_offset)
-          child.st_offset = sync(child, child.st_offset)
+          child.st_ref.idx = deserialize(sync(child, child.st_offset), self.tile_size)
           _logger.debug('decide to generate tensor <%s> at offset %d',
                         child.name, child.st_offset)
 
@@ -933,33 +933,34 @@ def _get_replicated_reuse_buffer(tile_size, tensor, replication_factor):
 
 class Printer(object):
   def __init__(self, out):
-    self.out = out
-    self.indent = 0
-    self.assign = 0
-    self.comments = []
+    self._out = out
+    self._indent = 0
+    self._assign = 0
+    self._comments = []
+    self._tab = 2
 
-  def println(self, line='', local_indent=-1):
-    if local_indent < 0:
-      local_indent = self.indent
+  def println(self, line='', indent=-1):
+    if indent < 0:
+      indent = self._indent
     if line:
-      self.out.write('%s%s\n' % (' '*local_indent*4, line))
+      self._out.write('%s%s\n' % (' '*indent*self._tab, line))
     else:
-      self.out.write('\n')
+      self._out.write('\n')
 
   def do_indent(self):
-    self.indent += 1
+    self._indent += 1
 
   def un_indent(self):
-    self.indent -= 1
+    self._indent -= 1
 
   def do_scope(self, comment=''):
     self.println('{')
     self.do_indent()
-    self.comments.append(comment)
+    self._comments.append(comment)
 
   def un_scope(self, comment=''):
     self.un_indent()
-    popped_comment = self.comments.pop()
+    popped_comment = self._comments.pop()
     if comment:
       self.println('} // %s' % comment)
     else:
@@ -969,7 +970,7 @@ class Printer(object):
         self.println('}')
 
   def new_var(self):
-    self.assign += 1
+    self._assign += 1
     return self.last_var()
 
   def last_var(self, offset=-1):
@@ -978,7 +979,7 @@ class Printer(object):
   def print_func(self, name, params, suffix='', align=80):
     lines = [name+'(']
     for param in params:
-      if ((self.indent + min(1, len(lines)-1))*4+
+      if ((self._indent + min(1, len(lines)-1))*self._tab+
           len(lines[-1])+len(param+', ')) > align:
         lines.append(param+', ')
       else:
@@ -998,6 +999,11 @@ def get_c_type(soda_type):
       'uint8', 'uint16', 'uint32', 'uint64',
       'int8', 'int16', 'int32', 'int64'}:
     return soda_type+'_t'
+  if soda_type is None:
+    return None
+  for token in ('int', 'uint'):
+    if soda_type.startswith(token):
+      return 'ap_{}<{}>'.format(token, soda_type.replace(token, ''))
   return soda_type
 
 def get_soda_type(c_type):
@@ -1038,6 +1044,15 @@ def serialize(vec, tile_size):
 
 def serialize_iter(iterative, tile_size):
   return [serialize(x, tile_size) for x in iterative]
+
+def deserialize(offset, tile_size):
+  return tuple(deserialize_generator(offset, tile_size))
+
+def deserialize_generator(offset, tile_size):
+  for size in tile_size[:-1]:
+    yield offset % size
+    offset = offset // size
+  yield offset
 
 def get_stencil_distance(stencil_window, tile_size):
   return (max(serialize_iter(stencil_window, tile_size))+

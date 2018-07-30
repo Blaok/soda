@@ -9,10 +9,6 @@ from soda import grammar
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
-class Delay(grammar._Node):
-  def __str__(self):
-    return '%s delayed %d' % (self.ref, self.delay)
-
 class SuperSourceNode(ir.Node):
   """A node representing the super source in the dataflow graph.
 
@@ -276,7 +272,8 @@ def create_dataflow_graph(stencil):
       fifo = ir.FIFO(src_node, dst_node, depth, write_lat)
       if isinstance(src_node, SuperSourceNode):
         lets = []
-        expr = None
+        expr = ir.DRAMRef(soda_type=dst_node.tensor.soda_type, dram='gmem',
+                          offset=stencil.unroll_factor-1-dst_node.offset)
       elif isinstance(src_node, ForwardNode):
         lets = []
         delay = stencil.reuse_buffer_lengths[src_node.tensor.name]\
@@ -287,7 +284,20 @@ def create_dataflow_graph(stencil):
             if fifo_r.edge == (parent, src_node):
               break
         if delay > 0:
-          expr = Delay(delay=delay, ref=fifo_r)
+          # TODO: build an index somewhere
+          for let in src_node.lets:
+            if isinstance(let.expr, ir.DelayedRef) and let.expr.ref == fifo_r:
+              var_name = let.name
+              var_type = let.soda_type
+              break
+          else:
+            var_name = 'let_%d' % len(src_node.lets)
+            var_type = fifo_r.soda_type
+            lets.append(grammar.Let(
+              soda_type=var_type, name=var_name,
+              expr=ir.DelayedRef(delay=delay, ref=fifo_r)))
+          expr = grammar.Var(name=var_name, idx=[])
+          expr.soda_type=var_type
         else:
           expr = fifo_r
       elif isinstance(src_node, ComputeNode):
@@ -309,9 +319,16 @@ def create_dataflow_graph(stencil):
           return obj
         lets = [_.visit(replace_refs_callback) for _ in src_node.tensor.lets]
         expr = src_node.tensor.expr.visit(replace_refs_callback)
+        if isinstance(dst_node, SuperSinkNode):
+          dram_ref = ir.DRAMRef(soda_type=src_node.tensor.soda_type,
+                                dram='gmem', offset=src_node.pe_id)
+          dst_node.lets.append(grammar.Let(
+            soda_type=None, name=dram_ref, expr=fifo))
+      else:
+        raise core.InternalError('unexpected node of type %s', type(src_node))
 
       src_node.exprs[fifo] = expr
-      src_node.lets |= set(lets)
+      src_node.lets.extend(_ for _ in lets if _ not in src_node.lets)
       _logger.debug('fifo [%d]: %s%s => %s', fifo.depth, color_id(src_node),
                     '' if fifo.write_lat is None else ' ~%d' % fifo.write_lat,
                     color_id(dst_node))
@@ -326,10 +343,4 @@ def create_dataflow_graph(stencil):
     _logger.debug('fifo [%d]: %s%s => %s', fifo.depth, color_id(src_node),
                   '' if fifo.write_lat is None else ' ~%d' % fifo.write_lat,
                   color_id(dst_node))
-  for node in super_source.bfs_node_gen():
-    if node.__class__ is ir.Node:
-      _logger.error('private object ir.Node(%s) shall not be found here', node)
-    else:
-      for fifo, expr in node.exprs.items():
-        _logger.debug('%s writes %s with expr: %s', color_id(node), fifo, expr)
   return super_source
