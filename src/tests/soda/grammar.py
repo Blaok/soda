@@ -9,6 +9,15 @@ class TestGrammar(unittest.TestCase):
 
   def setUp(self):
     self.ref = grammar.Ref(name='foo', idx=(0, 23), lat=None)
+    self.expr_ref = grammar.Ref(name='bar', idx=(233, 42), lat=None)
+    self.expr = grammar.Expr(operand=(self.expr_ref,), operator=())
+    self.let_ref = grammar.Ref(name='bar_l', idx=(42, 2333), lat=None)
+    self.let_expr = grammar.Expr(operand=(self.let_ref,), operator=())
+    self.let = grammar.Let(soda_type='int8', name='foo_l', expr=self.let_expr)
+    self.let_ref2 = grammar.Ref(name='bar_l2', idx=(0, 42), lat=None)
+    self.let_expr2 = grammar.Expr(operand=(self.let_ref2,), operator=())
+    self.let2 = grammar.Let(soda_type='int8', name='foo_l2',
+                            expr=self.let_expr2)
 
   def test_syntax(self):
     soda_mm = textx.metamodel_from_str(
@@ -66,36 +75,42 @@ output double:
   def test_local(self):
     self.assertEqual(
       str(grammar.LocalStmt(soda_type='int8', let=[],
-                ref=self.ref, expr='bar')),
-      'local int8: foo(0, 23) = bar')
+                ref=self.ref, expr=self.expr)),
+      'local int8: foo(0, 23) = bar(233, 42)')
     self.assertEqual(
-      str(grammar.LocalStmt(soda_type='int8', let=['let expr'],
-                ref=self.ref, expr='bar')),
-      'local int8:\n  let expr\n  foo(0, 23) = bar')
+      str(grammar.LocalStmt(soda_type='int8', let=[self.let],
+                ref=self.ref, expr=self.expr)),
+      'local int8:\n  int8 foo_l = bar_l(42, 2333)\n'
+      '  foo(0, 23) = bar(233, 42)')
     self.assertEqual(
-      str(grammar.LocalStmt(soda_type='int8', let=['let expr0', 'let expr1'],
-                ref=self.ref, expr='bar')),
-      'local int8:\n  let expr0\n  let expr1\n  foo(0, 23) = bar')
+      str(grammar.LocalStmt(soda_type='int8', let=[self.let, self.let2],
+                ref=self.ref, expr=self.expr)),
+      'local int8:\n  int8 foo_l = bar_l(42, 2333)\n'
+      '  int8 foo_l2 = bar_l2(0, 42)\n  foo(0, 23) = bar(233, 42)')
 
   def test_output(self):
     self.assertEqual(
       str(grammar.OutputStmt(soda_type='int8', let=[],
-                 ref=self.ref, expr='bar')),
-      'output int8: foo(0, 23) = bar')
+                 ref=self.ref, expr=self.expr)),
+      'output int8: foo(0, 23) = bar(233, 42)')
     self.assertEqual(
-      str(grammar.OutputStmt(soda_type='int8', let=['let expr'],
-                 ref=self.ref, expr='bar')),
-      'output int8:\n  let expr\n  foo(0, 23) = bar')
+      str(grammar.OutputStmt(soda_type='int8', let=[self.let],
+                 ref=self.ref, expr=self.expr)),
+      'output int8:\n  int8 foo_l = bar_l(42, 2333)\n'
+      '  foo(0, 23) = bar(233, 42)')
     self.assertEqual(
-      str(grammar.OutputStmt(soda_type='int8', let=['let expr0', 'let expr1'],
-                 ref=self.ref, expr='bar')),
-      'output int8:\n  let expr0\n  let expr1\n  foo(0, 23) = bar')
+      str(grammar.OutputStmt(soda_type='int8', let=[self.let, self.let2],
+                 ref=self.ref, expr=self.expr)),
+      'output int8:\n  int8 foo_l = bar_l(42, 2333)\n'
+      '  int8 foo_l2 = bar_l2(0, 42)\n  foo(0, 23) = bar(233, 42)')
 
   def test_let(self):
-    self.assertEqual(str(grammar.Let(soda_type='int8', name='foo', expr='bar')),
-             'int8 foo = bar')
-    self.assertEqual(str(grammar.Let(soda_type=None, name='foo', expr='bar')),
-             'foo = bar')
+    self.assertEqual(str(grammar.Let(soda_type='int8', name='foo',
+                                     expr=self.expr)),
+                     'int8 foo = bar(233, 42)')
+    self.assertEqual(str(grammar.Let(soda_type=None, name='foo',
+                                     expr=self.expr)),
+                     'foo = bar(233, 42)')
 
   def test_ref(self):
     self.assertEqual(str(grammar.Ref(name='foo', idx=[0], lat=None)),

@@ -1,6 +1,6 @@
 import logging
 
-from soda import core
+from soda import util
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
@@ -98,7 +98,7 @@ FixedType: /u?int[1-9]\d*(_[1-9]\d*)?/;
 FloatType: /float[1-9]\d*(_[1-9]\d*)?/ | 'float' | 'double' | 'half';
 '''
 
-class _Node(object):
+class Node(object):
   """A immutable, hashable IR node.
   """
   SCALAR_ATTRS = ()
@@ -115,7 +115,8 @@ class _Node(object):
       setattr(self, attr, tuple(kwargs.pop(attr)))
 
   def __hash__(self):
-    return hash(tuple(getattr(self, _) for _ in self.ATTRS))
+    return hash((tuple(getattr(self, _) for _ in self.SCALAR_ATTRS),
+                 tuple(tuple(getattr(self, _)) for _ in self.LINEAR_ATTRS)))
 
   def __eq__(self, other):
     return all(getattr(self, attr) == getattr(other, attr)
@@ -123,13 +124,13 @@ class _Node(object):
 
   @property
   def c_type(self):
-    return core.get_c_type(self.soda_type)
+    return util.get_c_type(self.soda_type)
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = callback(self, args)
     return obj
 
-class InputStmt(_Node):
+class InputStmt(Node):
   """Node for input statement, represents a tiled input tensor.
 
   Attributes:
@@ -138,10 +139,10 @@ class InputStmt(_Node):
     tile_size: list of tile sizes. The last dimension should be 0.
   """
   SCALAR_ATTRS = 'soda_type', 'name'
-  LINEAR_ATTRS = 'tile_size',
+  LINEAR_ATTRS = ('tile_size',)
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
-    self.tile_size += 0,
+    self.tile_size += (0,)
 
   def __str__(self):
     result = 'input {}: {}'.format(self.soda_type, self.name)
@@ -149,12 +150,13 @@ class InputStmt(_Node):
       result += '({},)'.format(', '.join(map(str, self.tile_size[:-1])))
     return result
 
-class _LocalStmtOrOutputStmt(_Node):
+class _LocalStmtOrOutputStmt(Node):
   SCALAR_ATTRS = 'soda_type', 'ref', 'expr'
-  LINEAR_ATTRS = 'let',
+  LINEAR_ATTRS = ('let',)
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     var_types = {}
+    # pylint: disable=access-member-before-definition
     for let in self.let:
       var_types[let.name] = let.soda_type
     def set_var_type(obj, var_types):
@@ -173,10 +175,10 @@ class _LocalStmtOrOutputStmt(_Node):
       let = '\n  {}\n '.format('\n  '.join(map(str, self.let)))
     else:
       let = ''
-    return '{} {}:{} {} = {}'.format(
-      type(self).__name__[:-4].lower(), self.soda_type, let, self.ref, self.expr)
+    return '{} {}:{} {} = {}'.format(type(self).__name__[:-4].lower(),
+                                     self.soda_type, let, self.ref, self.expr)
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = super().visit(callback, args)
     obj.let = tuple(_.visit(callback, args) for _ in obj.let)
     obj.ref = obj.ref.visit(callback, args)
@@ -189,7 +191,7 @@ class LocalStmt(_LocalStmtOrOutputStmt):
 class OutputStmt(_LocalStmtOrOutputStmt):
   pass
 
-class Let(_Node):
+class Let(Node):
   SCALAR_ATTRS = 'soda_type', 'name', 'expr'
   def __str__(self):
     result = '{} = {}'.format(self.name, self.expr)
@@ -197,7 +199,7 @@ class Let(_Node):
       result = '{} {}'.format(self.soda_type, result)
     return result
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = super().visit(callback, args)
     obj.expr = self.expr.visit(callback, args)
     return obj
@@ -206,9 +208,9 @@ class Let(_Node):
   def c_expr(self):
     return '{}&& {name} = {expr.c_expr};'.format(self.c_type, **self.__dict__)
 
-class Ref(_Node):
+class Ref(Node):
   SCALAR_ATTRS = 'name', 'lat'
-  LINEAR_ATTRS = 'idx',
+  LINEAR_ATTRS = ('idx',)
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     self.idx = tuple(self.idx)
@@ -219,7 +221,7 @@ class Ref(_Node):
       result += ' ~{}'.format(self.lat)
     return result
 
-class _BinaryOp(_Node):
+class _BinaryOp(Node):
   LINEAR_ATTRS = 'operand', 'operator'
   def __str__(self):
     result = str(self.operand[0])
@@ -227,7 +229,7 @@ class _BinaryOp(_Node):
       result += ' {} {}'.format(operator, operand)
     return result
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = super().visit(callback, args)
     obj.operand = [operand.visit(callback, args) for operand in self.operand]
     return obj
@@ -271,9 +273,9 @@ class AddSub(_BinaryOp):
 class MulDiv(_BinaryOp):
   pass
 
-class Unary(_Node):
-  SCALAR_ATTRS = 'operand',
-  LINEAR_ATTRS = 'operator',
+class Unary(Node):
+  SCALAR_ATTRS = ('operand',)
+  LINEAR_ATTRS = ('operator',)
   def __str__(self):
     return ''.join(self.operator)+str(self.operand)
 
@@ -285,17 +287,18 @@ class Unary(_Node):
   def c_expr(self):
     return ''.join(self.operator)+self.operand.c_expr
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = super().visit(callback, args)
     obj.operand = obj.operand.visit(callback, args)
     return obj
 
-class Operand(_Node):
+class Operand(Node):
   SCALAR_ATTRS = 'cast', 'call', 'ref', 'num', 'var', 'expr'
   def __str__(self):
     for attr in ('cast', 'call', 'ref', 'num', 'var'):
       if getattr(self, attr) is not None:
         return str(getattr(self, attr))
+    # pylint: disable=useless-else-on-loop
     else:
       return '(%s)' % str(self.expr)
 
@@ -306,8 +309,8 @@ class Operand(_Node):
       if attr is not None:
         if hasattr(attr, 'c_expr'):
           return attr.c_expr
-        else:
-          return str(attr)
+        return str(attr)
+    # pylint: disable=useless-else-on-loop
     else:
       return '(%s)' % self.expr.c_expr
 
@@ -316,38 +319,39 @@ class Operand(_Node):
     for attr in self.ATTRS:
       if getattr(self, attr) is not None:
         return getattr(self, attr).soda_type
+    raise util.InternalError('undefined Operand')
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = super().visit(callback, args)
     for attr in ('cast', 'call', 'ref', 'expr'):
       if getattr(obj, attr) is not None:
         setattr(obj, attr, getattr(obj, attr).visit(callback, args))
     return obj
 
-class Cast(_Node):
+class Cast(Node):
   SCALAR_ATTRS = 'soda_type', 'expr'
   def __str__(self):
     return '{}({})'.format(self.soda_type, self.expr)
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = super().visit(callback, args)
     obj.expr = obj.expr.visit(callback, args)
     return obj
 
-class Call(_Node):
-  SCALAR_ATTRS = 'name',
-  LINEAR_ATTRS = 'arg',
+class Call(Node):
+  SCALAR_ATTRS = ('name',)
+  LINEAR_ATTRS = ('arg',)
   def __str__(self):
     return '{}({})'.format(self.name, ', '.join(map(str, self.arg)))
 
-  def visit(self, callback, args=[]):
+  def visit(self, callback, args=None):
     obj = super().visit(callback, args)
     obj.arg = [arg.visit(callback, args) for arg in obj.arg]
     return obj
 
-class Var(_Node):
-  SCALAR_ATTRS = 'name',
-  LINEAR_ATTRS = 'idx',
+class Var(Node):
+  SCALAR_ATTRS = ('name',)
+  LINEAR_ATTRS = ('idx',)
   def __str__(self):
     return self.name+''.join(map('[{}]'.format, self.idx))
 
@@ -355,14 +359,14 @@ class Var(_Node):
   def c_expr(self):
     return self.name+''.join(map('[{}]'.format, self.idx))
 
-class ParamStmt(_Node):
+class ParamStmt(Node):
   SCALAR_ATTRS = 'soda_type', 'attr', 'name', 'size'
   def __str__(self):
     return 'param {}{}: {}{}'.format(
       self.soda_type, ''.join(map(', {}'.format, self.attr)),
       self.name, ''.join(map('[{}]'.format, self.size)))
 
-class ParamAttr(_Node):
+class ParamAttr(Node):
   SCALAR_ATTRS = 'dup', 'partitioning'
   def __str__(self):
     if self.dup is not None:
@@ -393,10 +397,10 @@ def get_result_type(operand1, operand2, operator):
                      tuple()):
     if t in (operand1, operand2):
       return t
-  raise core.SemanticError('cannot parse type: %s %s %s' %
+  raise util.SemanticError('cannot parse type: %s %s %s' %
     (operand1, operator, operand2))
 
-class SodaProgram(_Node):
+class SodaProgram(Node):
   SCALAR_ATTRS = ('border', 'burst_width', 'cluster', 'dram_bank',
                   'dram_separate', 'iterate', 'app_name', 'unroll_factor',
                   'input_stmts', 'param_stmts', 'local_stmts', 'output_stmts')
@@ -404,16 +408,19 @@ class SodaProgram(_Node):
     super().__init__(**kwargs)
     for node in self.input_stmts:
       if hasattr(self, 'tile_size'):
+        # pylint: disable=access-member-before-definition
         if self.tile_size != node.tile_size:
           msg = ('tile size %s doesn\'t match previous one %s' %
+               # pylint: disable=access-member-before-definition
                (node.tile_size, self.tile_size))
-          raise core.SemanticError(msg)
+          raise util.SemanticError(msg)
       elif node.tile_size[:-1]:
         self.tile_size = node.tile_size
         self.dim = len(self.tile_size)
     self.dram_separate = self.dram_separate == 'yes'
     # deal with 1D case
     if not hasattr(self, 'tile_size'):
+      # pylint: disable=undefined-loop-variable
       self.tile_size = node.tile_size
       self.dim = len(self.tile_size)
 

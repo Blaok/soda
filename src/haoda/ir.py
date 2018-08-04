@@ -4,12 +4,12 @@ import copy
 import logging
 import math
 
-from soda import core
 from soda import grammar
+from soda import util
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
-class FIFO(grammar._Node):
+class FIFO(grammar.Node):
   """A reference to another node in a soda.grammar.Expr.
 
   This is used to represent a read/write from/to a Node in an output's Expr.
@@ -23,15 +23,13 @@ class FIFO(grammar._Node):
     write_lat: int, at what cycle of a pipelined loop it is being written.
     depth: int, FIFO depth.
   """
-  ATTRS = ('read_node', 'read_lat', 'write_node', 'write_lat', 'depth')
+  IMMUTABLE_ATTRS = 'read_node', 'write_node'
+  SCALAR_ATTRS = 'read_node', 'read_lat', 'write_node', 'write_lat', 'depth'
 
   def __init__(self, write_node, read_node,
                depth=None, write_lat=None, read_lat=None):
-    self.read_node = read_node
-    self.read_lat = read_lat
-    self.write_node = write_node
-    self.write_lat = write_lat
-    self.depth = depth
+    super().__init__(write_node=write_node, read_node=read_node,
+                     depth=depth, write_lat=write_lat, read_lat=read_lat)
 
   def __repr__(self):
     return 'fifo[%d]: %s%s => %s%s' % (self.depth, repr(self.write_node),
@@ -40,14 +38,11 @@ class FIFO(grammar._Node):
       '' if self.read_lat is None else ' ~%s'%self.read_lat)
 
   def __hash__(self):
-    return hash((id(self.read_node), id(self.write_node)))
-    return hash(tuple(getattr(self, _) for _ in type(self).ATTRS))
+    return hash(tuple(getattr(self, _) for _ in self.IMMUTABLE_ATTRS))
 
   def __eq__(self, other):
     return all(getattr(self, _) == getattr(other, _)
-               for _ in ('read_node', 'write_node'))
-    return all(getattr(self, _) == getattr(other, _)
-               for _ in type(self).ATTRS)
+               for _ in type(self).IMMUTABLE_ATTRS)
   @property
   def edge(self):
     return self.write_node, self.read_node
@@ -78,9 +73,6 @@ class Node(object):
     self.children = []
     self.lets = []
     self.exprs = OrderedDict()
-
-  def __hash__(self):
-    return hash(repr(self))
 
   @property
   def fifos(self):
@@ -227,7 +219,7 @@ class Node(object):
         .union(*map(Node.get_connections, self.children)))
 
 
-class DelayedRef(grammar._Node):
+class DelayedRef(grammar.Node):
   """A delayed FIFO reference.
 
   Attributes:
@@ -270,7 +262,7 @@ class DelayedRef(grammar._Node):
 
   @property
   def c_ptr_type(self):
-    return core.get_c_type(self.ptr_type)
+    return util.get_c_type(self.ptr_type)
 
   @property
   def c_buf_ref(self):
@@ -303,7 +295,7 @@ class DelayedRef(grammar._Node):
     obj.ref = self.ref.visit(callback, args)
     return obj
 
-class FIFORef(grammar._Node):
+class FIFORef(grammar.Node):
   """A FIFO reference.
 
   Attributes:
@@ -352,7 +344,7 @@ class FIFORef(grammar._Node):
   def c_expr(self):
     return self.ref_name
 
-class DRAMRef(grammar._Node):
+class DRAMRef(grammar.Node):
   """A FIFO reference.
 
   Attributes:
@@ -377,7 +369,7 @@ class DRAMRef(grammar._Node):
   def c_expr(self):
     return str(self)
 
-class NodeSignature(object):
+class NodeSignature(grammar.Node):
   """A immutable, hashable signature of a dataflow IR node.
 
   Attributes:
@@ -385,6 +377,9 @@ class NodeSignature(object):
     exprs: tuple of exprs
     template_types: tuple of template types (TODO)
     template_ints: tuple of template ints (TODO)
+
+  Properties:
+    loads: tuple of FIFORefs
   """
   LINEAR_ATTRS = ('lets', 'exprs', 'template_types', 'template_ints')
 
@@ -405,28 +400,13 @@ class NodeSignature(object):
     loads = OrderedDict()
     node = node.visit_loads(mutate, loads)
     self.loads = tuple(loads.values())
-    self.lets = tuple(node.lets)
-    self.exprs = tuple(node.exprs.values())
+    super().__init__(lets=tuple(node.lets), exprs=tuple(node.exprs.values()),
+                     template_types=tuple(), template_ints=tuple())
     _logger.debug('Signature: %s', self)
-    #self.template_types = tuple()
-    #self.template_ints = tuple()
 
   def __repr__(self):
     return '%s(loads: %s, lets: %s, exprs: %s)' % (
         type(self).__name__,
-        core.idx2str(self.loads),
-        core.idx2str(self.lets),
-        core.idx2str(self.exprs))
-
-  # TODO: this is too dirty
-  def __hash__(self):
-    return hash((*tuple(map(str, self.lets)), *tuple(map(str, self.exprs))))
-
-  # TODO: this is too dirty
-  def __eq__(self, other):
-    return all((all(str(let1) == str(let2)
-                    for let1, let2 in zip(self.lets, other.lets)),
-                all(str(expr1) == str(expr2)
-                    for expr1, expr2 in zip(self.exprs, other.exprs))))
-    return all(getattr(self, attr) == getattr(other, attr)
-               for attr in ('lets', 'exprs'))
+        util.idx2str(self.loads),
+        util.idx2str(self.lets),
+        util.idx2str(self.exprs))

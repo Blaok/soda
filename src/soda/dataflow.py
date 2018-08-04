@@ -4,7 +4,7 @@ import copy
 import logging
 
 from haoda import ir
-from soda import core
+from soda import util
 from soda import grammar
 
 _logger = logging.getLogger('__main__').getChild(__name__)
@@ -256,7 +256,7 @@ def create_dataflow_graph(stencil):
       elif isinstance(src_node, ComputeNode):
         write_lat = src_node.tensor.st_ref.lat
       else:
-        raise core.InternalError('unexpected source node: %s', repr(src_node))
+        raise util.InternalError('unexpected source node: %s', repr(src_node))
 
       if isinstance(dst_node, ForwardNode):
         depth = stencil.reuse_buffer_lengths[dst_node.tensor.name]\
@@ -266,7 +266,7 @@ def create_dataflow_graph(stencil):
       elif isinstance(dst_node, SuperSinkNode):
         depth = 0
       else:
-        raise core.InternalError('unexpected destination node: %s',
+        raise util.InternalError('unexpected destination node: %s',
                                  repr(dst_node))
 
       fifo = ir.FIFO(src_node, dst_node, depth, write_lat)
@@ -308,7 +308,7 @@ def create_dataflow_graph(stencil):
             # to confirm -- is this right?
             # TODO: build an index somewhere
             offset = stencil.unroll_factor - 1 - src_node.pe_id + \
-                     core.serialize(obj.ref.idx, stencil.tile_size)
+                     util.serialize(obj.ref.idx, stencil.tile_size)
             for parent in src_node.parents:
               if parent.tensor.name == obj.ref.name and parent.offset == offset:
                 for fifo_r in parent.fifos:
@@ -325,7 +325,7 @@ def create_dataflow_graph(stencil):
           dst_node.lets.append(grammar.Let(
             soda_type=None, name=dram_ref, expr=fifo))
       else:
-        raise core.InternalError('unexpected node of type %s', type(src_node))
+        raise util.InternalError('unexpected node of type %s', type(src_node))
 
       src_node.exprs[fifo] = expr
       src_node.lets.extend(_ for _ in lets if _ not in src_node.lets)

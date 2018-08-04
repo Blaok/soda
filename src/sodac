@@ -9,6 +9,7 @@ from textx.exceptions import TextXSyntaxError
 
 from soda import core
 from soda import grammar
+from soda import util
 from soda.codegen import header
 from soda.codegen import host
 from soda.codegen import kernel
@@ -281,10 +282,10 @@ def main():
   except TextXSyntaxError as e:
     logger.error(e)
     sys.exit(1)
-  except core.SemanticError as e:
+  except util.SemanticError as e:
     logger.error(e)
     sys.exit(1)
-  except core.SemanticWarn as w:
+  except util.SemanticWarn as w:
     logger.warning(w)
 
 if __name__ == '__main__':

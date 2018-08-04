@@ -11,35 +11,9 @@ from cached_property import cached_property
 
 from soda import dataflow
 from soda import grammar
-
-# constants
-COORDS_TILED = 'xyzw'
-COORDS_IN_TILE = 'ijkl'
-COORDS_IN_ORIG = 'pqrs'
-TYPE_WIDTH = {
-  'uint8_t':8,
-  'uint16_t':16,
-  'uint32_t':32,
-  'uint64_t':64,
-  'int8_t':8,
-  'int16_t':16,
-  'int32_t':32,
-  'int64_t':64,
-  'float':32,
-  'double':64
-}
-MAX_DRAM_BANK = 4
+from soda import util
 
 _logger = logging.getLogger('__main__').getChild(__name__)
-
-class InternalError(Exception):
-  pass
-
-class SemanticError(Exception):
-  pass
-
-class SemanticWarn(Exception):
-  pass
 
 class Tensor(object):
   """A tensor that corresponse to an input, local, or output.
@@ -76,12 +50,12 @@ class Tensor(object):
       self.expr = stmt.expr
     elif isinstance(stmt, grammar.InputStmt):
       if stmt.tile_size != tile_size:
-        raise InternalError("tile size doesn't match: %s %s")
+        raise util.InternalError("tile size doesn't match: %s %s")
       self.st_ref = None
       self.lets = []
       self.expr = None
     else:
-      raise InternalError('cannot initialize a Tensor from %s' % type(stmt))
+      raise util.InternalError('cannot initialize a Tensor from %s' % type(stmt))
     _logger.debug('tensor initialized from stmt `%s`', stmt)
     _logger.debug('                   at tx position %d', stmt._tx_position)
 
@@ -100,7 +74,7 @@ class Tensor(object):
 
   @property
   def st_offset(self):
-    return serialize(self.st_idx, self._tile_size)
+    return util.serialize(self.st_idx, self._tile_size)
 
   @cached_property
   def ld_indices(self):
@@ -111,7 +85,7 @@ class Tensor(object):
   def ld_offsets(self):
     return OrderedDict(
       (name, OrderedDict(
-        (serialize(ref.idx, self._tile_size), ref) for ref in refs))
+        (util.serialize(ref.idx, self._tile_size), ref) for ref in refs))
       for name, refs in self.ld_refs.items())
 
   def visit(self, callback, args=[]):
@@ -170,7 +144,7 @@ class Stencil(object):
   def __init__(self, **kwargs):
     self.iterate = kwargs.pop('iterate')
     if self.iterate < 1:
-      raise SemanticError('cannot iterate %d times' % self.iterate)
+      raise util.SemanticError('cannot iterate %d times' % self.iterate)
     self.border = kwargs.pop('border')
     self.preserve_border = self.border == 'preserve'
     self.cluster = kwargs.pop('cluster')
@@ -200,15 +174,15 @@ class Stencil(object):
 
     if self.iterate > 1:
       if len(self.input_stmts) != len(self.output_stmts):
-        raise SemanticError(
+        raise util.SemanticError(
           'number of input tensors must be the same as output if iterate > 1 '
           'times, currently there are %d input(s) but %d output(s)' %
           (len(self.input_stmts), len(self.output_stmts)))
       if self.input_types != self.output_types:
-        raise SemanticError(
+        raise util.SemanticError(
           'input must have the same type(s) as output if iterate > 1 '
           'times, current input has type %s but output has type %s' %
-          (lst2str(self.input_types), lst2str(self.output_types)))
+          (util.lst2str(self.input_types), util.lst2str(self.output_types)))
       _logger.debug('pipeline %d iterations of [%s] -> [%s]' % (self.iterate,
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.input_stmts),
@@ -281,7 +255,7 @@ class Stencil(object):
       elif name in self.param_names:
         return name
       else:
-        raise InternalError('unknown name: %s' % name)
+        raise util.InternalError('unknown name: %s' % name)
 
     for iteration in range(self.iterate):
       def mutate_name_callback(obj, mutated):
@@ -301,7 +275,7 @@ class Stencil(object):
             obj.idx = new_idx
             #if isinstance(obj.parent, Tensor):
             #  obj.parent.st_idx = obj.idx
-            #  obj.parent.st_offset = serialize(obj.idx, self.tile_size)
+            #  obj.parent.st_offset = util.serialize(obj.idx, self.tile_size)
         return obj
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
@@ -331,8 +305,8 @@ class Stencil(object):
           return obj
         tensor.visit_loads(get_load_dict, loads)
         for parent_name, ld_refs in loads.items():
-          ld_refs = sorted(ld_refs,
-                           key=lambda ref: serialize(ref.idx, self.tile_size))
+          ld_refs = sorted(
+              ld_refs, key=lambda ref: util.serialize(ref.idx, self.tile_size))
           parent_tensor = self.tensors[parent_name]
           parent_tensor.children[tensor.name] = tensor
           tensor.parents[parent_name] = parent_tensor
@@ -375,7 +349,7 @@ class Stencil(object):
               child.name,
               ', '.join([x.name for x in child.parents.values()]),
               'is' if len(child.parents) == 1 else 'are')
-          stage_offset = serialize(child.st_idx, self.tile_size)
+          stage_offset = util.serialize(child.st_idx, self.tile_size)
 
           # synchronization check
           def sync(tensor, offset):
@@ -383,7 +357,7 @@ class Stencil(object):
               return offset
             _logger.debug('index of tensor <%s>: %s',
                           tensor.name, tensor.st_idx)
-            tensor_offset = serialize(tensor.st_idx, self.tile_size)
+            tensor_offset = util.serialize(tensor.st_idx, self.tile_size)
             _logger.debug('offset of tensor <%s>: %d',
                           tensor.name, tensor_offset)
             loads = {}
@@ -397,7 +371,7 @@ class Stencil(object):
                   '(%s)' % ', '.join(map(str, idx)) for idx in indices))
                     for name, indices in loads.items()))
             for n in loads:
-              loads[n] = serialize_iter(loads[n], self.tile_size)
+              loads[n] = util.serialize_iter(loads[n], self.tile_size)
             for l in loads.values():
               l[0], l[-1] = (tensor_offset - max(l), tensor_offset - min(l))
               del l[1:-1]
@@ -427,7 +401,8 @@ class Stencil(object):
 
           _logger.debug('intend to generate tensor <%s> at offset %d',
                         child.name, child.st_offset)
-          child.st_ref.idx = deserialize(sync(child, child.st_offset), self.tile_size)
+          child.st_ref.idx = util.deserialize(sync(child, child.st_offset),
+                                              self.tile_size)
           _logger.debug('decide to generate tensor <%s> at offset %d',
                         child.name, child.st_offset)
 
@@ -475,8 +450,8 @@ class Stencil(object):
     for tensor in self.tensors.values():
       for name, indices in tensor.ld_indices.items():
         _logger.debug('stage index: %s@%s <- %s@%s',
-                      tensor.name, idx2str(tensor.st_idx),
-                      name, lst2str(idx2str(idx) for idx in indices))
+                      tensor.name, util.idx2str(tensor.st_idx),
+                      name, util.lst2str(util.idx2str(idx) for idx in indices))
     for tensor in self.tensors.values():
       if tensor.is_input():
         continue
@@ -484,8 +459,8 @@ class Stencil(object):
     for tensor in self.tensors.values():
       for name, offsets in tensor.ld_offsets.items():
         _logger.debug('stage offset: %s@%d <- %s@%s',
-                      tensor.name, serialize(tensor.st_idx, self.tile_size),
-                      name, lst2str(offsets))
+                      tensor.name, util.serialize(tensor.st_idx, self.tile_size),
+                      name, util.lst2str(offsets))
     for tensor in self.tensors.values():
       for name, delay in tensor.ld_delays.items():
         _logger.debug('stage delay: %s <- %s delayed %d' %
@@ -537,7 +512,7 @@ class Stencil(object):
     load_names = {l.name for l in loads
             if l.name not in self.extra_params}
     windows = {name: sorted({l.idx for l in loads if l.name == name},
-                key=lambda x: serialize(x, self.tile_size))
+                key=lambda x: util.serialize(x, self.tile_size))
            for name in load_names}
     _logger.debug('window for %s@(%s) is %s' %
       (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
@@ -549,7 +524,7 @@ class Stencil(object):
       return node.expr
     if isinstance(node, grammar.Local):
       return node.expr
-    raise SemanticError('cannot get expression for %s' % str(type(node)))
+    raise util.SemanticError('cannot get expression for %s' % str(type(node)))
 
   @cached_property
   def reuse_buffers(self):
@@ -686,7 +661,7 @@ class Stencil(object):
             iteration += 1
           delay = (
             get_stencil_distance(self_window, self.tile_size)-
-            serialize(overall_idx, self.tile_size))*iteration
+            util.serialize(overall_idx, self.tile_size))*iteration
 
           func_name += '_'+src_name
           temp_param = '%d-%d' % (unroll_idx, delay)
@@ -803,7 +778,7 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
   A_dag = set()
   for child in tensor.children.values():
     A_dag |= unroll_offsets(
-      serialize_iter(child.ld_indices[tensor.name], tile_size))
+      util.serialize_iter(child.ld_indices[tensor.name], tile_size))
   _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
@@ -848,7 +823,7 @@ def _get_points(tile_size, tensor, unroll_factor):
         _logger.debug(
           '%s <- %s @ offset=%d <=> %s @ unroll_idx=%d',
           child.name, tensor.name, offset,
-          idx2str(list(child.ld_indices[tensor.name].values())[point].idx),
+          util.idx2str(list(child.ld_indices[tensor.name].values())[point].idx),
           unroll_idx)
   return all_points
 
@@ -931,99 +906,6 @@ def _get_replicated_reuse_buffer(tile_size, tensor, replication_factor):
     (tensor.name, reuse_buffer))
   return reuse_buffer
 
-class Printer(object):
-  def __init__(self, out):
-    self._out = out
-    self._indent = 0
-    self._assign = 0
-    self._comments = []
-    self._tab = 2
-
-  def println(self, line='', indent=-1):
-    if indent < 0:
-      indent = self._indent
-    if line:
-      self._out.write('%s%s\n' % (' '*indent*self._tab, line))
-    else:
-      self._out.write('\n')
-
-  def do_indent(self):
-    self._indent += 1
-
-  def un_indent(self):
-    self._indent -= 1
-
-  def do_scope(self, comment=''):
-    self.println('{')
-    self.do_indent()
-    self._comments.append(comment)
-
-  def un_scope(self, comment=''):
-    self.un_indent()
-    popped_comment = self._comments.pop()
-    if comment:
-      self.println('} // %s' % comment)
-    else:
-      if popped_comment:
-        self.println('} // %s' % popped_comment)
-      else:
-        self.println('}')
-
-  def new_var(self):
-    self._assign += 1
-    return self.last_var()
-
-  def last_var(self, offset=-1):
-    return 'assign_%d' % (self.assign+offset)
-
-  def print_func(self, name, params, suffix='', align=80):
-    lines = [name+'(']
-    for param in params:
-      if ((self._indent + min(1, len(lines)-1))*self._tab+
-          len(lines[-1])+len(param+', ')) > align:
-        lines.append(param+', ')
-      else:
-        lines[-1] += param+', '
-    if lines[-1][-2:] == ', ':
-      lines[-1] = lines[-1][:-2]+')'+suffix
-    line = lines.pop(0)
-    self.println(line)
-    if lines:
-      self.do_indent()
-      for line in lines:
-        self.println(line)
-      self.un_indent()
-
-def get_c_type(soda_type):
-  if soda_type in {
-      'uint8', 'uint16', 'uint32', 'uint64',
-      'int8', 'int16', 'int32', 'int64'}:
-    return soda_type+'_t'
-  if soda_type is None:
-    return None
-  for token in ('int', 'uint'):
-    if soda_type.startswith(token):
-      return 'ap_{}<{}>'.format(token, soda_type.replace(token, ''))
-  return soda_type
-
-def get_soda_type(c_type):
-  return c_type[:-2] if c_type[-2:] == '_t' else c_type
-
-def get_width_in_bits(soda_type):
-  if isinstance(soda_type, str):
-    if soda_type.startswith('uint') or soda_type.startswith('int'):
-      return int(soda_type.lstrip('uint').lstrip('int'))
-  else:
-    if hasattr(soda_type, 'soda_type'):
-      return get_width_in_bits(soda_type.soda_type)
-  raise InternalError('unknown soda type: %s', soda_type)
-
-def get_width_in_bytes(soda_type):
-  return (get_width_in_bits(soda_type)-1)//8+1
-
-def is_float(soda_type):
-  return soda_type in {'float', 'double'}
-
 def print_guard(printer, var, val):
   printer.println('#if %s != %d' % (var, val))
   printer.println('#error %s != %d' % (var, val))
@@ -1036,23 +918,6 @@ def print_define(printer, var, val):
 
 def get_indices_id(indices):
   return '_'.join(str(idx).replace('-', 'm') for idx in indices)
-
-def serialize(vec, tile_size):
-  return sum((vec[i]*reduce(operator.mul, tile_size[:i])
-        for i in range(1, len(tile_size))),
-         vec[0])
-
-def serialize_iter(iterative, tile_size):
-  return [serialize(x, tile_size) for x in iterative]
-
-def deserialize(offset, tile_size):
-  return tuple(deserialize_generator(offset, tile_size))
-
-def deserialize_generator(offset, tile_size):
-  for size in tile_size[:-1]:
-    yield offset % size
-    offset = offset // size
-  yield offset
 
 def get_stencil_distance(stencil_window, tile_size):
   return (max(serialize_iter(stencil_window, tile_size))+
@@ -1097,9 +962,3 @@ def get_stencil_window_offset(stencil_window):
   # only works if window is normalized to store at 0
   return tuple(-min(p[d] for p in stencil_window)
          for d in range(len(next(iter(stencil_window)))))
-
-def idx2str(idx):
-  return '(%s)' % ', '.join(map(str, idx))
-
-def lst2str(idx):
-  return '[%s]' % ', '.join(map(str, idx))
