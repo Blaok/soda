@@ -12,29 +12,29 @@ _logger = logging.getLogger('__main__').getChild(__name__)
 class FIFO(grammar.Node):
   """A reference to another node in a soda.grammar.Expr.
 
-  This is used to represent a read/write from/to a Node in an output's Expr.
+  This is used to represent a read/write from/to a Module in an output's Expr.
   It replaces Ref in soda.grammar, which is used to represent an element
   reference to a tensor.
 
   Attributes:
-    read_node: Node reading from this FIFO.
+    read_module: Module reading from this FIFO.
     read_lat: int, at what cycle of a pipelined loop it is being read.
-    write_node: Node writing to this FIFO.
+    write_module: Module writing to this FIFO.
     write_lat: int, at what cycle of a pipelined loop it is being written.
     depth: int, FIFO depth.
   """
-  IMMUTABLE_ATTRS = 'read_node', 'write_node'
-  SCALAR_ATTRS = 'read_node', 'read_lat', 'write_node', 'write_lat', 'depth'
+  IMMUTABLE_ATTRS = 'read_module', 'write_module'
+  SCALAR_ATTRS = 'read_module', 'read_lat', 'write_module', 'write_lat', 'depth'
 
-  def __init__(self, write_node, read_node,
+  def __init__(self, write_module, read_module,
                depth=None, write_lat=None, read_lat=None):
-    super().__init__(write_node=write_node, read_node=read_node,
+    super().__init__(write_module=write_module, read_module=read_module,
                      depth=depth, write_lat=write_lat, read_lat=read_lat)
 
   def __repr__(self):
-    return 'fifo[%d]: %s%s => %s%s' % (self.depth, repr(self.write_node),
+    return 'fifo[%d]: %s%s => %s%s' % (self.depth, repr(self.write_module),
       '' if self.write_lat is None else ' ~%s'%self.write_lat,
-      repr(self.read_node),
+      repr(self.read_module),
       '' if self.read_lat is None else ' ~%s'%self.read_lat)
 
   def __hash__(self):
@@ -45,13 +45,17 @@ class FIFO(grammar.Node):
                for _ in type(self).IMMUTABLE_ATTRS)
   @property
   def edge(self):
-    return self.write_node, self.read_node
+    return self.write_module, self.read_module
 
   @property
   def soda_type(self):
-    return self.write_node.exprs[self].soda_type
+    return self.write_module.exprs[self].soda_type
 
-class Node(object):
+  @property
+  def c_expr(self):
+    return 'from_{}_to_{}'.format(self.write_module.name, self.read_module.name)
+
+class Module(object):
   """A node in the dataflow graph.
 
   This is the base class for a dataflow module. It defines the parent (input)
@@ -59,20 +63,22 @@ class Node(object):
   output schedules. It also has a name to help identify itself.
 
   Attributes:
-    name: str, optional.
-    parents: Set of parent (input) Node.
-    children: Set of child (output) Node.
+    parents: Set of parent (input) Module.
+    children: Set of child (output) Module.
     lets: List of soda.grammar.Let expressions.
     exprs: Dict of {FIFO: soda.grammar.Expr}, stores an output's expression.
   """
   def __init__(self):
     """Initializes attributes into empty list or dict.
     """
-    self.name = None
     self.parents = []
     self.children = []
     self.lets = []
     self.exprs = OrderedDict()
+
+  @property
+  def name(self):
+    return 'module_%u' % hash(self)
 
   @property
   def fifos(self):
@@ -80,7 +86,7 @@ class Node(object):
 
   @property
   def fifo_dict(self):
-    return {(self, fifo.read_node): fifo for fifo in self.exprs}
+    return {(self, fifo.read_module): fifo for fifo in self.exprs}
 
   def fifo(self, dst_node):
     return self.fifo_dict[(self, dst_node)]
@@ -90,7 +96,7 @@ class Node(object):
 
   def visit_loads(self, callback, args=None):
     obj = copy.copy(self)
-    obj.lets = [_.visit(callback, args) for _ in self.lets]
+    obj.lets = tuple(_.visit(callback, args) for _ in self.lets)
     obj.exprs = OrderedDict()
     for fifo in self.exprs:
       obj.exprs[fifo] = self.exprs[fifo].visit(callback, args)
@@ -110,7 +116,7 @@ class Node(object):
     not updated.
 
     Arguments:
-      child: Node, child being added
+      child: Module, child being added
     """
     if child not in self.children:
       self.children.append(child)
@@ -203,9 +209,9 @@ class Node(object):
     This method returns all descendant nodes as a set.
 
     Returns:
-      Set of descendant Node.
+      Set of descendant Module.
     """
-    return {self}.union(*map(Node.get_descendants, self.children))
+    return {self}.union(*map(Module.get_descendants, self.children))
 
   def get_connections(self):
     """Get all descendant edges.
@@ -213,10 +219,10 @@ class Node(object):
     This method returns all descendant edges as a set.
 
     Returns:
-      Set of descendant (src Node, dst Node) tuple.
+      Set of descendant (src Module, dst Module) tuple.
     """
     return ({(self, child) for child in self.children}
-        .union(*map(Node.get_connections, self.children)))
+        .union(*map(Module.get_connections, self.children)))
 
 
 class DelayedRef(grammar.Node):
@@ -278,7 +284,7 @@ class DelayedRef(grammar.Node):
 
   @property
   def c_buf_load(self):
-    return '{}&& {} = {};'.format(self.c_type, self.c_expr, self.c_buf_ref)
+    return 'const {} {} = {};'.format(self.c_type, self.c_expr, self.c_buf_ref)
 
   @property
   def c_buf_store(self):
@@ -289,11 +295,6 @@ class DelayedRef(grammar.Node):
     return ('{ptr} = {ptr} < {depth} ? '
             '{c_ptr_type}({ptr}+1) : {c_ptr_type}(0);').format(
       ptr=self.ptr, c_ptr_type=self.c_ptr_type, depth=self.delay-1)
-
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    obj.ref = self.ref.visit(callback, args)
-    return obj
 
 class FIFORef(grammar.Node):
   """A FIFO reference.
@@ -345,16 +346,18 @@ class FIFORef(grammar.Node):
     return self.ref_name
 
 class DRAMRef(grammar.Node):
-  """A FIFO reference.
+  """A DRAM reference.
 
   Attributes:
     soda_type: str
-    dram: str, DRAM bundle name it is accessesing
+    dram: [int], DRAM id it is accessing
+    var: str, variable name it is accessing
     offset: int
   """
-  SCALAR_ATTRS = 'soda_type', 'dram', 'offset'
+  SCALAR_ATTRS = 'soda_type', 'dram', 'var', 'offset'
   def __str__(self):
-    return 'dram<%s@%d>' % (self.dram, self.offset)
+    return 'dram<bank {} {}@{}>'.format(util.lst2str(self.dram),
+                                        self.var, self.offset)
 
   def __repr__(self):
     return str(self)
@@ -369,8 +372,16 @@ class DRAMRef(grammar.Node):
   def c_expr(self):
     return str(self)
 
-class NodeSignature(grammar.Node):
-  """A immutable, hashable signature of a dataflow IR node.
+  @property
+  def dram_buf_name(self):
+    return 'bank_{}_buf'.format(self.var)
+
+  @property
+  def dram_fifo_name(self):
+    return 'bank_{}_fifo'.format(self.var)
+
+class ModuleTrait(grammar.Node):
+  """A immutable, hashable trait of a dataflow module.
 
   Attributes:
     lets: tuple of lets

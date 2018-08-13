@@ -1,14 +1,13 @@
-from collections import OrderedDict
-from collections import deque
+from collections import Iterable, OrderedDict, deque
 from functools import reduce
 import copy
 import itertools
 import logging
 import operator
-import sys
 
 from cached_property import cached_property
 
+from haoda import ir
 from soda import dataflow
 from soda import grammar
 from soda import util
@@ -43,7 +42,7 @@ class Tensor(object):
     self.name = stmt.name
     self.soda_type = stmt.soda_type
     self._tile_size = tile_size
-    if issubclass(type(stmt), grammar._LocalStmtOrOutputStmt):
+    if issubclass(type(stmt), grammar.LocalStmtOrOutputStmt):
       self.st_ref = copy.copy(stmt.ref)
       self.st_ref.parent = self
       self.lets = stmt.let
@@ -55,8 +54,10 @@ class Tensor(object):
       self.lets = []
       self.expr = None
     else:
-      raise util.InternalError('cannot initialize a Tensor from %s' % type(stmt))
+      raise util.InternalError('cannot initialize a Tensor from %s' %
+                               type(stmt))
     _logger.debug('tensor initialized from stmt `%s`', stmt)
+    # pylint: disable=protected-access
     _logger.debug('                   at tx position %d', stmt._tx_position)
 
     # these fields are to be set externally
@@ -69,8 +70,7 @@ class Tensor(object):
   def st_idx(self):
     if self.st_ref is not None:
       return self.st_ref.idx
-    else:
-      return (0,)*len(self._tile_size)
+    return (0,)*len(self._tile_size)
 
   @property
   def st_offset(self):
@@ -88,13 +88,17 @@ class Tensor(object):
         (util.serialize(ref.idx, self._tile_size), ref) for ref in refs))
       for name, refs in self.ld_refs.items())
 
-  def visit(self, callback, args=[]):
+  @property
+  def c_type(self):
+    return util.get_c_type(self.soda_type)
+
+  def visit(self, callback, args=None):
     for let in self.lets:
       let.visit(callback, args)
     self.expr.visit(callback, args)
     self.st_ref.visit(callback, args)
 
-  def visit_loads(self, callback, args=[]):
+  def visit_loads(self, callback, args=None):
     for let in self.lets:
       let.visit(callback, args)
     self.expr.visit(callback, args)
@@ -124,12 +128,10 @@ class Stencil(object):
     preserve_border: Reserved.
     cluster: Reserved.
     burst_width: int, width of bits for DRAM burst access.
-    dram_bank: int, number of DRAM banks to use.
     app_name: str, application's name.
     tile_size: List of int.
     unroll_factor: int.
     replication_factor: int.
-    dram_separate: bool.
     dim: int.
     param_stmts: List of ParamStmt.
     input_stmts: List of InputStmt.
@@ -150,20 +152,12 @@ class Stencil(object):
     self.cluster = kwargs.pop('cluster')
     # platform determined
     self.burst_width = kwargs.pop('burst_width')
-    self.dram_bank = kwargs.pop('dram_bank')
     # application determined
     self.app_name = kwargs.pop('app_name')
     # parameters that can be explored
     self.tile_size = tuple(kwargs.pop('tile_size'))
     self.unroll_factor = kwargs.pop('unroll_factor')
     self.replication_factor = kwargs.pop('replication_factor')
-    self.dram_separate = kwargs.pop('dram_separate')
-    if self.dram_separate:
-      if self.dram_bank%2 != 0:
-        _logger.fatal('Number of DRAM banks has to be even when separated')
-        sys.exit(-1)
-      else:
-        self.dram_bank = int(self.dram_bank/2)
     # stage-independent
     self.dim = kwargs.pop('dim')
     self.param_stmts = kwargs.pop('param_stmts')
@@ -189,22 +183,57 @@ class Stencil(object):
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.output_stmts)))
 
-    # force generating tensors
-    self.chronological_tensors
     _logger.debug('producer tensors: [%s]',
                   ', '.join(tensor.name for tensor in self.producer_tensors))
     _logger.debug('consumer tensors: [%s]',
                   ', '.join(tensor.name for tensor in self.consumer_tensors))
 
+    # soda frontend successfully parsed
+    # replicate tensors for iterative stencil
+    # TODO: build Ref table and Var table
+    # generate reuse buffers and get haoda nodes
+    # pylint: disable=pointless-statement
+    self.dataflow_super_source
     _logger.debug('dataflow: %s', self.dataflow_super_source)
+
+    _logger.debug('module table: %s', dict(self.module_table))
+    _logger.debug('module traits: %s', self.module_traits)
 
   @cached_property
   def dataflow_super_source(self):
     return dataflow.create_dataflow_graph(self)
 
   @cached_property
+  def module_table(self):
+    """
+    Node -> module_trait, module_trait_id
+    """
+    self._module_traits = OrderedDict()
+    module_table = OrderedDict()
+    for node in self.dataflow_super_source.tpo_node_gen():
+      self._module_traits.setdefault(ir.ModuleTrait(node), []).append(node)
+    for idx, module_trait in enumerate(self._module_traits):
+      for node in self._module_traits[module_trait]:
+        module_table[node] = module_trait, idx
+    return module_table
+
+  @cached_property
+  def module_traits(self):
+    # pylint: disable=pointless-statement
+    self.module_table
+    return tuple(self._module_traits)
+
+  @cached_property
   def input_types(self):
     return tuple(tensor.soda_type for tensor in self.input_stmts)
+
+  @cached_property
+  def param_types(self):
+    return tuple(tensor.soda_type for tensor in self.param_stmts)
+
+  @cached_property
+  def local_types(self):
+    return tuple(tensor.soda_type for tensor in self.local_stmts)
 
   @cached_property
   def output_types(self):
@@ -227,6 +256,17 @@ class Stencil(object):
     return tuple(stmt.name for stmt in self.output_stmts)
 
   @cached_property
+  def tensor_type_map(self):
+    tensor_types = {}
+    for name, soda_type in zip(self.input_names, self.input_types):
+      tensor_types[name] = soda_type
+    for name, soda_type in zip(self.local_names, self.local_types):
+      tensor_types[name] = soda_type
+    for name, soda_type in zip(self.output_names, self.output_types):
+      tensor_types[name] = soda_type
+    return tensor_types
+
+  @cached_property
   def tensors(self):
     # start constructing high-level DAG
     # TODO: check for name conflicts
@@ -239,19 +279,16 @@ class Stencil(object):
       if name in self.input_names:
         if iteration > 0:
           return name+'_iter%d' % iteration
-        else:
-          return name
+        return name
       elif name in self.output_names:
         if iteration < self.iterate-1:
           return (self.input_names[self.output_names.index(name)]+
                   '_iter%d' % (iteration+1))
-        else:
-          return name
+        return name
       elif name in self.local_names:
         if iteration > 0:
           return name+'_iter%d' % iteration
-        else:
-          return name
+        return name
       elif name in self.param_names:
         return name
       else:
@@ -261,6 +298,8 @@ class Stencil(object):
       def mutate_name_callback(obj, mutated):
         obj = copy.copy(obj)
         if isinstance(obj, grammar.Ref):
+          obj.soda_type = self.tensor_type_map[obj.name]
+          # pylint: disable=cell-var-from-loop
           obj.name = name_in_iter(obj.name, iteration)
         return obj
       def normalize_callback(obj, args):
@@ -431,16 +470,15 @@ class Stencil(object):
           processed_tensors.add(child.name)
           self.chronological_tensors.append(child)
         else:
-          for bb in s.inputs.values():
-            if bb.name not in processed_tensors:
-              _logger.debug(
-                'tensor %s requires tensor <%s> as an input' %
-                (s.name, bb.name))
-              _logger.debug(
-                'but tensor <%s> isn\'t processed yet' % bb.name)
-              _logger.debug(
-                'add %s to scheduling queue' % bb.name)
-              processing_queue.append(bb.name)
+          for parent in tensor.parents.values():
+            if parent.name not in processed_tensors:
+              _logger.debug('tensor %s requires tensor <%s> as an input',
+                            tensor.name, parent.name)
+              _logger.debug('but tensor <%s> isn\'t processed yet',
+                            parent.name)
+              _logger.debug('add %s to scheduling queue',
+                            parent.name)
+              processing_queue.append(parent.name)
 
     _logger.debug('tensors in insertion order: [%s]',
                   ', '.join(map(str, self.tensors)))
@@ -459,7 +497,8 @@ class Stencil(object):
     for tensor in self.tensors.values():
       for name, offsets in tensor.ld_offsets.items():
         _logger.debug('stage offset: %s@%d <- %s@%s',
-                      tensor.name, util.serialize(tensor.st_idx, self.tile_size),
+                      tensor.name, util.serialize(tensor.st_idx,
+                                                  self.tile_size),
                       name, util.lst2str(offsets))
     for tensor in self.tensors.values():
       for name, delay in tensor.ld_delays.items():
@@ -473,24 +512,22 @@ class Stencil(object):
     pixel_width_i = sum(self.pixel_width_i)
     if self.burst_width/pixel_width_i*self.dram_bank/2 > self.unroll_factor/2:
       return int(self.burst_width/pixel_width_i*self.dram_bank/2)
-    else:
-      return int(self.unroll_factor/2)
+    return int(self.unroll_factor/2)
 
   @cached_property
   def output_partition(self):
     pixel_width_o = sum(self.pixel_width_o)
     if self.burst_width/pixel_width_o*self.dram_bank/2 > self.unroll_factor/2:
       return int(self.burst_width/pixel_width_o*self.dram_bank/2)
-    else:
-      return int(self.unroll_factor/2)
+    return int(self.unroll_factor/2)
 
   @cached_property
   def pixel_width_i(self):
-    return list(map(get_width_in_bits, self.input_stmts))
+    return list(map(util.get_width_in_bits, self.input_stmts))
 
   @cached_property
   def pixel_width_o(self):
-    return list(map(get_width_in_bits, self.output_stmts))
+    return list(map(util.get_width_in_bits, self.output_stmts))
 
   @cached_property
   def producer_tensors(self):
@@ -596,6 +633,7 @@ class Stencil(object):
 
   @cached_property
   def reuse_buffer_lengths(self):
+    # pylint: disable=pointless-statement
     self.reuse_buffers
     return self.reuse_buffer_lengths
 
@@ -605,10 +643,10 @@ class Stencil(object):
         return self.forwardings[src_name]
     else:
       self.forwardings = {}
-    next_fifo = self.get_next_fifo()
+    next_fifo = self.next_fifo
     unroll_factor = self.unroll_factor
-    dsts = self.get_all_points()[src_name]
-    reuse_buffer = self.get_reuse_buffers()[src_name]
+    dsts = self.all_points[src_name]
+    reuse_buffer = self.reuse_buffers[src_name]
 
     # {offset: [func_name, outputs, inputs, params, temp_param]}
     forwardings = {}
@@ -637,10 +675,10 @@ class Stencil(object):
           '/*  input */ %s_offset_%d_chan_%%d' %
           (src_name, offset))
         func_name = 'forward'
-        temp_param = self.get_reuse_buffer_length(src_name, offset)
+        temp_param = self.reuse_buffer_lengths[src_name][offset]
         forward_num = len(params)-1
         if (
-          offset < self.unroll_factor and
+          offset < self.unroll_factor and False and
           self.tensors[src_name].preserve_border_to() and
           not self.tensors[src_name].is_input()):
           stage = self.stages[src_name]
@@ -718,7 +756,7 @@ class Stencil(object):
       replication_factor = self.replication_factor
       self.replicated_reuse_buffer_lengths = {}
       self.replicated_reuse_buffers = {}
-      for tensor in self.producer_tensors():
+      for tensor in self.producer_tensors:
         reuse_buffer = _get_replicated_reuse_buffer(self.tile_size,
           tensor, replication_factor)
         self.replicated_reuse_buffers[tensor.name] = reuse_buffer
@@ -742,7 +780,7 @@ class Stencil(object):
   def get_replicated_all_points(self):
     if not hasattr(self, 'replicated_all_points'):
       self.replicated_all_points = {}
-      for tensor in self.producer_tensors():
+      for tensor in self.producer_tensors:
         self.replicated_all_points[tensor.name
           ] = _get_replicated_points(self.tile_size, tensor)
       _logger.debug('replicated_all_points: %s' %
@@ -862,7 +900,7 @@ def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
     tensor.name)
   A_dag = set()
   for stage in tensor.children:
-    offsets = serialize_iter(stage.window[tensor.name], tile_size)
+    offsets = util.serialize_iter(stage.window[tensor.name], tile_size)
     A_dag |= {max(offsets)-offset+stage.delay[tensor.name]
       for offset in offsets}
   _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
@@ -878,7 +916,7 @@ def _get_replicated_points(tile_size, tensor):
   all_points = {} # {name:{offset:point_index}}
   for stage in tensor.children:
     all_points[stage.name] = {}
-    offsets = serialize_iter(stage.window[tensor.name], tile_size)
+    offsets = util.serialize_iter(stage.window[tensor.name], tile_size)
     max_offset = max(offsets)
     for idx, offset in enumerate(offsets):
       all_points[stage.name][
@@ -920,8 +958,8 @@ def get_indices_id(indices):
   return '_'.join(str(idx).replace('-', 'm') for idx in indices)
 
 def get_stencil_distance(stencil_window, tile_size):
-  return (max(serialize_iter(stencil_window, tile_size))+
-      serialize(get_stencil_window_offset(stencil_window), tile_size))
+  return (max(util.serialize_iter(stencil_window, tile_size))+
+      util.serialize(get_stencil_window_offset(stencil_window), tile_size))
 
 def get_stencil_dim(points):
   dimension = len(next(iter(points)))
@@ -938,22 +976,22 @@ def get_overall_stencil_window(input_tensor, output_tensor):
   _logger.debug('get overall stencil window of %s <- %s' %
           (output_tensor.name, input_tensor.name))
   all_points = set()
-  if output_tensor.parent is not None:
-    for name, points in output_tensor.parent.window.items():
+  for parent in output_tensor.parents.values():
+    for name, points in parent.ld_indices.items():
       if name != input_tensor.name:
         recursive_points = get_overall_stencil_window(
-          input_tensor, output_tensor.parent.inputs[name])
+          input_tensor, parent.parents[name])
         all_points |= set.union(*[{
           tuple(map(lambda a, b, c: a + b - c,
-                p, point, output_tensor.idx))
+                p, point, output_tensor.st_idx))
           for p in recursive_points} for point in points])
       else:
         all_points |= {tuple(map(operator.sub,
-                     point, output_tensor.idx))
+                     point, output_tensor.st_idx))
                  for point in points}
   _logger.debug(
     'overall stencil window of %s (%s) <- %s is %s (%d points)' %
-    (output_tensor.name, ', '.join(['0']*len(output_tensor.idx)),
+    (output_tensor.name, ', '.join(['0']*len(output_tensor.st_idx)),
      input_tensor.name, all_points, len(all_points)))
   _overall_stencil_window_cache[idx] = all_points
   return all_points
@@ -962,3 +1000,14 @@ def get_stencil_window_offset(stencil_window):
   # only works if window is normalized to store at 0
   return tuple(-min(p[d] for p in stencil_window)
          for d in range(len(next(iter(stencil_window)))))
+
+def get_dram_refs(obj):
+  if isinstance(obj, Iterable):
+    return sum(map(get_dram_refs, obj), [])
+  dram_refs = []
+  def get_dram_refs_callback(obj, args):
+    if isinstance(obj, ir.DRAMRef):
+      args.append(obj)
+    return obj
+  obj.visit(get_dram_refs_callback, dram_refs)
+  return dram_refs

@@ -58,16 +58,16 @@ class Printer(object):
     self.do_indent()
     self._comments.append(comment)
 
-  def un_scope(self, comment=''):
+  def un_scope(self, comment='', suffix=''):
     self.un_indent()
     popped_comment = self._comments.pop()
     if comment:
-      self.println('} // %s' % comment)
+      self.println('}%s // %s' % (suffix, comment))
     else:
       if popped_comment:
-        self.println('} // %s' % popped_comment)
+        self.println('}%s // %s' % (suffix, popped_comment))
       else:
-        self.println('}')
+        self.println('}%s' % suffix)
 
   def new_var(self):
     self._assign += 1
@@ -146,3 +146,16 @@ def idx2str(idx):
 
 def lst2str(idx):
   return '[%s]' % ', '.join(map(str, idx))
+
+def get_node_name(node_id):
+  return 'node_%d' % node_id
+
+def get_func_name(node_id):
+  return 'Node%d' % node_id
+
+get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
+get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)
+def get_fifo_name(name, offset):
+  return 'stream_{}_offset_{}'.format(name, offset)
+def get_tensor_name_at(name, offset):
+  return 'tensor_{}_offset_{}'.format(name, offset)

@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from collections import namedtuple
 from functools import reduce
 import copy
 import logging
@@ -12,6 +11,7 @@ from soda import util
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
+'''
 def print_compute_input(printer, stencil):
   unroll_factor = stencil.unroll_factor
   all_points = stencil.get_all_points()
@@ -472,476 +472,325 @@ def print_increment_coordinates(printer, stencil, stage):
     PrintDecrementTileLastDim(0)
     printer.un_scope()
   printer.un_scope()
+'''
 
-def print_interface(p, stencil):
+def _print_interface(printer, stencil):
+  println = printer.println
+  do_indent = printer.do_indent
+  un_indent = printer.un_indent
+  do_scope = printer.do_scope
+  un_scope = printer.un_scope
   tile_size = stencil.tile_size
   unroll_factor = stencil.unroll_factor
   app_name = stencil.app_name
-  extra_params = stencil.extra_params
-  dram_bank = stencil.dram_bank
-  dram_separate = stencil.dram_separate
-  input_chan = stencil.input.chan
-  output_chan = stencil.output.chan
   super_source = stencil.dataflow_super_source
+  burst_width = stencil.burst_width
 
   _logger.info('generate reuse buffers')
-  reuse_buffers = stencil.get_reuse_buffers()
-  all_points = stencil.get_all_points()
-  next_fifo = stencil.get_next_fifo()
-  overall_stencil_window = util.get_overall_stencil_window(stencil.input, stencil.output)
+  reuse_buffers = stencil.reuse_buffers
+  all_points = stencil.all_points
+  next_fifo = stencil.next_fifo
+  overall_stencil_window = core.get_overall_stencil_window(
+      stencil.tensors[stencil.input_names[0]],
+      stencil.tensors[stencil.output_names[0]])
 
-  p.println('extern "C"')
-  p.println('{')
-  p.println()
-  p.println('void %s_kernel(' % app_name)
-  p.do_indent()
-  for c in range(output_chan):
-    for i in range(dram_bank):
-      p.println('ap_uint<BURST_WIDTH>* var_output_chan_%d_bank_%d,' % (c, i))
-  for c in range(input_chan):
-    for i in range(dram_bank):
-      p.println('ap_uint<BURST_WIDTH>* var_input_chan_%d_bank_%d,' % (c, i))
-  if extra_params:
-    for param in extra_params.values():
-      p.println('%s* var_%s,' % (param.type, param.name))
-  p.println('uint64_t coalesced_data_num,')
-  p.println('uint64_t tile_data_num,')
+  outputs = [(stmt.name, bank) for stmt in stencil.output_stmts
+                               for bank in stmt.dram]
+  inputs = [(stmt.name, bank) for stmt in stencil.input_stmts
+                              for bank in stmt.dram]
+
+  get_port_name = util.get_port_name
+  get_port_buf_name = util.get_port_buf_name
+  get_fifo_name = util.get_fifo_name
+  get_tensor_name_at = util.get_tensor_name_at
+
+  println('extern "C"')
+  println('{')
+  println()
+  println('void %s_kernel(' % app_name)
+  do_indent()
+  for name, bank in outputs + inputs:
+    println('ap_uint<BURST_WIDTH>* {},'.format(get_port_name(name, bank)))
+  for param in stencil.param_names:
+    println('%s* var_%s,' % (param.type, param.name))
+  println('uint64_t coalesced_data_num,')
+  println('uint64_t tile_data_num,')
   for i in range(stencil.dim-1):
-    p.println('uint32_t input_bound_dim_%d,' % i)
+    println('uint32_t input_bound_dim_%d,' % i)
   for d in range(stencil.dim-1):
-    p.println('uint32_t input_size_dim_%d,' % d)
-  p.println('uint32_t input_size_dim_%d)' % (stencil.dim-1))
-  p.un_indent()
-  p.do_scope()
+    println('uint32_t input_size_dim_%d,' % d)
+  println('uint32_t input_size_dim_%d)' % (stencil.dim-1))
+  un_indent()
+  do_scope()
 
-  bank = 0
-  for i in range(dram_bank):
-    for c in range(output_chan):
-      p.println('#pragma HLS interface m_axi port=var_output_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%do latency=120' % (c, i, c, bank), 0)
-    bank += 1
-  if not dram_separate:
-    bank = 0
-  for i in range(dram_bank):
-    for c in range(input_chan):
-      p.println('#pragma HLS interface m_axi port=var_input_chan_%d_bank_%d offset=slave depth=65536 bundle=chan%dbank%di latency=120' % (c, i, c, bank), 0)
-    bank += 1
-  if extra_params:
-    for idx, param in enumerate(extra_params.values()):
-      p.println('#pragma HLS interface m_axi port=var_%s offset=slave depth=%d bundle=gmem%d latency=120' % (param.name, reduce(operator.mul, param.size), idx), 0)
-  p.println()
-  for c in range(output_chan):
-    for i in range(dram_bank):
-      p.println('#pragma HLS interface s_axilite port=var_output_chan_%d_bank_%d bundle=control' % (c, i), 0)
-  for c in range(input_chan):
-    for i in range(dram_bank):
-      p.println('#pragma HLS interface s_axilite port=var_input_chan_%d_bank_%d bundle=control' % (c, i), 0)
-  if extra_params:
-    for param in extra_params.values():
-      p.println('#pragma HLS interface s_axilite port=var_%s bundle=control' % param.name, 0)
-  p.println('#pragma HLS interface s_axilite port=coalesced_data_num bundle=control', 0)
-  p.println('#pragma HLS interface s_axilite port=tile_data_num bundle=control', 0)
+  for name, bank in outputs:
+    println('#pragma HLS interface m_axi port={} offset=slave depth=65536 '
+            'bundle={} latency=120'.format(get_port_name(name, bank),
+                                           get_port_name(name, bank)), 0)
+  for name, bank in inputs:
+    println('#pragma HLS interface m_axi port={} offset=slave depth=65536 '
+            'bundle={} latency=120'.format(get_port_name(name, bank),
+                                           get_port_name(name, bank)), 0)
+
+  for idx, param in enumerate(stencil.param_stmts):
+    println('#pragma HLS interface m_axi port=var_{} offset=slave depth={} '
+            'bundle=gmem{} latency=120'.format(
+                param.name, reduce(operator.mul, param.size), idx), 0)
+
+  println()
+  for name, bank in outputs + inputs:
+    println('#pragma HLS interface s_axilite port={} '
+            'bundle=control'.format(get_port_name(name, bank)), 0)
+
+  for param in stencil.param_stmts:
+    println('#pragma HLS interface s_axilite port=var_{} '
+            'bundle=control'.format(param.name), 0)
+  println('#pragma HLS interface s_axilite port=coalesced_data_num '
+          'bundle=control', 0)
+  println('#pragma HLS interface s_axilite port=tile_data_num '
+          'bundle=control', 0)
   for d in range(stencil.dim-1):
-    p.println('#pragma HLS interface s_axilite port=input_bound_dim_%d bundle=control' % d, 0)
+    println('#pragma HLS interface s_axilite port=input_bound_dim_%d '
+            'bundle=control' % d, 0)
   for d in range(stencil.dim):
-    p.println('#pragma HLS interface s_axilite port=input_size_dim_%d bundle=control' % d, 0)
-  p.println('#pragma HLS interface s_axilite port=return bundle=control', 0)
-  p.println()
+    println('#pragma HLS interface s_axilite port=input_size_dim_%d '
+            'bundle=control' % d, 0)
+  println('#pragma HLS interface s_axilite port=return bundle=control', 0)
+  println()
 
-  for c in range(input_chan):
-    for i in range(dram_bank):
-      p.println('hls::stream<ap_uint<BURST_WIDTH> >  input_stream_chan_%d_bank_%d( "input_stream_chan_%d_bank_%d");' % ((c, i)*2))
-  for c in range(output_chan):
-    for i in range(dram_bank):
-      p.println('hls::stream<ap_uint<BURST_WIDTH> > output_stream_chan_%d_bank_%d("output_stream_chan_%d_bank_%d");' % ((c, i)*2))
-  for c in range(input_chan):
-    for i in range(dram_bank):
-      p.println('#pragma HLS stream variable=input_stream_chan_%d_bank_%d depth=32' % (c, i), 0)
-  for c in range(output_chan):
-    for i in range(dram_bank):
-      p.println('#pragma HLS stream variable=output_stream_chan_%d_bank_%d depth=32' % (c, i), 0)
-  p.println()
+  # port buf declarations
+  for name, bank in inputs + outputs:
+    println('hls::stream<Data<ap_uint<BURST_WIDTH> > > {0}("{0}");'.format(
+        get_port_buf_name(name, bank)))
+  # port buf depths
+  for name, bank in inputs + outputs:
+    println('#pragma HLS stream variable={} depth=32'.format(
+        get_port_buf_name(name, bank)), 0)
+  println()
 
+  # internal fifos
+  for node in stencil.dataflow_super_source.tpo_node_gen():
+    for fifo in node.fifos:
+      println('hls::stream<Data<{0}> > {1}("{1}");'.format(fifo.c_type, fifo.c_expr))
+      if fifo.depth > 0:
+        println('#pragma HLS stream variable={} depth={}'.format(
+            fifo.c_expr, fifo.depth), 0)
+
+  '''
   if extra_params:
     for param in extra_params.values():
       if param.dup:
         dup = ('[%d]' % param.dup)
       else:
         dup = ''
-      p.println('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join(map(str, param.size))))
-    p.println()
+      println('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join(map(str, param.size))))
+    println()
 
     for param in extra_params.values():
-      p.println('#pragma HLS array_partition variable=%s complete dim=1' % param.name, 0)
+      println('#pragma HLS array_partition variable=%s complete dim=1' % param.name, 0)
       dim_offset = 1
       if param.dup:
-        p.println('#pragma HLS array_partition variable=%s complete dim=2' % param.name, 0)
+        println('#pragma HLS array_partition variable=%s complete dim=2' % param.name, 0)
         dim_offset = 2
       for partitioning in param.partitioning:
-        p.println('#pragma HLS array_partition variable=%s %s dim=%d%s' % (
+        println('#pragma HLS array_partition variable=%s %s dim=%d%s' % (
           param.name,
           partitioning.partition_type,
           dim_offset+1 if partitioning.dim is None else partitioning.dim+dim_offset,
           '' if partitioning.factor is None else ' factor=%d' % partitioning.factor,
         ), 0)
-    p.println()
+    println()
 
     for param in extra_params.values():
       if len(param.size) > 1:
         for dim, size in enumerate(param.size):
-          p.println('uint32_t %s_index_dim_%d = 0;' % (param.name, dim))
-      p.println('%s_init:' % param.name, 0)
-      p.println('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, reduce(operator.mul, param.size), param.name))
+          println('uint32_t %s_index_dim_%d = 0;' % (param.name, dim))
+      println('%s_init:' % param.name, 0)
+      println('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, reduce(operator.mul, param.size), param.name))
       p.do_scope()
-      p.println('#pragma HLS pipeline II=1', 0)
-      p.println('%s& %s_tmp = var_%s[%s_index];' % (param.type, param.name, param.name, param.name))
-      p.println('%s_unrolled:' % param.name, 0)
-      p.println('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
+      println('#pragma HLS pipeline II=1', 0)
+      println('%s& %s_tmp = var_%s[%s_index];' % (param.type, param.name, param.name, param.name))
+      println('%s_unrolled:' % param.name, 0)
+      println('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
       p.do_scope()
-      p.println('#pragma HLS unroll',0)
+      println('#pragma HLS unroll',0)
       if param.dup is None:
-        p.println('%s[unroll_index]%s = %s_tmp;' % ((param.name, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name)))
+        println('%s[unroll_index]%s = %s_tmp;' % ((param.name, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name)))
       else:
         for i in range(param.dup):
-          p.println('%s[%d][unroll_index]%s = %s_tmp;' % (param.name, i, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name))
+          println('%s[%d][unroll_index]%s = %s_tmp;' % (param.name, i, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name))
       p.un_scope()
       if len(param.size) > 1:
         for dim in range(len(param.size)):
-          p.println('++%s_index_dim_%d;' % (param.name, dim))
+          println('++%s_index_dim_%d;' % (param.name, dim))
           if dim<len(param.size)-1:
-            p.println('if(%s_index_dim_%d==%d)' % (param.name, dim, param.size[len(param.size)-1-dim]))
+            println('if(%s_index_dim_%d==%d)' % (param.name, dim, param.size[len(param.size)-1-dim]))
             p.do_scope()
-            p.println('%s_index_dim_%d = 0;' % (param.name, dim))
+            println('%s_index_dim_%d = 0;' % (param.name, dim))
       for size in param.size[:-1]:
         p.un_scope()
       p.un_scope()
-    p.println()
+    println()
 
   extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
+  '''
 
-  p.println('uint64_t epoch_num = coalesced_data_num*%d/%d;' % (
-    stencil.burst_width*stencil.dram_bank/util.TYPE_WIDTH[stencil.input.type],
-    unroll_factor))
-  p.println()
+  # TODO: fix this number
+  println('uint64_t epoch_num = coalesced_data_num*{}/{};'.format(
+      stencil.burst_width//sum(util.get_width_in_bits(_)
+                               for _ in stencil.input_types),
+      unroll_factor))
+  println()
 
+  # TODO: replication not supported
+  '''
   if stencil.replication_factor > 1:
     _generate_code(p, stencil)
 
     p.un_scope()
-    p.println()
-    p.println('}//extern "C"')
+    println()
+    println('}  //extern "C"')
 
     return
-
-  GetTensorAt = lambda n, o, c: ('%s_offset_%d_chan_%d') % (n, o, c)
 
   # reuse buffers
   if stencil.cluster == 'none':
     for name, reuse_buffer in reuse_buffers.items():
       pragmas = []
       msg = 'reuse buffers for %s' % name
-      _logger.debug('generate %s' % msg)
-      p.println('// %s' % msg)
+      _logger.debug('generate %s', msg)
+      println('// %s' % msg)
       for start, end in reuse_buffer[1:]:
-        for c in range(stencil.tensors[name].chan):
-          p.println('hls::stream<%s> %s("%s");' % ((stencil.tensors[name].type,)+(GetTensorAt(name, end, c),)*2))
-          buffer_length = stencil.get_reuse_buffer_length(name, end)
-          tensor_name = GetTensorAt(name, end, c)
-          if buffer_length > 1:
-            pragmas.append((tensor_name, buffer_length))
+        println('hls::stream<{0}> {1}("{1}");'.format(
+            stencil.tensors[name].c_type, get_tensor_name_at(name, end)))
+        buffer_length = stencil.reuse_buffer_lengths[name][end]
+        tensor_name = get_tensor_name_at(name, end)
+        if buffer_length > 1:
+          pragmas.append((tensor_name, buffer_length))
       for pragma in pragmas:
-        p.println('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
-      p.println()
+        println('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
+      println()
   else:
-    p.println('// %s' % stencil.input.name)
+    println('// %s' % stencil.input.name)
     for unroll_index in range(unroll_factor):
       for c in range(stencil.input.chan):
-        p.println('hls::stream<%s> %s("%s");' % ((stencil.tensors[stencil.input.name].type,)+(GetTensorAt(stencil.input.name, unroll_index, c),)*2))
-    p.println()
+        println('hls::stream<{0}> {1}("{1}");'.format(
+            stencil.tensors[stencil.input.name].type,
+            get_tensor_name_at(stencil.input.name, unroll_index, c)))
+    println()
 
-  p.println('// %s' % stencil.output.name)
-  for unroll_index in range(unroll_factor):
-    for c in range(stencil.output.chan):
-      p.println('hls::stream<%s> %s("%s");' % ((stencil.tensors[stencil.output.name].type,)+(GetTensorAt(stencil.output.name, unroll_index, c),)*2))
-  p.println()
+  for output_name in stencil.output_names:
+    println('// %s' % output_name)
+    for unroll_index in range(unroll_factor):
+      println('hls::stream<{0}> {1}("{1}");'.format(
+          stencil.tensors[output_name].c_type,
+          get_tensor_name_at(output_name, unroll_index)))
+  println()
 
   # params
   msg = 'params'
   _logger.debug('generate %s' % msg)
-  p.println('// %s' % msg)
+  println('// %s' % msg)
   pragmas = []
-  for stage in stencil.get_stages_chronologically():
+  for tensor in stencil.chronological_tensors:
     for pe_id in range(unroll_factor):
-      for input_name, input_window in stage.window.items():
-        for i in range(len(input_window)):
+      for input_name, input_window in tensor.ld_indices.items():
+        for param_id in range(len(input_window)):
           offset = next(offset for offset, points in
-            all_points[input_name][stage.name].items()
-            if pe_id in points and points[pe_id] == i)
+            all_points[input_name][tensor.name].items()
+            if pe_id in points and points[pe_id] == param_id)
           fwd_node = super_source.fwd_nodes[(input_name, offset)]
-          cpt_node = super_source.cpt_nodes[(stage.name, pe_id)]
+          cpt_node = super_source.cpt_nodes[(tensor.name, pe_id)]
           extra_depth = super_source.get_extra_depth(
             (fwd_node, cpt_node))
-          for c in range(stencil.tensors[input_name].chan):
-            var_type = stencil.tensors[input_name].type
-            var_name = 'from_%s_to_%s_param_%d_chan_%d_pe_%d' % (
-              input_name, stage.name, i, c, pe_id)
-            p.println('hls::stream<%s> %s("%s");' % (
-              var_type, var_name, var_name))
-            if extra_depth > 0:
-              pragmas.append((var_name, extra_depth+1))
-            else:
-              pragmas.append((var_name, 2))
+          var_type = stencil.tensors[input_name].c_type
+          var_name = 'from_%s_to_%s_param_%d_pe_%d' % (
+            input_name, tensor.name, param_id, pe_id)
+          println('hls::stream<{0}> {1}("{1}");'.format(var_type, var_name))
+          if extra_depth > 0:
+            pragmas.append((var_name, extra_depth+1))
+          else:
+            pragmas.append((var_name, 2))
   for pragma in pragmas:
-    p.println('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
-  p.println()
+    println('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
+  println()
+  '''
 
+  '''
   # border buffers
   msg = 'border buffers'
   _logger.debug('generate %s' % msg)
-  p.println('// %s' % msg)
-  for stage in stencil.get_stages_chronologically():
-    if stage.output.preserve_border_to():
+  println('// %s' % msg)
+  for tensor in stencil.chronological_tensors:
+    if tensor.output.preserve_border_to():
       for unroll_index in range(unroll_factor):
         for d in range(stencil.dim-1):
-          for c in range(stage.output.chan):
-            param = (stage.output.type, 'border_from_%s_dim_%d_left_chan_%d_pe_%d' % (stage.name, d, c, unroll_index))
-            p.println('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
-            param = (stage.output.type, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % (stage.name, d, c, unroll_index))
-            p.println('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
-  p.println()
+          for c in range(tensor.output.chan):
+            param = (tensor.output.type, 'border_from_%s_dim_%d_left_chan_%d_pe_%d' % (tensor.name, d, c, unroll_index))
+            println('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
+            param = (tensor.output.type, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % (tensor.name, d, c, unroll_index))
+            println('hls::stream<%s> %s("%s");' % (param[0], param[1], param[1]))
+  println()
+  '''
 
-  p.println('#pragma HLS dataflow', 0)
-  for c in range(input_chan):
-    for i in range(dram_bank):
-      p.println('load(input_stream_chan_%d_bank_%d, var_input_chan_%d_bank_%d, coalesced_data_num);' % ((c, i)*2))
-  for c in range(input_chan):
-    for i in range(dram_bank):
-      p.println('unpack_%s(' % util.get_soda_type(stencil.input.type))
-      p.do_indent()
-      for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
-        p.println('%s,' % GetTensorAt(stencil.input.name, stencil.input.offset+unroll_index, c))
-      p.println('input_stream_chan_%d_bank_%d, coalesced_data_num);' % (c, i))
-      p.un_indent()
-  p.println()
+  println('#pragma HLS dataflow', 0)
+  for name, bank in inputs:
+    println('BurstRead(&{}, {}, coalesced_data_num);'.format(
+        get_port_buf_name(name, bank), get_port_name(name, bank)))
 
-  output_stream = ', '.join(', '.join('output_stream_chan_%d_bank_%d' % (c, x) for x in range(dram_bank)) for c in range(output_chan))
-  input_stream = ', '.join(', '.join('input_stream_chan_%d_bank_%d' % (c, x) for x in range(dram_bank)) for c in range(input_chan))
-  tile_num_dim = ', '.join('tile_num_dim_%d' % d for d in range(stencil.dim-1))
-  input_size_dim = ', '.join('input_size_dim_%d' % d for d in range(stencil.dim))
-  next_fifo = stencil.get_next_fifo()
-  if stencil.cluster == 'none':
-    print_forward_call(p, stencil, stencil.input.name)
-    p.println()
+  for node in super_source.tpo_node_gen():
+    module_trait_id = stencil.module_table[node][1]
+    _print_module_func_call(printer, node, module_trait_id)
 
-    for stage in stencil.get_stages_chronologically():
-      inputs = tuple(reversed(range(unroll_factor))) if stage.is_output() else [start for start, end in stencil.get_reuse_buffers()[stage.name][1:] if start==end]
-      for unroll_index in range(unroll_factor):
-        params = []
-        for c in range(stage.output.chan):
-          params.append('/* output */ %s_offset_%s_chan_%d' %
-            (stage.name, inputs[unroll_index], c))
-        if stage.output.preserve_border_to():
-          for d in range(stencil.dim-1):
-            for c in range(stage.output.chan):
-              param = (stage.name, d, c, unroll_index)
-              params += [
-      '/* output */ border_from_%s_dim_%d_left_chan_%d_pe_%d'  % param,
-      '/* output */ border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
-        for input_name, input_window in stage.window.items():
-          for i in range(len(input_window)):
-            for c in range(stencil.tensors[input_name].chan):
-              params += [
-            '/*  input */ from_%s_to_%s_param_%d_chan_%d_pe_%d'
-            % (input_name, stage.name, i, c, unroll_index)]
-        if stage.preserve_border_from():
-          for d in range(stencil.dim-1):
-            params.append('/*  param */ input_bound_dim_%d' % d)
-          for d in range(stencil.dim):
-            params.append('/*  param */ input_size_dim_%d' % d)
-        params.append('/*  param */ epoch_num')
-        p.print_func('compute_%s<%d>' % (stage.name, unroll_index),
-          params, ';', 0)
+  for name, bank in outputs:
+    println('BurstWrite({}, &{});'.format(
+        get_port_name(name, bank), get_port_buf_name(name, bank)))
 
-      if not stage.is_output():
-        p.println()
-        print_forward_call(p, stencil, stage.name)
-      p.println()
-  elif stencil.cluster == 'fine':
-    for tensor in [stencil.input]+[stage.output for stage in stencil.get_stages_chronologically()]:
-      inputs = tuple(reversed(range(unroll_factor))) if tensor.is_output() else [start for start, end in stencil.get_reuse_buffers()[tensor.name][1:] if start==end]
-      for pe_id in range(unroll_factor):
-        p.println('compute_%s_pe_%d(' % (tensor.name, pe_id))
-        p.do_indent()
+  un_scope()
+  println()
+  println('}//extern "C"')
 
-        # outputs
-        offset = unroll_factor-1-pe_id
-        if tensor.is_output():
-          for c in range(stencil.tensors[tensor.name].chan):
-            p.println('/* output */ %s_offset_%s_chan_%d,' % (tensor.name, offset, c))
-        else:
-          while offset is not None:
-            for output_stage in tensor.children:
-              points = all_points[tensor.name][output_stage.name][offset]
-              for unroll_index, point in points.items():
-                for c in range(stencil.tensors[tensor.name].chan):
-                  p.println('/* output */ from_%s_to_%s_param_%d_chan_%d_pe_%d,' % (tensor.name, output_stage.name, point, c, unroll_index))
-            offset = next_fifo[tensor.name].get(offset, None)
+def print_header(printer):
+  println = printer.println
+  for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio',
+                 'string', 'ap_int', 'hls_stream']:
+    println('#include<%s.h>' % header)
+  println()
 
-        # inputs
-        if tensor.is_input():
-          for c in range(stencil.tensors[stencil.input.name].chan):
-            p.println('/*  input */ %s_offset_%s_chan_%d,' % (stencil.input.name, unroll_factor-1-pe_id, c))
-        else:
-          for param in ['from_%s_to_%s_param_%d_chan_%d_pe_%d' % (input_name, tensor.name, i, c, pe_id) for input_name, input_window in tensor.parent.window.items() for i in range(len(input_window)) for c in range(stencil.tensors[input_name].chan)]:
-            p.println('/*  input */ %s,' % param)
+def _print_burst_read(printer):
+  println = printer.println
+  do_scope = printer.do_scope
+  un_scope = printer.un_scope
+  println('void BurstRead(hls::stream<Data<ap_uint<BURST_WIDTH> > >* to, ap_uint<BURST_WIDTH>* from, uint64_t data_num)')
+  do_scope()
+  println('load_epoch:', 0)
+  println('for (uint64_t epoch = 0; epoch < data_num;)')
+  do_scope()
+  println('#pragma HLS pipeline II=1', 0)
+  println('const uint64_t next_epoch = epoch + 1;')
+  println('epoch = next_epoch;')
+  println('WriteData(to, from[epoch], next_epoch < data_num);')
+  un_scope()
+  un_scope()
 
-        params = []
-        if tensor.preserve_border_to():
-          for d in range(stencil.dim-1):
-            for c in range(tensor.chan):
-              param = (tensor.name, d, c, pe_id)
-              params += ['border_from_%s_dim_%d_left_chan_%d_pe_%d' % param, 'border_from_%s_dim_%d_right_chan_%d_pe_%d' % param]
-        if tensor.preserve_border_from():
-          params += ['input_bound_dim_%d' % d for d in range(stencil.dim-1)]
-          params += ['input_size_dim_%d' % d for d in range(stencil.dim)]
-        for param in params:
-          p.println('/*  param */ %s,' % param)
-        p.println('/*  param */ epoch_num);')
-        p.un_indent()
-      p.println()
+def _print_burst_write(printer):
+  println = printer.println
+  do_scope = printer.do_scope
+  un_scope = printer.un_scope
+  println('void BurstWrite(ap_uint<BURST_WIDTH>* to, hls::stream<Data<ap_uint<BURST_WIDTH> > >* from)')
+  do_scope()
+  println('uint64_t epoch = 0;')
+  println('store_epoch:', 0)
+  println('for (bool enable = true; enable; ++epoch)')
+  do_scope()
+  println('#pragma HLS pipeline II=1', 0)
+  println('ap_uint<BURST_WIDTH> buf;')
+  println('enable = ReadData(&buf, from);')
+  println('to[epoch] = buf;')
+  un_scope()
+  un_scope()
 
-  for c in range(output_chan):
-    for i in range(dram_bank):
-      p.println('pack_%s(output_stream_chan_%d_bank_%d,' % (util.get_soda_type(stencil.output.type), c, i))
-      p.do_indent()
-      for unroll_index in reversed(range(dram_bank-1-i, unroll_factor, dram_bank)):
-        p.println('%s,' % GetTensorAt(stencil.output.name, unroll_index, c))
-      p.println('coalesced_data_num);')
-      p.un_indent()
-  for c in range(output_chan):
-    for i in range(dram_bank):
-      p.println('store(var_output_chan_%d_bank_%d, output_stream_chan_%d_bank_%d, coalesced_data_num);' % ((c, i)*2))
-
-  p.un_scope()
-  p.println()
-  p.println('}//extern "C"')
-
-def print_header(p):
-  for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio', 'string', 'ap_int', 'hls_stream']:
-    p.println('#include<%s.h>' % header)
-  p.println()
-
-def print_load(printer):
-  printer.println('void load(hls::stream<ap_uint<BURST_WIDTH> >& to, ap_uint<BURST_WIDTH>* from, uint64_t data_num)')
-  printer.do_scope()
-  printer.println('load_epoch:', 0)
-  printer.println('for(uint64_t i = 0; i < data_num; ++i)')
-  printer.do_scope()
-  printer.println('#pragma HLS pipeline II=1', 0)
-  printer.println('to<<from[i];')
-  printer.un_scope()
-  printer.un_scope()
-
-def print_unpack(printer, burst_width, data_type, unroll_factor):
-  coalesced_size = burst_width//util.TYPE_WIDTH[data_type]
-  ii = 1
-  if coalesced_size > unroll_factor:
-    ii = coalesced_size/unroll_factor
-  GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
-  GetDstName = lambda i: ('to_%0'+str(len(str(unroll_factor-1)))+'d') % i
-  printer.println('void unpack_%s(' % util.get_soda_type(data_type))
-  printer.do_indent()
-  for unroll_index in range(unroll_factor):
-    printer.println(('hls::stream<%s>& %s,') % (data_type, GetDstName(unroll_index)))
-  printer.println('hls::stream<ap_uint<%d> >& from, uint64_t data_num)' % burst_width)
-  printer.un_indent()
-  printer.do_scope()
-  printer.println('unpack_%s_epoch:' % util.get_soda_type(data_type), 0)
-  printer.println('for(uint64_t i = 0; i < data_num; ++i)')
-  printer.do_scope()
-  printer.println('#pragma HLS pipeline II=%d' % ii, 0)
-  printer.println('ap_uint<%d> tmp;' % burst_width)
-  printer.println('from>>tmp;')
-  if util.is_float(data_type):
-    printer.println('uint%d_t raw_bits;' % util.TYPE_WIDTH[data_type])
-  if coalesced_size >= unroll_factor:
-    for i in range(coalesced_size):
-      if util.is_float(data_type):
-        printer.println('raw_bits = tmp(%s*%d-1, %s*%d); %s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type], GetDstName(i%unroll_factor), data_type))
-      else:
-        printer.println('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type]))
-  else:
-    printer.println('switch(i&%d)' % (unroll_factor//coalesced_size-1))
-    printer.do_scope()
-    for batch in range(unroll_factor//coalesced_size):
-      printer.println('case %d:' % batch)
-      printer.do_scope()
-      for i in range(coalesced_size):
-        if util.is_float(data_type):
-          printer.println('raw_bits = tmp(%s*%d-1, %s*%d);%s<<*((%s*)(&raw_bits));' % (GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size), data_type))
-        else:
-          printer.println('%s<<tmp(%s*%d-1, %s*%d);' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type]))
-      printer.println('break;')
-      printer.un_scope()
-    printer.un_scope()
-  printer.un_scope()
-  printer.un_scope()
-
-def print_pack(printer, burst_width, data_type, unroll_factor):
-  coalesced_size = burst_width//util.TYPE_WIDTH[data_type]
-  ii = 1
-  if coalesced_size > unroll_factor:
-    ii = coalesced_size/unroll_factor
-  GetCoalescedIdx = lambda i: ('%'+str(len(str(coalesced_size)))+'d') % i
-  GetDstName = lambda i: ('from_%0'+str(len(str(unroll_factor-1)))+'d') % i
-  printer.println('void pack_%s(hls::stream<ap_uint<%d> >& to,' % (util.get_soda_type(data_type), burst_width))
-  printer.do_indent()
-  for unroll_index in range(unroll_factor):
-    printer.println(('hls::stream<%s>& %s,') % (data_type, GetDstName(unroll_index)))
-  printer.println('uint64_t data_num)')
-  printer.un_indent()
-  printer.do_scope()
-  printer.println('pack_%s_epoch:' % util.get_soda_type(data_type), 0)
-  printer.println('for(uint64_t i = 0; i < data_num; ++i)')
-  printer.do_scope()
-  printer.println('#pragma HLS pipeline II=%d' % ii, 0)
-  printer.println('ap_uint<%d> tmp;' % burst_width)
-  if util.is_float(data_type):
-    printer.println('%s raw_bits;' % data_type)
-  if coalesced_size >= unroll_factor:
-    for i in range(coalesced_size):
-      if util.is_float(data_type):
-        printer.println('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i%unroll_factor), GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type], util.TYPE_WIDTH[data_type]))
-      else:
-        printer.println('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type], GetDstName(i%unroll_factor)))
-  else:
-    printer.println('switch(i&%d)' % (unroll_factor//coalesced_size-1))
-    printer.do_scope()
-    for batch in range(unroll_factor//coalesced_size):
-      printer.println('case %d:' % batch)
-      printer.do_scope()
-      for i in range(coalesced_size):
-        if util.is_float(data_type):
-          printer.println('%s>>raw_bits; tmp(%s*%d-1, %s*%d) = *((uint%d_t*)(&raw_bits));' % (GetDstName(i+batch*coalesced_size), GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type], util.TYPE_WIDTH[data_type]))
-        else:
-          printer.println('tmp(%s*%d-1, %s*%d) = %s.read();' % (GetCoalescedIdx(i+1), util.TYPE_WIDTH[data_type], GetCoalescedIdx(i), util.TYPE_WIDTH[data_type], GetDstName(i+batch*coalesced_size)))
-      printer.println('break;')
-      printer.un_scope()
-    printer.un_scope()
-  printer.println('to<<tmp;')
-  printer.un_scope()
-  printer.un_scope()
-
-def print_store(printer):
-  printer.println('void store(ap_uint<BURST_WIDTH>* to, hls::stream<ap_uint<BURST_WIDTH> >& from, uint64_t data_num)')
-  printer.do_scope()
-  printer.println('store_epoch:', 0)
-  printer.println('for(uint64_t i = 0; i < data_num; ++i)')
-  printer.do_scope()
-  printer.println('#pragma HLS pipeline II=1', 0)
-  printer.println('from>>to[i];')
-  printer.un_scope()
-  printer.un_scope()
-
+'''
 def print_forward_func(printer, forwarder):
   printer.print_func('template<typename T, uint32_t fifo_depth> void forward_%d' % forwarder, ['hls::stream<T>& dst_%d'%i for i in range(forwarder)]+['hls::stream<T>& src']+['uint32_t data_num'])
   printer.do_scope()
@@ -1059,6 +908,7 @@ def print_forward_call(printer, stencil, src_name):
         [s%c for s in args[1]]+
         [s%c for s in args[2]]+
         args[3], ';', 0)
+'''
 
 def print_code(stencil, output_file):
   _logger.info('generate kernel code as %s' % output_file.name)
@@ -1077,72 +927,98 @@ def print_code(stencil, output_file):
   core.print_guard(printer, 'BURST_WIDTH', stencil.burst_width)
   printer.println()
 
-  print_load(printer)
-  printer.println()
-  for data_type in {util.get_c_type(stmt.soda_type)
-                    for stmt in stencil.input_stmts}:
-    print_unpack(printer, stencil.burst_width, data_type, stencil.unroll_factor//stencil.dram_bank)
-    printer.println()
-  for data_type in {util.get_c_type(stmt.soda_type)
-                    for stmt in stencil.output_stmts}:
-    print_pack(printer, stencil.burst_width, data_type, stencil.unroll_factor//stencil.dram_bank)
-    printer.println()
-  print_store(printer)
-  printer.println()
-
   print_data_struct(printer)
   print_read_data(printer)
   print_write_data(printer)
 
-  node_signatures = OrderedDict()
-  for node in stencil.dataflow_super_source.tpo_node_gen():
-    node_signatures.setdefault(ir.NodeSignature(node), []).append(node)
+  _print_burst_read(printer)
+  _print_burst_write(printer)
 
-  for idx, node_signature in enumerate(node_signatures):
-    printer.println()
-    _print_node_definition(printer, node_signature, idx)
+  for module_trait_id, module_trait in enumerate(stencil.module_traits):
+    _print_module_definition(printer, module_trait, module_trait_id,
+                           burst_width=stencil.burst_width)
 
 
-#  if stencil.cluster == 'none':
-#    for forwarder in stencil.get_forwarders():
-#      print_forward_func(printer, forwarder)
-#      printer.println()
-#
-#    for forwarder in stencil.get_forwarders_with_border():
-#      print_forward_func_with_border(printer, stencil, forwarder)
-#      printer.println()
-#    for stage in stencil.stages.values():
-#      print_compute_stage(printer, stencil, stage)
-#      printer.println()
-#  elif stencil.cluster == 'fine':
-#    print_compute_input(printer, stencil)
-#    for stage in stencil.get_stages_chronologically():
-#      print_compute_stage(printer, stencil, stage)
-#
-#  if stencil.replication_factor > 1:
-#    dst_lists = set()
-#    super_source = stencil.dataflow_super_source
-#    def add_dst_lists(tensor):
-#      rf = stencil.replication_factor
-#      dst_ids = [start%rf for start, end
-#        in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
-#        if start == end]
-#      dst_ids = tuple(dst_id if dst_id in dst_ids else None
-#        for dst_id in range(stencil.replication_factor))
-#      dst_lists.add(dst_ids)
-#    for node in super_source.tpo_node_generator():
-#      if isinstance(node, SuperSourceNode):
-#        add_dst_lists(stencil.input)
-#      elif isinstance(node, ComputeNode):
-#        if not node.stage.is_output():
-#          add_dst_lists(node.stage.output)
-#    for dst_list in dst_lists:
-#      _print_reconnect_func(printer, dst_list)
-#  printer.println()
+  '''
+  if stencil.cluster == 'none':
+    for forwarder in stencil.get_forwarders():
+      print_forward_func(printer, forwarder)
+      printer.println()
 
-  print_interface(printer, stencil)
+    for forwarder in stencil.get_forwarders_with_border():
+      print_forward_func_with_border(printer, stencil, forwarder)
+      printer.println()
+    for stage in stencil.stages.values():
+      print_compute_stage(printer, stencil, stage)
+      printer.println()
+  elif stencil.cluster == 'fine':
+    print_compute_input(printer, stencil)
+    for stage in stencil.get_stages_chronologically():
+      print_compute_stage(printer, stencil, stage)
 
-def _print_node_definition(printer, node_signature, node_id):
+  if stencil.replication_factor > 1:
+    dst_lists = set()
+    super_source = stencil.dataflow_super_source
+    def add_dst_lists(tensor):
+      rf = stencil.replication_factor
+      dst_ids = [start%rf for start, end
+        in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
+        if start == end]
+      dst_ids = tuple(dst_id if dst_id in dst_ids else None
+        for dst_id in range(stencil.replication_factor))
+      dst_lists.add(dst_ids)
+    for node in super_source.tpo_node_generator():
+      if isinstance(node, SuperSourceNode):
+        add_dst_lists(stencil.input)
+      elif isinstance(node, ComputeNode):
+        if not node.stage.is_output():
+          add_dst_lists(node.stage.output)
+    for dst_list in dst_lists:
+      _print_reconnect_func(printer, dst_list)
+  printer.println()
+  '''
+
+  _print_interface(printer, stencil)
+
+def _print_module_func_call(printer, node, module_trait_id, **kwargs):
+  println = printer.println
+  print_func = printer.print_func
+  func_name = util.get_func_name(module_trait_id)
+  func_lower_name = util.get_node_name(module_trait_id)
+
+  def get_load_set(obj, loads):
+    if isinstance(obj, ir.FIFO):
+      loads[obj] = None
+    return obj
+  loads = OrderedDict()
+  node.visit_loads(get_load_set, loads)
+  loads = tuple(loads)
+
+  # find dram reads
+  reads_in_lets = tuple(_.expr for _ in node.lets)
+  reads_in_exprs = tuple(node.exprs.values())
+  dram_reads = OrderedDict()
+  for dram_ref in core.get_dram_refs(reads_in_lets + reads_in_exprs):
+    for bank in dram_ref.dram:
+      dram_reads[util.get_port_buf_name(dram_ref.var, bank)] = None
+  dram_reads = tuple('/* input*/ &' + _ for _ in dram_reads)
+
+  # find dram writes
+  writes_in_lets = tuple(_.name for _ in node.lets
+                         if not isinstance(_.name, str))
+  dram_writes = OrderedDict()
+  for dram_ref in core.get_dram_refs(writes_in_lets):
+    for bank in dram_ref.dram:
+      dram_writes[util.get_port_buf_name(dram_ref.var, bank)] = None
+  dram_writes = tuple('/*output*/ &' + _ for _ in dram_writes)
+
+  output_fifos = tuple('/*output*/ &' + _.c_expr for _ in node.exprs)
+  input_fifos = tuple('/* input*/ &' + _.c_expr for _ in loads)
+  params = dram_writes + output_fifos + input_fifos + dram_reads
+
+  print_func(func_name, params, suffix=';', align=0)
+
+def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope
@@ -1151,63 +1027,206 @@ def _print_node_definition(printer, node_signature, node_id):
   fifo_st_prefix = 'fifo_st_'
   fifo_ref_prefix = 'fifo_ref_'
   read_fifo_func = 'ReadFIFO'
-  func_name = 'Node%s' % node_id
-  func_lower_name = 'node_%s' % node_id
+  func_name = util.get_func_name(module_trait_id)
+  func_lower_name = util.get_node_name(module_trait_id)
+  ii = 1
 
   def get_delays(obj, delays):
     if isinstance(obj, ir.DelayedRef):
       delays.append(obj)
     return obj
   delays = []
-  for let in node_signature.lets:
+  for let in module_trait.lets:
     let.visit(get_delays, delays)
-  for expr in node_signature.exprs:
+  for expr in module_trait.exprs:
     expr.visit(get_delays, delays)
   _logger.debug('delays: %s', delays)
 
-  fifo_loads = tuple(
-    '/* input*/ hls::stream<{_.c_type}>* {_.ld_name}'.format(**locals())
-    for _ in node_signature.loads)
-  fifo_stores = tuple(
-    '/*output*/ hls::stream<%s>* %s%s' % (expr.c_type, fifo_st_prefix, idx)
-    for idx, expr in enumerate(node_signature.exprs))
+  fifo_loads = tuple('/* input*/ hls::stream<Data<{}> >* {}'.format(
+      _.c_type, _.ld_name) for _ in module_trait.loads)
+  fifo_stores = tuple('/*output*/ hls::stream<Data<{}> >* {}{}'.format(
+      expr.c_type, fifo_st_prefix, idx)
+    for idx, expr in enumerate(module_trait.exprs))
+
+  # look for DRAM access
+  reads_in_lets = tuple(_.expr for _ in module_trait.lets)
+  writes_in_lets = tuple(_.name for _ in module_trait.lets
+                         if not isinstance(_.name, str))
+  reads_in_exprs = module_trait.exprs
+  dram_reads = core.get_dram_refs(reads_in_lets + reads_in_exprs)
+  dram_writes = core.get_dram_refs(writes_in_lets)
+  drams = ()
+  dram_read_map = OrderedDict()
+  dram_write_map = OrderedDict()
+  if dram_reads:  # this is an unpacking module
+    assert not dram_writes, 'cannot read and write DRAM in the same module'
+    for dram_read in dram_reads:
+      dram_read_map.setdefault(dram_read.dram, []).append(dram_read)
+    burst_width = kwargs.pop('burst_width')
+    for dram in dram_read_map:
+      batch_size = len(dram_read_map[dram])   # number of elements per cycle
+      dram_read_map[dram] = OrderedDict((_.offset, _)
+                                        for _ in dram_read_map[dram])
+      dram_reads = dram_read_map[dram]
+      assert tuple(sorted(dram_reads.keys())) == tuple(range(batch_size)), \
+             'unexpected DRAM accesses pattern %s' % dram_reads
+      batch_width = sum(util.get_width_in_bits(_.soda_type)
+                        for _ in dram_reads.values())
+      del dram_reads
+      if burst_width > batch_width:
+        assert burst_width % batch_width == 0, 'cannot process such a burst'
+        # a single burst consumed in multiple cycles
+        coalescing_factor = burst_width // batch_width
+        ii = coalescing_factor
+      else:
+        assert batch_width % burst_width == 0, 'cannot process such a burst'
+        # multiple bursts consumed in a single cycle
+        reassemble_factor = batch_width // burst_width
+    dram_reads = tuple(next(iter(_.values())) for _ in dram_read_map.values())
+    fifo_loads += tuple(
+        '/* input*/ hls::stream<Data<ap_uint<{burst_width}> > >* '
+        '{dram.dram_fifo_name}'.format(
+            burst_width=burst_width, dram=_) for _ in dram_reads)
+  elif dram_writes:   # this is a packing module
+    for dram_write in dram_writes:
+      dram_write_map.setdefault(dram_write.dram, []).append(dram_write)
+    burst_width = kwargs.pop('burst_width')
+    for dram in dram_write_map:
+      batch_size = len(dram_write_map[dram])  # number of elements per cycle
+      dram_write_map[dram] = OrderedDict((_.offset, _)
+                                         for _ in dram_write_map[dram])
+      dram_writes = dram_write_map[dram]
+      assert tuple(sorted(dram_writes.keys())) == tuple(range(batch_size)), \
+             'unexpected DRAM accesses pattern %s' % dram_writes
+      batch_width = sum(util.get_width_in_bits(_.soda_type)
+                        for _ in dram_writes.values())
+      del dram_writes
+      if burst_width > batch_width:
+        assert burst_width % batch_width == 0, 'cannot process such a burst'
+        # a single burst consumed in multiple cycles
+        coalescing_factor = burst_width // batch_width
+        ii = coalescing_factor
+      else:
+        assert batch_width % burst_width == 0, 'cannot process such a burst'
+        # multiple bursts consumed in a single cycle
+        reassemble_factor = batch_width // burst_width
+    dram_writes = tuple(next(iter(_.values()))
+                        for _ in dram_write_map.values())
+    fifo_stores += tuple(
+        '/*output*/ hls::stream<Data<ap_uint<{burst_width}> > >* '
+        '{dram.dram_fifo_name}'.format(
+            burst_width=burst_width, dram=_) for _ in dram_writes)
+
+  # print function
   printer.print_func('void {func_name}'.format(**locals()),
                      fifo_stores+fifo_loads, align=0)
-  do_scope(func_lower_name)
+  do_scope(func_name)
+
+  # print inter-iteration declarations
   for delay in delays:
     println(delay.c_buf_decl)
     println(delay.c_ptr_decl)
+
+  # print loop
   println('{func_lower_name}_epoch:'.format(**locals()), indent=0)
   println('for (bool enable = true; enable;)')
   do_scope('for {func_lower_name}_epoch'.format(**locals()))
-  for fifo_in in node_signature.loads:
-    println('{fifo_in.c_type} {fifo_in.ref_name};'.format(**locals()))
-  println('if (%s)' % (' && '.join('!{_.ld_name}->empty()'.format(**locals())
-                                   for _ in node_signature.loads)))
-  do_scope('if not empty')
-  for fifo_in in node_signature.loads:
-    println('bool&& {fifo_in.ref_name}_enable = '
-      'ReadData(&{fifo_in.ref_name}, {fifo_in.ld_name});'.format(**locals()))
-  println('enable = %s;' % (
-    ' && '.join('{_.ref_name}_enable'.format(**locals())
-                for _ in node_signature.loads)))
+  println('#pragma HLS pipeline II=%d' % ii, 0)
 
+  # print emptyness tests
+  println('if (%s)' % (' && '.join(
+      '!{fifo}->empty()'.format(fifo=_)
+      for _ in tuple(_.ld_name for _ in module_trait.loads) +
+               tuple(_.dram_fifo_name for _ in dram_reads))))
+  do_scope('if not empty')
+
+  # print intra-iteration declarations
+  for fifo_in in module_trait.loads:
+    println('{fifo_in.c_type} {fifo_in.ref_name};'.format(**locals()))
+  for dram in (next(iter(_.values())) for _ in dram_read_map.values()):
+    println('ap_uint<{burst_width}> {dram.dram_buf_name};'.format(
+        burst_width=burst_width, dram=dram))
+  for dram in (next(iter(_.values())) for _ in dram_write_map.values()):
+    println('ap_uint<{burst_width}> {dram.dram_buf_name};'.format(
+        burst_width=burst_width, dram=dram))
+
+  # print enable conditions
+  for fifo_in in module_trait.loads:
+    println('const bool {fifo_in.ref_name}_enable = '
+      'ReadData(&{fifo_in.ref_name}, {fifo_in.ld_name});'.format(**locals()))
+  for dram in dram_reads:
+    println('const bool {dram.dram_buf_name}_enable = '
+            'ReadData(&{dram.dram_buf_name}, {dram.dram_fifo_name});'.format(
+                dram=dram))
+  println('const bool enabled = %s;' % (
+    ' && '.join(tuple('{_.ref_name}_enable'.format(_=_)
+                      for _ in module_trait.loads) +
+                tuple('{_.dram_buf_name}_enable'.format(_=_)
+                      for _ in dram_reads))))
+  println('enable = enabled;')
+
+  # print delays (if any)
   for delay in delays:
     println(delay.c_buf_load)
     println(delay.c_buf_store)
     println(delay.c_ptr_incr)
 
-  for let in node_signature.lets:
-    println(let.c_expr)
-  for idx, expr in enumerate(node_signature.exprs):
-    println('WriteData(%s%s, %s, true);' % (fifo_st_prefix, idx, expr.c_expr))
+  # print lets
+  def mutate_dram_ref_for_writes(obj, kwargs):
+    if isinstance(obj, ir.DRAMRef):
+      coalescing_idx = kwargs.pop('coalescing_idx')
+      unroll_factor = kwargs.pop('unroll_factor')
+      type_width = util.get_width_in_bits(obj.soda_type)
+      lsb = (coalescing_idx * unroll_factor + obj.offset) * type_width
+      msb = lsb + type_width - 1
+      return grammar.Var(name='{dram.dram_buf_name}({msb}, {lsb})'.format(
+          dram=obj, msb=msb, lsb=lsb), idx=())
+    return copy.copy(obj)
+
+  # mutate dram ref for writes
+  if dram_write_map:
+    for coalescing_idx in range(coalescing_factor):
+      for idx, let in enumerate(module_trait.lets):
+        let = let.visit(mutate_dram_ref_for_writes,
+                        {'coalescing_idx': coalescing_idx,
+                         'unroll_factor': len(module_trait.lets)})
+        println('{} = {};'.format(let.name, let.expr.c_expr))
+    for dram in map(lambda _: next(iter(_.values())), dram_write_map.values()):
+      println('WriteData({}, {}, enabled);'.format(
+          dram.dram_fifo_name, dram.dram_buf_name))
+  else:
+    for let in module_trait.lets:
+      println(let.c_expr)
+
+  def mutate_dram_ref_for_reads(obj, kwargs):
+    if isinstance(obj, ir.DRAMRef):
+      coalescing_idx = kwargs.pop('coalescing_idx')
+      unroll_factor = kwargs.pop('unroll_factor')
+      type_width = util.get_width_in_bits(obj.soda_type)
+      lsb = (coalescing_idx * unroll_factor + obj.offset) * type_width
+      msb = lsb + type_width - 1
+      return grammar.Var(
+          name='{c_type}({dram.dram_buf_name}({msb}, {lsb}))'.format(
+              c_type=obj.c_type, dram=obj, msb=msb, lsb=lsb), idx=())
+    return copy.copy(obj)
+
+  # mutate dram ref for reads
+  if dram_read_map:
+    for coalescing_idx in range(coalescing_factor):
+      for idx, expr in enumerate(module_trait.exprs):
+        println('WriteData({}{}, {}, enabled);'.format(
+            fifo_st_prefix, idx,
+            expr.visit(mutate_dram_ref_for_reads,
+                       {'coalescing_idx': coalescing_idx,
+                        'unroll_factor': len(module_trait.exprs)}).c_expr))
+  else:
+    for idx, expr in enumerate(module_trait.exprs):
+      println('WriteData({}{}, {}({}), enabled);'.format(
+              fifo_st_prefix, idx, expr.c_type, expr.c_expr))
   un_scope()
   un_scope()
-  for idx, expr in enumerate(node_signature.exprs):
-    println('WriteData(%s%s, %s(0), false);' %
-            (fifo_st_prefix, idx, expr.c_type))
   un_scope()
-  _logger.debug('printing: %s', node_signature)
+  _logger.debug('printing: %s', module_trait)
 
 def print_data_struct(printer):
   println = printer.println
@@ -1215,7 +1234,7 @@ def print_data_struct(printer):
   printer.do_scope()
   println('T data;')
   println('bool ctrl;')
-  printer.un_scope()
+  printer.un_scope(suffix=';')
 
 def print_read_data(printer):
   println = printer.println
@@ -1223,7 +1242,7 @@ def print_read_data(printer):
           '(T* data, hls::stream<Data<T> >* from)')
   printer.do_scope()
   println('#pragma HLS inline', indent=0)
-  println('Data<T>&& tmp = from->read();')
+  println('const Data<T>& tmp = from->read();')
   println('#pragma HLS data_pack variable=tmp', indent=0)
   println('*data = tmp.data;')
   println('return tmp.ctrl;')
@@ -1242,6 +1261,7 @@ def print_write_data(printer):
   println('to->write(tmp);')
   printer.un_scope()
 
+'''
 def _generate_code(printer, stencil):
   super_source = stencil.dataflow_super_source
 
@@ -1500,4 +1520,4 @@ def _print_reconnect_func(printer, dst_list):
   printer.un_scope()
   printer.un_scope()
   printer.un_scope()
-
+'''

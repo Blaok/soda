@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from collections import deque
 import copy
 import logging
 
@@ -9,7 +8,7 @@ from soda import grammar
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
-class SuperSourceNode(ir.Node):
+class SuperSourceNode(ir.Module):
   """A node representing the super source in the dataflow graph.
 
   A super source doesn't have parent nodes.
@@ -36,7 +35,8 @@ class SuperSourceNode(ir.Node):
       node_heights = OrderedDict()
       for node in self.tpo_node_gen():
         node_heights[node] = max(
-          (node_heights[parent] + parent.get_latency(node) for parent in node.parents), default=0)
+            (node_heights[parent] + parent.get_latency(node)
+             for parent in node.parents), default=0)
         for parent in node.parents:
           extra_depth = node_heights[node] - (
             node_heights[parent] + parent.get_latency(node))
@@ -46,14 +46,21 @@ class SuperSourceNode(ir.Node):
                           extra_depth, (parent, node))
     return self._extra_depths.get(edge, 0)
 
-class SuperSinkNode(ir.Node):
+  @property
+  def name(self):
+    return 'super_source'
+
+class SuperSinkNode(ir.Module):
   """A node representing the super sink in the dataflow graph.
 
   A super sink doesn't have child nodes.
   """
-  pass
+  @property
+  def name(self):
+    return 'super_sink'
 
-class ForwardNode(ir.Node):
+
+class ForwardNode(ir.Module):
   """A node representing a forward module in the dataflow graph.
 
   Attributes:
@@ -68,7 +75,11 @@ class ForwardNode(ir.Node):
   def __repr__(self):
     return '\033[32mforward %s @%d\033[0m' % (self.tensor.name, self.offset)
 
-class ComputeNode(ir.Node):
+  @property
+  def name(self):
+    return '{}_offset_{}'.format(self.tensor.name, self.offset)
+
+class ComputeNode(ir.Module):
   """A node representing a compute module in the dataflow graph.
 
   Attributes:
@@ -83,7 +94,12 @@ class ComputeNode(ir.Node):
   def __repr__(self):
     return '\033[31mcompute %s #%d\033[0m' % (self.tensor.name, self.pe_id)
 
+  @property
+  def name(self):
+    return '{}_pe_{}'.format(self.tensor.name, self.pe_id)
+
 def create_dataflow_graph(stencil):
+  chronological_tensors = stencil.chronological_tensors
   super_source = SuperSourceNode()
   super_sink = SuperSinkNode()
 
@@ -91,7 +107,7 @@ def create_dataflow_graph(stencil):
   super_source.cpt_nodes = OrderedDict()  # {(stage_name, pe_id): node}
 
   def color_id(node):
-    if node.__class__ is (ir.Node):
+    if node.__class__ is (ir.Module):
       return repr(node)
     elif node.__class__ is SuperSourceNode:
       return '\033[33msuper source\033[0m'
@@ -219,7 +235,7 @@ def create_dataflow_graph(stencil):
     for input_name in stencil.input_names:
       add_fwd_nodes(input_name)
 
-    for tensor in stencil.chronological_tensors:
+    for tensor in chronological_tensors:
       if tensor.is_input():
         continue
       for unroll_index in range(stencil.unroll_factor):
@@ -256,7 +272,7 @@ def create_dataflow_graph(stencil):
       elif isinstance(src_node, ComputeNode):
         write_lat = src_node.tensor.st_ref.lat
       else:
-        raise util.InternalError('unexpected source node: %s', repr(src_node))
+        raise util.InternalError('unexpected source node: %s' % repr(src_node))
 
       if isinstance(dst_node, ForwardNode):
         depth = stencil.reuse_buffer_lengths[dst_node.tensor.name]\
@@ -266,13 +282,22 @@ def create_dataflow_graph(stencil):
       elif isinstance(dst_node, SuperSinkNode):
         depth = 0
       else:
-        raise util.InternalError('unexpected destination node: %s',
+        raise util.InternalError('unexpected destination node: %s' %
                                  repr(dst_node))
 
       fifo = ir.FIFO(src_node, dst_node, depth, write_lat)
       if isinstance(src_node, SuperSourceNode):
         lets = []
-        expr = ir.DRAMRef(soda_type=dst_node.tensor.soda_type, dram='gmem',
+        # TODO: build an index somewhere
+        for stmt in stencil.input_stmts:
+          if stmt.name == dst_node.tensor.name:
+            break
+        else:
+          raise util.InternalError('cannot find tensor %s' %
+                                   dst_node.tensor.name)
+        expr = ir.DRAMRef(soda_type=dst_node.tensor.soda_type,
+                          dram=stmt.dram,
+                          var=dst_node.tensor.name,
                           offset=stencil.unroll_factor-1-dst_node.offset)
       elif isinstance(src_node, ForwardNode):
         lets = []
@@ -297,35 +322,46 @@ def create_dataflow_graph(stencil):
               soda_type=var_type, name=var_name,
               expr=ir.DelayedRef(delay=delay, ref=fifo_r)))
           expr = grammar.Var(name=var_name, idx=[])
-          expr.soda_type=var_type
+          expr.soda_type = var_type
         else:
           expr = fifo_r
       elif isinstance(src_node, ComputeNode):
         def replace_refs_callback(obj, args):
           obj = copy.copy(obj)
-          if hasattr(obj, 'ref') and obj.ref:
-            #if isinstance(obj, grammar.Ref):
+          if isinstance(obj, grammar.Ref):
             # to confirm -- is this right?
             # TODO: build an index somewhere
             offset = stencil.unroll_factor - 1 - src_node.pe_id + \
-                     util.serialize(obj.ref.idx, stencil.tile_size)
+                     util.serialize(obj.idx, stencil.tile_size)
             for parent in src_node.parents:
-              if parent.tensor.name == obj.ref.name and parent.offset == offset:
+              if parent.tensor.name == obj.name and parent.offset == offset:
                 for fifo_r in parent.fifos:
                   if fifo_r.edge == (parent, src_node):
                     break
-            _logger.debug('replace %s with %s', obj.ref, fifo_r)
-            obj.ref = fifo_r
+            _logger.debug('replace %s with %s', obj, fifo_r)
+            return fifo_r
           return obj
+        _logger.debug('lets: %s', src_node.tensor.lets)
         lets = [_.visit(replace_refs_callback) for _ in src_node.tensor.lets]
+        _logger.debug('replaced lets: %s', lets)
+        _logger.debug('expr: %s', src_node.tensor.expr)
         expr = src_node.tensor.expr.visit(replace_refs_callback)
+        _logger.debug('replaced expr: %s', expr)
+        # TODO: build an index somewhere
         if isinstance(dst_node, SuperSinkNode):
+          for stmt in stencil.output_stmts:
+            if stmt.name == src_node.tensor.name:
+              break
+          else:
+            raise util.InternalError('cannot find tensor %s' %
+                                     src_node.tensor.name)
           dram_ref = ir.DRAMRef(soda_type=src_node.tensor.soda_type,
-                                dram='gmem', offset=src_node.pe_id)
+                                dram=stmt.dram, var=src_node.tensor.name,
+                                offset=src_node.pe_id)
           dst_node.lets.append(grammar.Let(
             soda_type=None, name=dram_ref, expr=fifo))
       else:
-        raise util.InternalError('unexpected node of type %s', type(src_node))
+        raise util.InternalError('unexpected node of type %s' % type(src_node))
 
       src_node.exprs[fifo] = expr
       src_node.lets.extend(_ for _ in lets if _ not in src_node.lets)

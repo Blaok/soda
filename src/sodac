@@ -169,16 +169,9 @@ def main():
       unroll_factor = args.replication_factor
       replication_factor = args.replication_factor
 
-    if args.dram_separate is not None:
-      dram_separate = args.dram_separate == 'yes'
-    else:
-      dram_separate = soda_model.dram_separate
-
     stencil = core.Stencil(
       burst_width=args.burst_width if args.burst_width is not None
                      else soda_model.burst_width,
-      dram_bank=args.dram_bank if args.dram_bank is not None
-                   else soda_model.dram_bank,
       border=args.border if args.border is not None
                  else soda_model.border,
       iterate=args.iterate if args.iterate is not None
@@ -193,8 +186,7 @@ def main():
       dim=soda_model.dim,
       tile_size=tile_size,
       unroll_factor=unroll_factor,
-      replication_factor=replication_factor,
-      dram_separate=dram_separate)
+      replication_factor=replication_factor)
 
     logger.debug('stencil obtained: %s', stencil)
 

@@ -10,8 +10,6 @@ SodaProgram:
   ('border' ':' border=BorderStrategies)
   ('burst' 'width' ':' burst_width=INT)
   ('cluster' ':' cluster=ClusterStrategies)
-  ('dram' 'bank' ':' dram_bank=INT)
-  ('dram' 'separate' ':' dram_separate=YesOrNo)
   ('iterate' ':' iterate=INT)
   ('kernel' ':' app_name=ID)
   ('unroll' 'factor' ':' unroll_factor=INT)
@@ -45,9 +43,9 @@ FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
   'copysign'|'nan'|'nextafter'|'nexttoward'|'fdim'|'fmax'|'fmin'|'fabs'|'abs'|'fma'|
   'min'|'max'|'select';
 
-InputStmt: 'input' soda_type=Type ':' name=ID ('(' (tile_size=INT ',')* ')')?;
+InputStmt: 'input' ('dram' dram=INT ('|' dram=INT)*)? soda_type=Type ':' name=ID ('(' (tile_size=INT ',')* ')')?;
 LocalStmt: 'local' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
-OutputStmt: 'output' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
+OutputStmt: 'output' ('dram' dram=INT ('|' dram=INT)*)? soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
 
 Let: (soda_type=Type)? name=ID '=' expr=Expr;
 Ref: name=ID '(' idx=INT (',' idx=INT)* ')' ('~' lat=Int)?;
@@ -87,7 +85,7 @@ Cast: soda_type=Type '(' expr=Expr ')';
 Call: name=FuncName '(' arg=Expr (',' arg=Expr)* ')';
 Var: name=ID ('[' idx=Int ']')*;
 
-ParamStmt: 'param' soda_type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
+ParamStmt: 'param' ('dram' dram=INT ('|' dram=INT)*)? soda_type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
 ParamAttr: 'dup' dup=Int | partitioning=Partitioning;
 Partitioning:
   'partition' strategy='complete' ('dim' '=' dim=Int)? |
@@ -128,6 +126,18 @@ class Node(object):
 
   def visit(self, callback, args=None):
     obj = callback(self, args)
+    #_logger.debug('obj: %s', self)
+    #_logger.debug('     %s', type(self))
+    #_logger.debug('     %s', self.__dict__)
+    #_logger.debug('')
+
+    for attr in self.SCALAR_ATTRS:
+      if issubclass(type(getattr(self, attr)), Node):
+        setattr(obj, attr, getattr(self, attr).visit(callback, args))
+    for attr in self.LINEAR_ATTRS:
+      setattr(obj, attr,
+              tuple(_.visit(callback, args) if issubclass(type(_), Node) else _
+                    for _ in getattr(self, attr)))
     return obj
 
 class InputStmt(Node):
@@ -135,13 +145,17 @@ class InputStmt(Node):
 
   Attributes:
     soda_type: Type of this input tensor.
+    dram: [int], dram id used to read this input
     name: str, name of this input tensor.
     tile_size: list of tile sizes. The last dimension should be 0.
   """
   SCALAR_ATTRS = 'soda_type', 'name'
-  LINEAR_ATTRS = ('tile_size',)
+  LINEAR_ATTRS = ('tile_size', 'dram',)
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
+    # pylint: disable=access-member-before-definition
+    if not self.dram:
+      self.dram = (0,)
     self.tile_size += (0,)
 
   def __str__(self):
@@ -150,7 +164,7 @@ class InputStmt(Node):
       result += '({},)'.format(', '.join(map(str, self.tile_size[:-1])))
     return result
 
-class _LocalStmtOrOutputStmt(Node):
+class LocalStmtOrOutputStmt(Node):
   SCALAR_ATTRS = 'soda_type', 'ref', 'expr'
   LINEAR_ATTRS = ('let',)
   def __init__(self, **kwargs):
@@ -178,18 +192,16 @@ class _LocalStmtOrOutputStmt(Node):
     return '{} {}:{} {} = {}'.format(type(self).__name__[:-4].lower(),
                                      self.soda_type, let, self.ref, self.expr)
 
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    obj.let = tuple(_.visit(callback, args) for _ in obj.let)
-    obj.ref = obj.ref.visit(callback, args)
-    obj.expr = obj.expr.visit(callback, args)
-    return obj
-
-class LocalStmt(_LocalStmtOrOutputStmt):
+class LocalStmt(LocalStmtOrOutputStmt):
   pass
 
-class OutputStmt(_LocalStmtOrOutputStmt):
-  pass
+class OutputStmt(LocalStmtOrOutputStmt):
+  LINEAR_ATTRS = LocalStmtOrOutputStmt.LINEAR_ATTRS + ('dram',)
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    # pylint: disable=access-member-before-definition
+    if not self.dram:
+      self.dram = (0,)
 
 class Let(Node):
   SCALAR_ATTRS = 'soda_type', 'name', 'expr'
@@ -199,14 +211,9 @@ class Let(Node):
       result = '{} {}'.format(self.soda_type, result)
     return result
 
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    obj.expr = self.expr.visit(callback, args)
-    return obj
-
   @property
   def c_expr(self):
-    return '{}&& {name} = {expr.c_expr};'.format(self.c_type, **self.__dict__)
+    return 'const {} {} = {};'.format(self.c_type, self.name, self.expr.c_expr)
 
 class Ref(Node):
   SCALAR_ATTRS = 'name', 'lat'
@@ -228,11 +235,6 @@ class _BinaryOp(Node):
     for operator, operand in zip(self.operator, self.operand[1:]):
       result += ' {} {}'.format(operator, operand)
     return result
-
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    obj.operand = [operand.visit(callback, args) for operand in self.operand]
-    return obj
 
   @property
   def soda_type(self):
@@ -287,11 +289,6 @@ class Unary(Node):
   def c_expr(self):
     return ''.join(self.operator)+self.operand.c_expr
 
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    obj.operand = obj.operand.visit(callback, args)
-    return obj
-
 class Operand(Node):
   SCALAR_ATTRS = 'cast', 'call', 'ref', 'num', 'var', 'expr'
   def __str__(self):
@@ -321,33 +318,16 @@ class Operand(Node):
         return getattr(self, attr).soda_type
     raise util.InternalError('undefined Operand')
 
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    for attr in ('cast', 'call', 'ref', 'expr'):
-      if getattr(obj, attr) is not None:
-        setattr(obj, attr, getattr(obj, attr).visit(callback, args))
-    return obj
-
 class Cast(Node):
   SCALAR_ATTRS = 'soda_type', 'expr'
   def __str__(self):
     return '{}({})'.format(self.soda_type, self.expr)
-
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    obj.expr = obj.expr.visit(callback, args)
-    return obj
 
 class Call(Node):
   SCALAR_ATTRS = ('name',)
   LINEAR_ATTRS = ('arg',)
   def __str__(self):
     return '{}({})'.format(self.name, ', '.join(map(str, self.arg)))
-
-  def visit(self, callback, args=None):
-    obj = super().visit(callback, args)
-    obj.arg = [arg.visit(callback, args) for arg in obj.arg]
-    return obj
 
 class Var(Node):
   SCALAR_ATTRS = ('name',)
@@ -401,9 +381,9 @@ def get_result_type(operand1, operand2, operator):
     (operand1, operator, operand2))
 
 class SodaProgram(Node):
-  SCALAR_ATTRS = ('border', 'burst_width', 'cluster', 'dram_bank',
-                  'dram_separate', 'iterate', 'app_name', 'unroll_factor',
-                  'input_stmts', 'param_stmts', 'local_stmts', 'output_stmts')
+  SCALAR_ATTRS = ('border', 'burst_width', 'cluster', 'iterate', 'app_name',
+                  'unroll_factor', 'input_stmts', 'param_stmts', 'local_stmts',
+                  'output_stmts')
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     for node in self.input_stmts:
@@ -417,7 +397,6 @@ class SodaProgram(Node):
       elif node.tile_size[:-1]:
         self.tile_size = node.tile_size
         self.dim = len(self.tile_size)
-    self.dram_separate = self.dram_separate == 'yes'
     # deal with 1D case
     if not hasattr(self, 'tile_size'):
       # pylint: disable=undefined-loop-variable
@@ -429,8 +408,6 @@ class SodaProgram(Node):
       'border: {}'.format(self.border),
       'burst width: {}'.format(self.burst_width),
       'cluster: {}'.format(self.cluster),
-      'dram bank: {}'.format(self.dram_bank),
-      'dram separate: {}'.format('yes' if self.dram_separate else 'no'),
       'iterate: {}'.format(self.iterate),
       'kernel: {}'.format(self.app_name),
       'unroll factor: {}'.format(self.unroll_factor),
