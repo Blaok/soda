@@ -2,6 +2,7 @@ from collections import OrderedDict
 from functools import reduce
 import copy
 import logging
+import math
 import operator
 
 from haoda import ir
@@ -768,8 +769,8 @@ def _print_burst_read(printer):
   do_scope()
   println('#pragma HLS pipeline II=1', 0)
   println('const uint64_t next_epoch = epoch + 1;')
-  println('epoch = next_epoch;')
   println('WriteData(to, from[epoch], next_epoch < data_num);')
+  println('epoch = next_epoch;')
   un_scope()
   un_scope()
 
@@ -918,13 +919,13 @@ def print_code(stencil, output_file):
 
   printer.println()
 
-  core.print_define(printer, 'BURST_WIDTH', stencil.burst_width)
+  util.print_define(printer, 'BURST_WIDTH', stencil.burst_width)
   printer.println()
 
-  core.print_guard(printer, 'UNROLL_FACTOR', stencil.unroll_factor)
+  util.print_guard(printer, 'UNROLL_FACTOR', stencil.unroll_factor)
   for i in range(len(stencil.tile_size)-1):
-    core.print_guard(printer, 'TILE_SIZE_DIM_%d' % i, stencil.tile_size[i])
-  core.print_guard(printer, 'BURST_WIDTH', stencil.burst_width)
+    util.print_guard(printer, 'TILE_SIZE_DIM_%d' % i, stencil.tile_size[i])
+  util.print_guard(printer, 'BURST_WIDTH', stencil.burst_width)
   printer.println()
 
   print_data_struct(printer)
@@ -984,7 +985,7 @@ def _print_module_func_call(printer, node, module_trait_id, **kwargs):
   println = printer.println
   print_func = printer.print_func
   func_name = util.get_func_name(module_trait_id)
-  func_lower_name = util.get_node_name(module_trait_id)
+  func_lower_name = util.get_module_name(module_trait_id)
 
   def get_load_set(obj, loads):
     if isinstance(obj, ir.FIFO):
@@ -1028,7 +1029,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   fifo_ref_prefix = 'fifo_ref_'
   read_fifo_func = 'ReadFIFO'
   func_name = util.get_func_name(module_trait_id)
-  func_lower_name = util.get_node_name(module_trait_id)
+  func_lower_name = util.get_module_name(module_trait_id)
   ii = 1
 
   def get_delays(obj, delays):
@@ -1151,19 +1152,21 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         burst_width=burst_width, dram=dram))
 
   # print enable conditions
-  for fifo_in in module_trait.loads:
-    println('const bool {fifo_in.ref_name}_enable = '
-      'ReadData(&{fifo_in.ref_name}, {fifo_in.ld_name});'.format(**locals()))
+  if not dram_write_map:
+    for fifo_in in module_trait.loads:
+      println('const bool {fifo_in.ref_name}_enable = '
+        'ReadData(&{fifo_in.ref_name}, {fifo_in.ld_name});'.format(**locals()))
   for dram in dram_reads:
     println('const bool {dram.dram_buf_name}_enable = '
             'ReadData(&{dram.dram_buf_name}, {dram.dram_fifo_name});'.format(
                 dram=dram))
-  println('const bool enabled = %s;' % (
-    ' && '.join(tuple('{_.ref_name}_enable'.format(_=_)
-                      for _ in module_trait.loads) +
-                tuple('{_.dram_buf_name}_enable'.format(_=_)
-                      for _ in dram_reads))))
-  println('enable = enabled;')
+  if not dram_write_map:
+    println('const bool enabled = %s;' % (
+      ' && '.join(tuple('{_.ref_name}_enable'.format(_=_)
+                        for _ in module_trait.loads) +
+                  tuple('{_.dram_buf_name}_enable'.format(_=_)
+                        for _ in dram_reads))))
+    println('enable = enabled;')
 
   # print delays (if any)
   for delay in delays:
@@ -1181,11 +1184,26 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       msb = lsb + type_width - 1
       return grammar.Var(name='{dram.dram_buf_name}({msb}, {lsb})'.format(
           dram=obj, msb=msb, lsb=lsb), idx=())
-    return copy.copy(obj)
+    return obj
 
   # mutate dram ref for writes
   if dram_write_map:
     for coalescing_idx in range(coalescing_factor):
+      for fifo_in in module_trait.loads:
+        if coalescing_idx == coalescing_factor - 1:
+          prefix = 'const bool {fifo_in.ref_name}_enable = '.format(
+              fifo_in=fifo_in)
+        else:
+          prefix = ''
+        println('{prefix}ReadData(&{fifo_in.ref_name},'
+                ' {fifo_in.ld_name});'.format(fifo_in=fifo_in, prefix=prefix))
+      if coalescing_idx == coalescing_factor - 1:
+        println('const bool enabled = %s;' % (
+          ' && '.join(tuple('{_.ref_name}_enable'.format(_=_)
+                            for _ in module_trait.loads) +
+                      tuple('{_.dram_buf_name}_enable'.format(_=_)
+                            for _ in dram_reads))))
+        println('enable = enabled;')
       for idx, let in enumerate(module_trait.lets):
         let = let.visit(mutate_dram_ref_for_writes,
                         {'coalescing_idx': coalescing_idx,
@@ -1208,17 +1226,18 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       return grammar.Var(
           name='{c_type}({dram.dram_buf_name}({msb}, {lsb}))'.format(
               c_type=obj.c_type, dram=obj, msb=msb, lsb=lsb), idx=())
-    return copy.copy(obj)
+    return obj
 
   # mutate dram ref for reads
   if dram_read_map:
     for coalescing_idx in range(coalescing_factor):
       for idx, expr in enumerate(module_trait.exprs):
-        println('WriteData({}{}, {}, enabled);'.format(
+        println('WriteData({}{}, {}, {});'.format(
             fifo_st_prefix, idx,
             expr.visit(mutate_dram_ref_for_reads,
                        {'coalescing_idx': coalescing_idx,
-                        'unroll_factor': len(module_trait.exprs)}).c_expr))
+                        'unroll_factor': len(module_trait.exprs)}).c_expr,
+            'true' if coalescing_idx < coalescing_factor - 1 else 'enabled'))
   else:
     for idx, expr in enumerate(module_trait.exprs):
       println('WriteData({}{}, {}({}), enabled);'.format(

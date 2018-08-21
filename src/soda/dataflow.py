@@ -327,7 +327,6 @@ def create_dataflow_graph(stencil):
           expr = fifo_r
       elif isinstance(src_node, ComputeNode):
         def replace_refs_callback(obj, args):
-          obj = copy.copy(obj)
           if isinstance(obj, grammar.Ref):
             # to confirm -- is this right?
             # TODO: build an index somewhere

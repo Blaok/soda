@@ -1,3 +1,4 @@
+import copy
 import logging
 
 from soda import util
@@ -125,19 +126,49 @@ class Node(object):
     return util.get_c_type(self.soda_type)
 
   def visit(self, callback, args=None):
-    obj = callback(self, args)
-    #_logger.debug('obj: %s', self)
-    #_logger.debug('     %s', type(self))
-    #_logger.debug('     %s', self.__dict__)
-    #_logger.debug('')
+    """A general-purpose, flexible, and powerful visitor.
+
+    The args parameter will be passed to the callback callable so that it may
+    read or write any information from or to the caller.
+
+    A copy of self will be made and passed to the callback to avoid destructive
+    access.
+
+    If a new object is returned by the callback, it will be returned directly
+    without recursion.
+
+    If the same object is returned by the callback, if any attribute is
+    changed, it will not be recursively visited. If an attribute is unchanged,
+    it will be recursively visited.
+    """
+
+    self_copy = copy.copy(self)
+    obj = callback(self_copy, args)
+    self_copy = copy.copy(self)
+    scalar_attrs = {attr: getattr(self_copy, attr).visit(callback, args)
+                    if issubclass(type(getattr(self_copy, attr)), Node)
+                    else getattr(self_copy, attr)
+                    for attr in self_copy.SCALAR_ATTRS}
+    linear_attrs = {attr: tuple(_.visit(callback, args)
+                                if issubclass(type(_), Node) else _
+                                for _ in getattr(self_copy, attr))
+                    for attr in self_copy.LINEAR_ATTRS}
 
     for attr in self.SCALAR_ATTRS:
-      if issubclass(type(getattr(self, attr)), Node):
-        setattr(obj, attr, getattr(self, attr).visit(callback, args))
+      # old attribute may not exist in mutated object
+      if not hasattr(obj, attr):
+        continue
+      if getattr(obj, attr) is getattr(self, attr):
+        if issubclass(type(getattr(obj, attr)), Node):
+          setattr(obj, attr, scalar_attrs[attr])
     for attr in self.LINEAR_ATTRS:
-      setattr(obj, attr,
-              tuple(_.visit(callback, args) if issubclass(type(_), Node) else _
-                    for _ in getattr(self, attr)))
+      # old attribute may not exist in mutated object
+      if not hasattr(obj, attr):
+        continue
+      setattr(obj, attr, tuple(
+          c if a is b and issubclass(type(a), Node) else a
+          for a, b, c in zip(getattr(obj, attr), getattr(self, attr),
+                             linear_attrs[attr])))
     return obj
 
 class InputStmt(Node):
@@ -314,8 +345,11 @@ class Operand(Node):
   @property
   def soda_type(self):
     for attr in self.ATTRS:
-      if getattr(self, attr) is not None:
-        return getattr(self, attr).soda_type
+      val = getattr(self, attr)
+      if val is not None:
+        if hasattr(val, 'soda_type'):
+          return val.soda_type
+        return None
     raise util.InternalError('undefined Operand')
 
 class Cast(Node):

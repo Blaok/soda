@@ -74,7 +74,7 @@ class Printer(object):
     return self.last_var()
 
   def last_var(self, offset=-1):
-    return 'assign_%d' % (self.assign+offset)
+    return 'assign_%d' % (self._assign+offset)
 
   def print_func(self, name, params, suffix='', align=80):
     lines = [name+'(']
@@ -93,6 +93,16 @@ class Printer(object):
       for line in lines:
         self.println(line)
       self.un_indent()
+
+def print_define(printer, var, val):
+  printer.println('#ifndef %s' % var)
+  printer.println('#define %s %d' % (var, val))
+  printer.println('#endif//%s' % var)
+
+def print_guard(printer, var, val):
+  printer.println('#if %s != %d' % (var, val))
+  printer.println('#error %s != %d' % (var, val))
+  printer.println('#endif//%s != %d' % (var, val))
 
 def get_c_type(soda_type):
   if soda_type in {
@@ -147,11 +157,11 @@ def idx2str(idx):
 def lst2str(idx):
   return '[%s]' % ', '.join(map(str, idx))
 
-def get_node_name(node_id):
-  return 'node_%d' % node_id
+def get_module_name(module_id):
+  return 'module_%d' % module_id
 
-def get_func_name(node_id):
-  return 'Node%d' % node_id
+def get_func_name(module_id):
+  return 'Module%d' % module_id
 
 get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
 get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)

@@ -407,7 +407,7 @@ class ModuleTrait(grammar.Node):
         fifo_ref = FIFORef(fifo=obj, lat=obj.read_lat, ref_id=load_id)
         loads[obj] = fifo_ref
         return fifo_ref
-      return copy.copy(obj)
+      return obj
     loads = OrderedDict()
     node = node.visit_loads(mutate, loads)
     self.loads = tuple(loads.values())
