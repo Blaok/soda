@@ -564,9 +564,10 @@ def _print_interface(printer, stencil):
     println('hls::stream<Data<ap_uint<BURST_WIDTH> > > {0}("{0}");'.format(
         get_port_buf_name(name, bank)))
   # port buf depths
-  for name, bank in inputs + outputs:
     println('#pragma HLS stream variable={} depth=32'.format(
         get_port_buf_name(name, bank)), 0)
+    println('#pragma HLS data_pack variable={}'.format(
+        get_port_buf_name(name, bank)), indent=0)
   println()
 
   # internal fifos
@@ -576,6 +577,8 @@ def _print_interface(printer, stencil):
       if fifo.depth > 0:
         println('#pragma HLS stream variable={} depth={}'.format(
             fifo.c_expr, fifo.depth), 0)
+      println('#pragma HLS data_pack variable={}'.format(fifo.c_expr),
+              indent=0)
 
   '''
   if extra_params:
@@ -1275,7 +1278,6 @@ def _print_read_data(printer):
   printer.do_scope()
   println('#pragma HLS inline', indent=0)
   println('const Data<T>& tmp = from->read();')
-  println('#pragma HLS data_pack variable=tmp', indent=0)
   println('*data = tmp.data;')
   println('return tmp.ctrl;')
   printer.un_scope()
@@ -1287,7 +1289,6 @@ def _print_write_data(printer):
   printer.do_scope()
   println('#pragma HLS inline', indent=0)
   println('Data<T> tmp;')
-  println('#pragma HLS data_pack variable=tmp', indent=0)
   println('tmp.data = data;')
   println('tmp.ctrl = ctrl;')
   println('to->write(tmp);')
