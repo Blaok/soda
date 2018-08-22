@@ -359,6 +359,10 @@ class Cast(Node):
   def __str__(self):
     return '{}({})'.format(self.soda_type, self.expr)
 
+  @property
+  def c_expr(self):
+    return 'static_cast<{} >({})'.format(self.c_type, self.expr.c_expr)
+
 class Call(Node):
   SCALAR_ATTRS = ('name',)
   LINEAR_ATTRS = ('arg',)

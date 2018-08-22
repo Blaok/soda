@@ -13,7 +13,7 @@ logger = logging.getLogger('__main__').getChild(__name__)
 def print_header(printer):
   for header in ['assert', 'float', 'math', 'stdbool', 'stdint', 'stdio',
                  'stdlib', 'string', 'fcntl', 'time', 'unistd', 'sys/types',
-                 'sys/stat', 'CL/opencl']:
+                 'sys/stat', 'CL/opencl', 'ap_int']:
     printer.println('#include<%s.h>' % header)
   printer.println()
 
@@ -1041,7 +1041,7 @@ def print_test(printer, stencil):
       return obj
     println('// {} = {}'.format(tensor.st_ref, tensor.expr))
     println('{} = {};'.format(tensor.st_ref.visit(mutate_store_for_host),
-                              tensor.expr.visit(mutate_load_for_host)))
+                              tensor.expr.visit(mutate_load_for_host).c_expr))
     if tensor.is_output():
       run_result = '%s_img[%s]' % (tensor.name, '+'.join(
           '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], tensor.name, d)
