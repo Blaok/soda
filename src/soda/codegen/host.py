@@ -973,9 +973,8 @@ def print_test(printer, stencil):
       do_scope()
     init_val = '+'.join(util.COORDS_IN_ORIG[0:input_dim])
     if util.is_float(stencil.input_types[0]):
-      init_val = '%s(%s)/%s(%s%s)' % (
-          stencil.input.type, init_val, stencil.input.type,
-          '%d+' % stencil.input.chan if stencil.input.chan>1 else '',
+      init_val = '{0}({1})/{0}({2})'.format(
+          stencil.tensors[name].c_type, init_val,
           '+'.join('dims[%d]' % d for d in range(stencil.dim)))
     println('%s_img[%s] = %s;' % (
         name, '+'.join('%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], name, d)

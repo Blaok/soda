@@ -7,16 +7,9 @@ COORDS_TILED = 'xyzw'
 COORDS_IN_TILE = 'ijkl'
 COORDS_IN_ORIG = 'pqrs'
 TYPE_WIDTH = {
-  'uint8_t':8,
-  'uint16_t':16,
-  'uint32_t':32,
-  'uint64_t':64,
-  'int8_t':8,
-  'int16_t':16,
-  'int32_t':32,
-  'int64_t':64,
-  'float':32,
-  'double':64
+  'float': 32,
+  'double': 64,
+  'half': 16
 }
 MAX_DRAM_BANK = 4
 
@@ -121,8 +114,11 @@ def get_soda_type(c_type):
 
 def get_width_in_bits(soda_type):
   if isinstance(soda_type, str):
-    if soda_type.startswith('uint') or soda_type.startswith('int'):
-      return int(soda_type.lstrip('uint').lstrip('int'))
+    if soda_type in TYPE_WIDTH:
+      return TYPE_WIDTH[soda_type]
+    for prefix in 'uint', 'int', 'float':
+      if soda_type.startswith(prefix):
+        return int(soda_type.lstrip(prefix).split('_')[0])
   else:
     if hasattr(soda_type, 'soda_type'):
       return get_width_in_bits(soda_type.soda_type)
@@ -132,7 +128,7 @@ def get_width_in_bytes(soda_type):
   return (get_width_in_bits(soda_type)-1)//8+1
 
 def is_float(soda_type):
-  return soda_type in {'float', 'double'}
+  return soda_type in {'half', 'double'} or soda_type.startswith('float')
 
 def serialize(vec, tile_size):
   return sum((vec[i]*reduce(operator.mul, tile_size[:i])

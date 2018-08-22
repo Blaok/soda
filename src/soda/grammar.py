@@ -252,6 +252,8 @@ class Ref(Node):
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     self.idx = tuple(self.idx)
+    if self.lat is not None:
+      self.lat = str2int(self.lat)
 
   def __str__(self):
     result = '{}({})'.format(self.name, ', '.join(map(str, self.idx)))

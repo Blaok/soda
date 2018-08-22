@@ -928,9 +928,10 @@ def print_code(stencil, output_file):
   util.print_guard(printer, 'BURST_WIDTH', stencil.burst_width)
   printer.println()
 
-  print_data_struct(printer)
-  print_read_data(printer)
-  print_write_data(printer)
+  _print_data_struct(printer)
+  _print_reinterpret(printer)
+  _print_read_data(printer)
+  _print_write_data(printer)
 
   _print_burst_read(printer)
   _print_burst_write(printer)
@@ -1208,7 +1209,9 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         let = let.visit(mutate_dram_ref_for_writes,
                         {'coalescing_idx': coalescing_idx,
                          'unroll_factor': len(module_trait.lets)})
-        println('{} = {};'.format(let.name, let.expr.c_expr))
+        println('{} = Reinterpret<ap_uint<{width}> >({});'.format(
+            let.name, let.expr.c_expr,
+            width=util.get_width_in_bits(let.expr.soda_type)))
     for dram in map(lambda _: next(iter(_.values())), dram_write_map.values()):
       println('WriteData({}, {}, enabled);'.format(
           dram.dram_fifo_name, dram.dram_buf_name))
@@ -1224,8 +1227,10 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       lsb = (coalescing_idx * unroll_factor + obj.offset) * type_width
       msb = lsb + type_width - 1
       return grammar.Var(
-          name='{c_type}({dram.dram_buf_name}({msb}, {lsb}))'.format(
-              c_type=obj.c_type, dram=obj, msb=msb, lsb=lsb), idx=())
+          name='Reinterpret<{c_type}>(static_cast<ap_uint<{width}> >('
+               '{dram.dram_buf_name}({msb}, {lsb})))'.format(
+                   c_type=obj.c_type, dram=obj, msb=msb, lsb=lsb,
+                   width=msb-lsb+1), idx=())
     return obj
 
   # mutate dram ref for reads
@@ -1247,7 +1252,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   un_scope()
   _logger.debug('printing: %s', module_trait)
 
-def print_data_struct(printer):
+def _print_data_struct(printer):
   println = printer.println
   println('template<typename T> struct Data')
   printer.do_scope()
@@ -1255,7 +1260,15 @@ def print_data_struct(printer):
   println('bool ctrl;')
   printer.un_scope(suffix=';')
 
-def print_read_data(printer):
+def _print_reinterpret(printer):
+  println = printer.println
+  println('template<typename To, typename From>')
+  println('inline To Reinterpret(const From& val)')
+  printer.do_scope()
+  println('return reinterpret_cast<const To&>(val);')
+  printer.un_scope()
+
+def _print_read_data(printer):
   println = printer.println
   println('template<typename T> inline bool ReadData'
           '(T* data, hls::stream<Data<T> >* from)')
@@ -1267,7 +1280,7 @@ def print_read_data(printer):
   println('return tmp.ctrl;')
   printer.un_scope()
 
-def print_write_data(printer):
+def _print_write_data(printer):
   println = printer.println
   println('template<typename T> inline void WriteData'
           '(hls::stream<Data<T> >* to, const T& data, bool ctrl)')
