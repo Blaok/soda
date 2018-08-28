@@ -1039,6 +1039,10 @@ def print_test(printer, stencil):
         return '%s_img[%s]' % (obj.name, '+'.join('%c*%s.stride[%d]' % (
             util.COORDS_IN_ORIG[d], obj.name, d) for d in range(stencil.dim)))
       return obj
+    for let in tensor.lets:
+      println('// let {} {} = {}'.format(let.soda_type, let.name, let.expr))
+      println('const {} {} = {};'.format(
+          let.c_type, let.name, let.expr.visit(mutate_load_for_host).c_expr))
     println('// {} = {}'.format(tensor.st_ref, tensor.expr))
     println('{} = {};'.format(tensor.st_ref.visit(mutate_store_for_host),
                               tensor.expr.visit(mutate_load_for_host).c_expr))

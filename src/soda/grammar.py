@@ -236,11 +236,24 @@ class OutputStmt(LocalStmtOrOutputStmt):
 
 class Let(Node):
   SCALAR_ATTRS = 'soda_type', 'name', 'expr'
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+
   def __str__(self):
     result = '{} = {}'.format(self.name, self.expr)
     if self.soda_type is not None:
       result = '{} {}'.format(self.soda_type, result)
     return result
+
+  @property
+  def soda_type(self):
+    if self._soda_type is None:
+      return self.expr.soda_type
+    return self._soda_type
+
+  @soda_type.setter
+  def soda_type(self, val):
+    self._soda_type = val
 
   @property
   def c_expr(self):
@@ -351,6 +364,20 @@ class Operand(Node):
       if val is not None:
         if hasattr(val, 'soda_type'):
           return val.soda_type
+        if attr == 'num':
+          if 'u' in val.lower():
+            if 'll' in val.lower():
+              return 'uint64'
+            return 'uint32'
+          if 'll' in val.lower():
+            return 'int64'
+          if 'fl' in val.lower():
+            return 'double'
+          if 'f' in val.lower() or 'e' in val.lower():
+            return 'float'
+          if '.' in val:
+            return 'double'
+          return 'int32'
         return None
     raise util.InternalError('undefined Operand')
 
@@ -368,6 +395,10 @@ class Call(Node):
   LINEAR_ATTRS = ('arg',)
   def __str__(self):
     return '{}({})'.format(self.name, ', '.join(map(str, self.arg)))
+
+  @property
+  def c_expr(self):
+    return '{}({})'.format(self.name, ', '.join(_.c_expr for _ in self.arg))
 
 class Var(Node):
   SCALAR_ATTRS = ('name',)
