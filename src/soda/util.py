@@ -104,6 +104,10 @@ def get_c_type(soda_type):
     return soda_type+'_t'
   if soda_type is None:
     return None
+  if soda_type == 'float32':
+    return 'float'
+  if soda_type == 'float64':
+    return 'double'
   for token in ('int', 'uint'):
     if soda_type.startswith(token):
       return 'ap_{}<{}>'.format(token, soda_type.replace(token, ''))
