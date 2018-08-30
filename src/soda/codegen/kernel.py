@@ -1137,6 +1137,9 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   println('for (bool enable = true; enable;)')
   do_scope('for {func_lower_name}_epoch'.format(**locals()))
   println('#pragma HLS pipeline II=%d' % ii, 0)
+  for delay in delays:
+    println('#pragma HLS dependence variable=%s inter false' %
+            delay.buf_name, 0)
 
   # print emptyness tests
   println('if (%s)' % (' && '.join(
