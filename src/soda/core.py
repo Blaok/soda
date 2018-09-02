@@ -100,6 +100,25 @@ class Tensor(object):
   def c_type(self):
     return util.get_c_type(self.soda_type)
 
+  def propagate_type(self):
+    if self.expr is None:
+      return
+
+    var_types = {}
+    # pylint: disable=access-member-before-definition
+    for let in self.lets:
+      var_types[let.name] = let.soda_type
+
+    def visit_soda_type(obj, args):
+      if obj.soda_type is None:
+        if isinstance(obj, grammar.Var):
+          obj.soda_type = var_types[obj.name]
+      return obj
+
+    self.lets = tuple(_.visit(visit_soda_type) for _ in self.lets)
+    self.expr = self.expr.visit(visit_soda_type)
+    self.st_ref = self.st_ref.visit(visit_soda_type)
+
   def mutate(self, callback, args=None):
     self.lets = tuple(_.visit(callback, args) for _ in self.lets)
     self.expr = self.expr.visit(callback, args)
@@ -365,6 +384,7 @@ class Stencil(object):
         _logger.debug('%s', tensor)
 
       for tensor in tensors:
+        tensor.propagate_type()
         loads = OrderedDict()
         def get_load_dict(obj, loads):
           if isinstance(obj, grammar.Ref):
