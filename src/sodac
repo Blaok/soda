@@ -53,15 +53,14 @@ def main():
                       dest='tile_size',
                       help='override tile size; '
                            '0 means no overriding on that dimension')
-  parser.add_argument('--dram-bank',
-            type=int,
-            dest='dram_bank',
-            help='override DRAM bank num')
-  parser.add_argument('--dram-separate',
-            type=str,
-            metavar='(yes|no)',
-            dest='dram_separate',
-            help='override DRAM separation')
+  parser.add_argument('--dram-in',
+                      type=str,
+                      dest='dram_in',
+                      help='override DRAM configuration for input')
+  parser.add_argument('--dram-out',
+                      type=str,
+                      dest='dram_out',
+                      help='override DRAM configuration for output')
   parser.add_argument('--iterate',
             type=int,
             metavar='#ITERATION',
@@ -178,6 +177,8 @@ def main():
                  else soda_model.iterate,
       cluster=args.cluster if args.cluster is not None
                  else soda_model.cluster,
+      dram_in=args.dram_in,
+      dram_out=args.dram_out,
       app_name=soda_model.app_name,
       input_stmts=soda_model.input_stmts,
       param_stmts=soda_model.param_stmts,
@@ -251,8 +252,8 @@ def main():
           '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (
             soda_model.app_name, 'x'.join(
               ['%d'%x for x in soda_model.tile_size[0:-1]]),
-            soda_model.unroll_factor, soda_model.dram_bank,
-            '-separated' if soda_model.dram_separate else '')),
+            soda_model.unroll_factor, soda_model.dram_in + '-' +
+            soda_model.dram_out)),
           'w') as kernel_file:
           kernel.print_code(stencil, kernel_file)
       if args.host_file is None:
