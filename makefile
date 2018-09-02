@@ -1,7 +1,7 @@
 .PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp check-git-status
 
 APP ?= blur
-SDA_VER ?= 2017.1
+SDA_VER ?= 2017.4
 TILE_SIZE_DIM_0 ?= 32
 #TILE_SIZE_DIM_1 ?= 32
 UNROLL_FACTOR ?= 2
@@ -26,17 +26,18 @@ HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZ
 
 KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-$(DRAM_BANK)ddr$(if $(DRAM_SEPARATE),-separated)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.cpp
 KERNEL_NAME ?= $(APP)_kernel
-HOST_XCLSRC ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-iterate$(ITERATE)-border-$(BORDER)d.cpp
 HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-iterate$(ITERATE)-border-$(BORDER)d
+HOST_SRCS += $(HOST_BIN).cpp
 
 SHELL = /bin/bash
-SRC ?= src
+SODA_SRC ?= src
 LABEL ?= $(COMMIT)
 OBJ ?= obj/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 BIN ?= bin/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 BIT ?= bit/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 RPT ?= rpt/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 TMP ?= tmp/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
+SRC ?= $(TMP)
 
 AWS_AFI_DIR ?= afis
 AWS_AFI_LOG ?= logs
@@ -46,13 +47,13 @@ COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quie
 
 XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
-SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0 xilinx:adm-pcie-ku3:2ddr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:4.0
+SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0 xilinx:adm-pcie-ku3:2ddr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:4.0 xilinx:vcu1525:dynamic:5.0 xilinx:aws-vu9p-f1-04261818:dynamic:5.0
 
-HOST_CFLAGS = -std=c++0x -g -Wall -fopenmp -DFPGA_DEVICE -DC_KERNEL -I$(XILINX_SDACCEL)/runtime/include/1_2
-HOST_LFLAGS = -fopenmp -L$(XILINX_SDACCEL)/runtime/lib/x86_64 -lxilinxopencl -lrt -ldl -lpthread -lz $(shell libpng-config --ldflags)
+HOST_CFLAGS ?= -fopenmp -I$(TMP)
+HOST_LFLAGS ?= -fopenmp
 
 ifdef AWS_BUCKET
-XDEVICE ?= xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0
+XDEVICE ?= xilinx:aws-vu9p-f1-04261818:dynamic:5.0
 else # AWS_BUCKET
 XDEVICE ?= xilinx:adm-pcie-7v3:1ddr:3.0
 endif # AWS_BUCKET
@@ -61,21 +62,12 @@ ifeq (,$(findstring $(XDEVICE),$(SUPPORTED_XDEVICES)))
 $(error $(XDEVICE) is not supported)
 endif
 
-ifeq ($(SDA_VER),2017.2)
-XILINX_SDX ?= /opt/tools/xilinx/SDx/$(SDA_VER)
-HOST_CFLAGS += -DTARGET_DEVICE=\"$(subst :,_,$(subst .,_,$(XDEVICE)))\"
-else # ($(SDA_VER),2017.2)
-HOST_CFLAGS += -DTARGET_DEVICE=\"$(XDEVICE)\"
-endif # ($(SDA_VER),2017.2)
 HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 
-CLCXX_OPT = $(CLCXX_OPT_LEVEL) $(DEVICE_REPO_OPT) --platform $(XDEVICE) $(KERNEL_DEFS) $(KERNEL_INCS)
-CLCXX_OPT += --kernel $(KERNEL_NAME)
-CLCXX_OPT += -s -g --temp_dir $(TMP) -O3 -j8
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
-ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
+ifneq (,$(findstring aws-vu9p-f1,$(XDEVICE)))
 CLCXX_OPT += --xp "vivado_param:project.runs.noReportGeneration=false"
-endif # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
+endif
 ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank0+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank1+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M01_AXI ";done)
@@ -83,125 +75,28 @@ CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank3+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M03_AXI ";done)
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem[0-9]+'       $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'gmem[0-9]+'                  );do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
 endif # ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
-CLCXX_CSIM_OPT = -t sw_emu
-CLCXX_COSIM_OPT = -t hw_emu
-CLCXX_HW_OPT = -t hw
 
-############################## phony targets ##############################
-csim: $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN) $(BIN)/emconfig.json
-	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN) $(HOST_ARGS)
-	@ulimit -s unlimited;DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=sw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(CSIM_XCLBIN) $(HOST_ARGS)
-
-cosim: $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN) $(BIN)/emconfig.json
-	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN) $(HOST_ARGS)
-	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) XCL_EMULATION_MODE=hw_emu $(WITH_SDACCEL) $(BIN)/$(HOST_BIN) $(BIT)/$(COSIM_XCLBIN) $(HOST_ARGS)
-
-ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
-bitstream: $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
-
-hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin)
-	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
-else # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
-bitstream: $(BIT)/$(HW_XCLBIN)
-
-hw: $(BIN)/$(HOST_BIN) $(BIT)/$(HW_XCLBIN)
-	@echo DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
-	@DRAM_BANK=$(DRAM_BANK) $(if $(DRAM_SEPARATE),DRAM_SEPARATE=) $(WITH_SDACCEL) $^ $(HOST_ARGS)
-endif # ifeq ("$(XDEVICE)","xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0")
-
-hls: $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
-
-exe: $(BIN)/$(HOST_BIN)
-
-kernel: $(TMP)/$(KERNEL_SRCS)
-
-check-afi-status:
-	@echo -n 'AFI state: ';aws ec2 describe-fpga-images --fpga-image-ids $$(jq -r '.FpgaImageId' $(BIT)/$(HW_XCLBIN:.xclbin=.afi))|jq '.FpgaImages[0].State.Code' -r
+include sdaccel-examples/makefile
 
 check-git-status:
 	@echo $(COMMIT)
 
-############################## generate source files ##############################
-$(TMP)/$(KERNEL_SRCS): $(SRC)/$(APP).soda
+$(TMP)/$(KERNEL_SRCS): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --kernel-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --kernel-file $@ $^
 
-$(TMP)/$(HOST_XCLSRC): $(SRC)/$(APP).soda
+$(TMP)/$(HOST_BIN).cpp: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --source-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --source-file $@ $^
 
-$(TMP)/$(APP).h: $(SRC)/$(APP).soda
+$(TMP)/$(APP).h: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-bank $(DRAM_BANK) --dram-separate $(if $(DRAM_SEPARATE),yes,no) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --header-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --header-file $@ $^
 
-############################## generate host binary ##############################
-$(BIN)/$(HOST_BIN): $(OBJ)/$(HOST_SRCS:.cpp=.o) $(OBJ)/$(HOST_XCLSRC:.cpp=.o)
-	@mkdir -p $(BIN)
-	$(WITH_SDACCEL) $(CXX) $(HOST_LFLAGS) $^ -o $@
-
-############################## generate host objects ##############################
-$(OBJ)/%.o: $(SRC)/%.cpp $(TMP)/$(APP).h
+$(OBJ)/%.o: $(TMP)/%.cpp $(TMP)/$(APP).h
 	@mkdir -p $(OBJ)
-	$(WITH_SDACCEL) $(CXX) -I$(TMP) $(HOST_CFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
-	$(WITH_SDACCEL) $(CXX) -I$(TMP) $(HOST_CFLAGS) -c $< -o $@
+	$(CXX) $(HOST_CFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
+	$(CXX) $(HOST_CFLAGS) -c $< -o $@
 
-$(OBJ)/%.o: $(TMP)/%.cpp
-	@mkdir -p $(OBJ)
-	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
-	$(WITH_SDACCEL) $(CXX) $(HOST_CFLAGS) -c $< -o $@
-
--include $(OBJ)/$(HOST_SRCS:.cpp=.d)
--include $(OBJ)/$(HOST_XCLSRC:.cpp=.d)
-
-############################## generate bitstreams ##############################
-$(BIT)/$(CSIM_XCLBIN): $(TMP)/$(KERNEL_SRCS)
-	@mkdir -p $(BIT)
-	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_CSIM_OPT) $(CLCXX_OPT) -o $@ $<
-	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
-	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
-	src/fix_xclbin2_size $@
-
-$(BIT)/$(COSIM_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
-	@mkdir -p $(BIT)
-	@mkdir -p $(RPT)
-	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_COSIM_OPT) $(CLCXX_OPT) -l -o $@ $<
-	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
-	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
-	src/fix_xclbin2_size $@
-
-$(BIT)/$(HW_XCLBIN): $(OBJ)/$(HW_XCLBIN:.xclbin=.xo)
-	@mkdir -p $(BIT)
-	@mkdir -p $(TMP)
-	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@ln -sf $(realpath $(TMP))/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/kernel_util_routed.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
-	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -l -o $@ $<
-	@cp --remove-destination $(TMP)/_xocc_link_$(HW_XCLBIN:.xclbin=)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/build/system/$(HW_XCLBIN:.xclbin=)/bitstream/$(HW_XCLBIN:%.xclbin=%_ipi)/{vivado.log,ipiimpl/ipiimpl.runs/impl_1/{{*_timing_summary,kernel_util}_routed,*_util*_*}.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
-	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
-	src/fix_xclbin2_size $@
-
-$(BIT)/$(HW_XCLBIN:.xclbin=.awsxclbin): $(BIT)/$(HW_XCLBIN)
-ifndef AWS_BUCKET
-	$(error AWS_BUCKET must be set to an available AWS S3 bucket)
-endif # AWS_BUCKET
-	@TMP=$$(mktemp -d);ln -rs ${BIT}/$(HW_XCLBIN) $${TMP};pushd $${TMP} >/dev/null;create-sdaccel-afi -xclbin=$(HW_XCLBIN) -o=$(HW_XCLBIN:.xclbin=) -s3_bucket=$(AWS_BUCKET) -s3_dcp_key=$(AWS_AFI_DIR) -s3_logs_key=$(AWS_AFI_LOG);popd >/dev/null;mv $${TMP}/$(HW_XCLBIN:.xclbin=.awsxclbin) $(BIT);mv $${TMP}/*afi_id.txt $(BIT)/$(HW_XCLBIN:.xclbin=.afi);rm -rf $${TMP}
-	src/fix_xclbin2_size $@
-
-$(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(TMP)/$(KERNEL_SRCS)
-	@mkdir -p $(OBJ)
-	@mkdir -p $(TMP)
-	@mkdir -p $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@ln -sf $(realpath $(TMP))/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/{vivado_hls.log,$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/$(KERNEL_NAME)_csynth.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
-	$(WITH_SDACCEL) $(CLCXX) $(CLCXX_HW_OPT) $(CLCXX_OPT) -c -o $@ $<
-	@cp --remove-destination $(TMP)/_xocc_compile_$(KERNEL_SRCS:%.cpp=%)_$(HW_XCLBIN:%.xclbin=%.dir)/impl/kernels/$(KERNEL_NAME)/{vivado_hls.log,$(KERNEL_NAME)/solution_OCL_REGION_0/syn/report/*.rpt} $(RPT)/$(HW_XCLBIN:.xclbin=)
-	@rm -rf $$(ls -d .Xil/xocc-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep xocc|tr '\n' '|'))-")
-	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
-
-############################## generate auxiliaries ##############################
-$(BIN)/emconfig.json:
-	@mkdir -p $(BIN)
-	$(WITH_SDACCEL) emconfigutil --platform $(XDEVICE) $(DEVICE_REPO_OPT) --od $(BIN)
-	@rm -rf $$(ls -d .Xil/configutil-*-$$(cat /etc/hostname) 2>/dev/null|grep -vE "\-($$(pgrep emconfigutil|tr '\n' '|'))-")
-	@rmdir .Xil --ignore-fail-on-non-empty 2>/dev/null; exit 0
-
+$(SRC)/$(APP)_run.cpp: $(SODA_SRC)/$(APP)_run.cpp
+	ln -sf $(abspath $<) $@
