@@ -242,7 +242,7 @@ def print_wrapped(printer, stencil):
   println()
 
   println('// change #bank if there is a env var defined')
-  println('int dram_bank = %d;' % util.MAX_DRAM_BANK)
+  println('int dram_bank = 1;')
   println('bool dram_separate = false;')
   println('if(nullptr!=getenv("DRAM_BANK"))')
   do_scope()
