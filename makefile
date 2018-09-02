@@ -99,5 +99,6 @@ $(OBJ)/%.o: $(TMP)/%.cpp $(TMP)/$(APP).h
 	$(CXX) $(HOST_CFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
 	$(CXX) $(HOST_CFLAGS) -c $< -o $@
 
-$(SRC)/$(APP)_run.cpp: $(SODA_SRC)/$(APP)_run.cpp
+$(SRC)/$(APP)_run.cpp: $(SODA_SRC)/$(APP)_run.cpp $(SRC)/$(APP).h
+	@mkdir -p $(SRC)
 	ln -sf $(abspath $<) $@
