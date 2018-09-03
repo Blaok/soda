@@ -561,7 +561,7 @@ def _print_interface(printer, stencil):
 
   # port buf declarations
   for name, bank in inputs + outputs:
-    println('hls::stream<Data<ap_uint<BURST_WIDTH> > > {0}("{0}");'.format(
+    println('hls::stream<Data<ap_uint<BURST_WIDTH>>> {0}("{0}");'.format(
         get_port_buf_name(name, bank)))
   # port buf depths
     println('#pragma HLS stream variable={} depth=32'.format(
@@ -573,7 +573,7 @@ def _print_interface(printer, stencil):
   # internal fifos
   for node in stencil.dataflow_super_source.tpo_node_gen():
     for fifo in node.fifos:
-      println('hls::stream<Data<{0}> > {1}("{1}");'.format(fifo.c_type, fifo.c_expr))
+      println('hls::stream<Data<{0}>> {1}("{1}");'.format(fifo.c_type, fifo.c_expr))
       if fifo.depth > 0:
         println('#pragma HLS stream variable={} depth={}'.format(
             fifo.c_expr, fifo.depth), 0)
@@ -765,7 +765,7 @@ def _print_burst_read(printer):
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope
-  println('void BurstRead(hls::stream<Data<ap_uint<BURST_WIDTH> > >* to, ap_uint<BURST_WIDTH>* from, uint64_t data_num)')
+  println('void BurstRead(hls::stream<Data<ap_uint<BURST_WIDTH>>>* to, ap_uint<BURST_WIDTH>* from, uint64_t data_num)')
   do_scope()
   println('load_epoch:', 0)
   println('for (uint64_t epoch = 0; epoch < data_num;)')
@@ -781,7 +781,7 @@ def _print_burst_write(printer):
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope
-  println('void BurstWrite(ap_uint<BURST_WIDTH>* to, hls::stream<Data<ap_uint<BURST_WIDTH> > >* from)')
+  println('void BurstWrite(ap_uint<BURST_WIDTH>* to, hls::stream<Data<ap_uint<BURST_WIDTH>>>* from)')
   do_scope()
   println('uint64_t epoch = 0;')
   println('store_epoch:', 0)
@@ -1047,9 +1047,9 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     expr.visit(get_delays, delays)
   _logger.debug('delays: %s', delays)
 
-  fifo_loads = tuple('/* input*/ hls::stream<Data<{}> >* {}'.format(
+  fifo_loads = tuple('/* input*/ hls::stream<Data<{}>>* {}'.format(
       _.c_type, _.ld_name) for _ in module_trait.loads)
-  fifo_stores = tuple('/*output*/ hls::stream<Data<{}> >* {}{}'.format(
+  fifo_stores = tuple('/*output*/ hls::stream<Data<{}>>* {}{}'.format(
       expr.c_type, fifo_st_prefix, idx)
     for idx, expr in enumerate(module_trait.exprs))
 
@@ -1089,7 +1089,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         reassemble_factor = batch_width // burst_width
     dram_reads = tuple(next(iter(_.values())) for _ in dram_read_map.values())
     fifo_loads += tuple(
-        '/* input*/ hls::stream<Data<ap_uint<{burst_width}> > >* '
+        '/* input*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
         '{dram.dram_fifo_name}'.format(
             burst_width=burst_width, dram=_) for _ in dram_reads)
   elif dram_writes:   # this is a packing module
@@ -1118,7 +1118,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     dram_writes = tuple(next(iter(_.values()))
                         for _ in dram_write_map.values())
     fifo_stores += tuple(
-        '/*output*/ hls::stream<Data<ap_uint<{burst_width}> > >* '
+        '/*output*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
         '{dram.dram_fifo_name}'.format(
             burst_width=burst_width, dram=_) for _ in dram_writes)
 
@@ -1222,7 +1222,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         let = let.visit(mutate_dram_ref_for_writes,
                         {'coalescing_idx': coalescing_idx,
                          'unroll_factor': len(module_trait.lets)})
-        println('{} = Reinterpret<ap_uint<{width}> >({});'.format(
+        println('{} = Reinterpret<ap_uint<{width}>>({});'.format(
             let.name, let.expr.c_expr,
             width=util.get_width_in_bits(let.expr.soda_type)))
     for dram in map(lambda _: next(iter(_.values())), dram_write_map.values()):
@@ -1240,7 +1240,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       lsb = (coalescing_idx * unroll_factor + obj.offset) * type_width
       msb = lsb + type_width - 1
       return grammar.Var(
-          name='Reinterpret<{c_type}>(static_cast<ap_uint<{width}> >('
+          name='Reinterpret<{c_type}>(static_cast<ap_uint<{width}>>('
                '{dram.dram_buf_name}({msb}, {lsb})))'.format(
                    c_type=obj.c_type, dram=obj, msb=msb, lsb=lsb,
                    width=msb-lsb+1), idx=())
@@ -1284,7 +1284,7 @@ def _print_reinterpret(printer):
 def _print_read_data(printer):
   println = printer.println
   println('template<typename T> inline bool ReadData'
-          '(T* data, hls::stream<Data<T> >* from)')
+          '(T* data, hls::stream<Data<T>>* from)')
   printer.do_scope()
   println('#pragma HLS inline', indent=0)
   println('const Data<T>& tmp = from->read();')
@@ -1295,7 +1295,7 @@ def _print_read_data(printer):
 def _print_write_data(printer):
   println = printer.println
   println('template<typename T> inline void WriteData'
-          '(hls::stream<Data<T> >* to, const T& data, bool ctrl)')
+          '(hls::stream<Data<T>>* to, const T& data, bool ctrl)')
   printer.do_scope()
   println('#pragma HLS inline', indent=0)
   println('Data<T> tmp;')
