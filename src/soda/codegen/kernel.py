@@ -574,9 +574,8 @@ def _print_interface(printer, stencil):
   for node in stencil.dataflow_super_source.tpo_node_gen():
     for fifo in node.fifos:
       println('hls::stream<Data<{0}>> {1}("{1}");'.format(fifo.c_type, fifo.c_expr))
-      if fifo.depth > 0:
-        println('#pragma HLS stream variable={} depth={}'.format(
-            fifo.c_expr, fifo.depth), 0)
+      println('#pragma HLS stream variable={} depth={}'.format(
+          fifo.c_expr, max(fifo.depth, 2)), 0)
       println('#pragma HLS data_pack variable={}'.format(fifo.c_expr),
               indent=0)
 
@@ -1177,16 +1176,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
 
   # print delays (if any)
   for delay in delays:
-    println('const {} {} = {};'.format(delay.c_ptr_type, delay.next_ptr,
-                                       delay.c_next_ptr_expr))
-    println('{} {};'.format(delay.c_type, delay.c_expr))
-    do_scope()
-    println('#pragma HLS latency min=1 max=1', 0)
-    # had to put store before load to make HLS schedule them in the same cycle
-    println(delay.c_buf_store)
-    println(delay.c_buf_load)
-    un_scope()
-    println('{} = {};'.format(delay.ptr, delay.next_ptr))
+    println('const {} {};'.format(delay.c_type, delay.c_buf_load))
 
   # print lets
   def mutate_dram_ref_for_writes(obj, kwargs):
@@ -1260,6 +1250,11 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     for idx, expr in enumerate(module_trait.exprs):
       println('WriteData({}{}, {}({}), enabled);'.format(
               fifo_st_prefix, idx, expr.c_type, expr.c_expr))
+
+  for delay in delays:
+    println(delay.c_buf_store)
+    println('{} = {};'.format(delay.ptr, delay.c_next_ptr_expr))
+
   un_scope()
   un_scope()
   un_scope()
