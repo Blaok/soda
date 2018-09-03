@@ -161,7 +161,7 @@ def get_module_name(module_id):
   return 'module_%d' % module_id
 
 def get_func_name(module_id):
-  return 'Module%d' % module_id
+  return 'Module%dFunc' % module_id
 
 get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
 get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)
