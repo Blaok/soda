@@ -1177,9 +1177,16 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
 
   # print delays (if any)
   for delay in delays:
-    println(delay.c_buf_load)
+    println('const {} {} = {};'.format(delay.c_ptr_type, delay.next_ptr,
+                                       delay.c_next_ptr_expr))
+    println('{} {};'.format(delay.c_type, delay.c_expr))
+    do_scope()
+    println('#pragma HLS latency min=1 max=1', 0)
+    # had to put store before load to make HLS schedule them in the same cycle
     println(delay.c_buf_store)
-    println(delay.c_ptr_incr)
+    println(delay.c_buf_load)
+    un_scope()
+    println('{} = {};'.format(delay.ptr, delay.next_ptr))
 
   # print lets
   def mutate_dram_ref_for_writes(obj, kwargs):

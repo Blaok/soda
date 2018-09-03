@@ -259,8 +259,12 @@ class DelayedRef(grammar.Node):
     return '{ref.c_expr}_delayed_{delay}_ptr'.format(**self.__dict__)
 
   @property
+  def next_ptr(self):
+    return '{ref.c_expr}_delayed_{delay}_next_ptr'.format(**self.__dict__)
+
+  @property
   def ptr_type(self):
-    return 'uint%d' % int(math.log2(self.delay)+1)
+    return 'uint%d' % int(math.log2(self.delay+1)+1)
 
   @property
   def c_expr(self):
@@ -271,30 +275,33 @@ class DelayedRef(grammar.Node):
     return util.get_c_type(self.ptr_type)
 
   @property
-  def c_buf_ref(self):
-    return '{}[{}]'.format(self.buf_name, self.ptr)
-
-  @property
-  def c_buf_decl(self):
-    return '{} {}[{}];'.format(self.c_type, self.buf_name, self.delay)
-
-  @property
   def c_ptr_decl(self):
     return '{} {} = 0;'.format(self.c_ptr_type, self.ptr)
 
   @property
+  def c_buf_ref(self):
+    return '{}[{}]'.format(self.buf_name, self.ptr)
+
+  @property
+  def c_buf_next_ref(self):
+    return '{}[{}]'.format(self.buf_name, self.next_ptr)
+
+  @property
+  def c_buf_decl(self):
+    return '{} {}[{}];'.format(self.c_type, self.buf_name, self.delay+1)
+
+  @property
   def c_buf_load(self):
-    return 'const {} {} = {};'.format(self.c_type, self.c_expr, self.c_buf_ref)
+    return '{} = {};'.format(self.c_expr, self.c_buf_next_ref)
 
   @property
   def c_buf_store(self):
     return '{} = {};'.format(self.c_buf_ref, self.ref.ref_name)
 
   @property
-  def c_ptr_incr(self):
-    return ('{ptr} = {ptr} < {depth} ? '
-            '{c_ptr_type}({ptr}+1) : {c_ptr_type}(0);').format(
-      ptr=self.ptr, c_ptr_type=self.c_ptr_type, depth=self.delay-1)
+  def c_next_ptr_expr(self):
+    return '{ptr} < {depth} ? {c_ptr_type}({ptr}+1) : {c_ptr_type}(0)'.format(
+        ptr=self.ptr, c_ptr_type=self.c_ptr_type, depth=self.delay)
 
 class FIFORef(grammar.Node):
   """A FIFO reference.
