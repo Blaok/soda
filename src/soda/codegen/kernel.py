@@ -746,7 +746,7 @@ def _print_interface(printer, stencil):
     _print_module_func_call(printer, node, module_trait_id)
 
   for name, bank in outputs:
-    println('BurstWrite({}, &{});'.format(
+    println('BurstWrite({}, &{}, coalesced_data_num);'.format(
         get_port_name(name, bank), get_port_buf_name(name, bank)))
 
   un_scope()
@@ -780,15 +780,14 @@ def _print_burst_write(printer):
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope
-  println('void BurstWrite(ap_uint<BURST_WIDTH>* to, hls::stream<Data<ap_uint<BURST_WIDTH>>>* from)')
+  println('void BurstWrite(ap_uint<BURST_WIDTH>* to, hls::stream<Data<ap_uint<BURST_WIDTH>>>* from, uint64_t data_num)')
   do_scope()
-  println('uint64_t epoch = 0;')
   println('store_epoch:', 0)
-  println('for (bool enable = true; enable; ++epoch)')
+  println('for (uint64_t epoch = 0; epoch < data_num; ++epoch)')
   do_scope()
   println('#pragma HLS pipeline II=1', 0)
   println('ap_uint<BURST_WIDTH> buf;')
-  println('enable = ReadData(&buf, from);')
+  println('ReadData(&buf, from);')
   println('to[epoch] = buf;')
   un_scope()
   un_scope()
