@@ -1,5 +1,4 @@
 from collections import OrderedDict
-import copy
 import logging
 
 from haoda import ir
@@ -330,15 +329,16 @@ def create_dataflow_graph(stencil):
           if isinstance(obj, grammar.Ref):
             # to confirm -- is this right?
             # TODO: build an index somewhere
-            offset = stencil.unroll_factor - 1 - src_node.pe_id + \
-                     util.serialize(obj.idx, stencil.tile_size)
+            offset = reuse_buffers[obj.name][0] - 1 - src_node.pe_id \
+                     - util.serialize(obj.idx, stencil.tile_size) \
+                     + min(src_node.tensor.ld_offsets[obj.name])
             for parent in src_node.parents:
               if parent.tensor.name == obj.name and parent.offset == offset:
                 for fifo_r in parent.fifos:
                   if fifo_r.edge == (parent, src_node):
-                    break
-            _logger.debug('replace %s with %s', obj, fifo_r)
-            return fifo_r
+                    _logger.debug('replace %s with %s', obj, fifo_r)
+                    return fifo_r
+            raise util.InternalError('cannot replace Ref %s' % obj)
           return obj
         _logger.debug('lets: %s', src_node.tensor.lets)
         lets = [_.visit(replace_refs_callback) for _ in src_node.tensor.lets]
