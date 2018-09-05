@@ -273,17 +273,7 @@ def create_dataflow_graph(stencil):
       else:
         raise util.InternalError('unexpected source node: %s' % repr(src_node))
 
-      if isinstance(dst_node, ForwardNode):
-        depth = stencil.reuse_buffer_lengths[dst_node.tensor.name]\
-                                            [dst_node.offset]
-      elif isinstance(dst_node, ComputeNode):
-        depth = 0
-      elif isinstance(dst_node, SuperSinkNode):
-        depth = 0
-      else:
-        raise util.InternalError('unexpected destination node: %s' %
-                                 repr(dst_node))
-
+      depth = 0
       fifo = ir.FIFO(src_node, dst_node, depth, write_lat)
       if isinstance(src_node, SuperSourceNode):
         lets = []

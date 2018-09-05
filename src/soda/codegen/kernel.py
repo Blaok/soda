@@ -1,8 +1,6 @@
 from collections import OrderedDict
 from functools import reduce
-import copy
 import logging
-import math
 import operator
 
 from haoda import ir
@@ -575,7 +573,7 @@ def _print_interface(printer, stencil):
     for fifo in node.fifos:
       println('hls::stream<Data<{0}>> {1}("{1}");'.format(fifo.c_type, fifo.c_expr))
       println('#pragma HLS stream variable={} depth={}'.format(
-          fifo.c_expr, max(fifo.depth, 2)), 0)
+          fifo.c_expr, max(fifo.depth+1, 2)), 0)
       println('#pragma HLS data_pack variable={}'.format(fifo.c_expr),
               indent=0)
 
