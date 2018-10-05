@@ -44,9 +44,9 @@ FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
   'copysign'|'nan'|'nextafter'|'nexttoward'|'fdim'|'fmax'|'fmin'|'fabs'|'abs'|'fma'|
   'min'|'max'|'select';
 
-InputStmt: 'input' ('dram' dram=INT ('|' dram=INT)*)? soda_type=Type ':' name=ID ('(' (tile_size=INT ',')* ')')?;
+InputStmt: 'input' ('dram' dram=INT ('.' dram=INT)*)? soda_type=Type ':' name=ID ('(' (tile_size=INT ',')* '*' ')')?;
 LocalStmt: 'local' soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
-OutputStmt: 'output' ('dram' dram=INT ('|' dram=INT)*)? soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
+OutputStmt: 'output' ('dram' dram=INT ('.' dram=INT)*)? soda_type=Type ':' (let=Let)* ref=Ref '=' expr=Expr;
 
 Let: (soda_type=Type)? name=ID '=' expr=Expr;
 Ref: name=ID '(' idx=INT (',' idx=INT)* ')' ('~' lat=Int)?;
@@ -86,7 +86,7 @@ Cast: soda_type=Type '(' expr=Expr ')';
 Call: name=FuncName '(' arg=Expr (',' arg=Expr)* ')';
 Var: name=ID ('[' idx=Int ']')*;
 
-ParamStmt: 'param' ('dram' dram=INT ('|' dram=INT)*)? soda_type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
+ParamStmt: 'param' ('dram' dram=INT ('.' dram=INT)*)? soda_type=Type (',' attr=ParamAttr)* ':' name=ID ('[' size=INT ']')*;
 ParamAttr: 'dup' dup=Int | partitioning=Partitioning;
 Partitioning:
   'partition' strategy='complete' ('dim' '=' dim=Int)? |
