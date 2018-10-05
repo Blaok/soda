@@ -204,6 +204,34 @@ class Stencil(object):
     self.local_stmts = kwargs.pop('local_stmts')
     self.output_stmts = kwargs.pop('output_stmts')
 
+    if 'dram_in' in kwargs:
+      dram_in = kwargs.pop('dram_in')
+      if dram_in is not None:
+        if ',' in dram_in or ':' in dram_in:
+          input_stmt_map = {_.name : _ for _ in self.input_stmts}
+          for dram_map in dram_in.split(','):
+            var_name, bank_list = dram_map.split(':')
+            if var_name not in input_stmt_map:
+              raise util.SemanticError('no input named `{}`'.format(var_name))
+            input_stmt_map[var_name].dram = tuple(bank_list.split('.'))
+        else:
+          for input_stmt in self.input_stmts:
+            input_stmt.dram = tuple(dram_in.split('.'))
+
+    if 'dram_out' in kwargs:
+      dram_out = kwargs.pop('dram_out')
+      if dram_out is not None:
+        if ',' in dram_out or ':' in dram_out:
+          output_stmt_map = {_.name : _ for _ in self.output_stmts}
+          for dram_map in dram_out.split(','):
+            var_name, bank_list = dram_map.split(':')
+            if var_name not in output_stmt_map:
+              raise util.SemanticError('no output named `{}`'.format(var_name))
+            output_stmt_map[var_name].dram = tuple(bank_list.split('.'))
+        else:
+          for output_stmt in self.output_stmts:
+            output_stmt.dram = tuple(dram_out.split('.'))
+
     if self.iterate > 1:
       if len(self.input_stmts) != len(self.output_stmts):
         raise util.SemanticError(
