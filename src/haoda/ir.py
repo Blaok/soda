@@ -371,13 +371,13 @@ class DRAMRef(grammar.Node):
   def c_expr(self):
     return str(self)
 
-  @property
-  def dram_buf_name(self):
-    return 'bank_{}_buf'.format(self.var)
+  def dram_buf_name(self, bank):
+    assert bank in self.dram, 'unexpected bank {}'.format(bank)
+    return 'dram_{}_bank_{}_buf'.format(self.var, bank)
 
-  @property
-  def dram_fifo_name(self):
-    return 'bank_{}_fifo'.format(self.var)
+  def dram_fifo_name(self, bank):
+    assert bank in self.dram, 'unexpected bank {}'.format(bank)
+    return 'dram_{}_bank_{}_fifo'.format(self.var, bank)
 
 class ModuleTrait(grammar.Node):
   """A immutable, hashable trait of a dataflow module.
