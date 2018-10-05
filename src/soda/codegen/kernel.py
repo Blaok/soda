@@ -1084,7 +1084,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         assert batch_width % burst_width == 0, 'cannot process such a burst'
         # multiple bursts consumed in a single cycle
         reassemble_factor = batch_width // (burst_width * num_banks)
-        raise core.InternalError('cannot process such a burst yet')
+        raise util.InternalError('cannot process such a burst yet')
     dram_reads = tuple(next(iter(_.values())) for _ in dram_read_map.values())
     fifo_loads += tuple(
         '/* input*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
@@ -1115,7 +1115,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         assert batch_width % burst_width == 0, 'cannot process such a burst'
         # multiple bursts consumed in a single cycle
         reassemble_factor = batch_width // (burst_width * num_banks)
-        raise core.InternalError('cannot process such a burst yet')
+        raise util.InternalError('cannot process such a burst yet')
     dram_writes = tuple(next(iter(_.values()))
                         for _ in dram_write_map.values())
     fifo_stores += tuple(
