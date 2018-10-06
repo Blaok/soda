@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from functools import reduce
 import logging
 import operator
@@ -86,6 +87,49 @@ class Printer(object):
       for line in lines:
         self.println(line)
       self.un_indent()
+
+  @contextmanager
+  def for_(self, *args):
+    if len(args) == 3:
+      self.println('for ({}; {}; {}) {{'.format(*args))
+    elif len(args) == 2:
+      self.println('for ({} : {}) {{'.format(*args))
+    else:
+      raise InternalError('for_ takes 2 or 3 arguments')
+    self.do_indent()
+    yield
+    self.un_indent()
+    self.println('}')
+
+  @contextmanager
+  def do_while(self, cond):
+    self.println('do {')
+    self.do_indent()
+    yield
+    self.un_indent()
+    self.println('}} while ({});'.format(cond))
+
+  @contextmanager
+  def if_(self, cond):
+    self.println('if ({}) {{'.format(cond))
+    self.do_indent()
+    yield
+    self.un_indent()
+    self.println('}')
+
+  @contextmanager
+  def elif_(self, cond):
+    self.un_indent()
+    self.println('}} else if ({}) {{'.format(cond))
+    self.do_indent()
+    yield
+
+  @contextmanager
+  def else_(self):
+    self.un_indent()
+    self.println('} else {')
+    self.do_indent()
+    yield
 
 def print_define(printer, var, val):
   printer.println('#ifndef %s' % var)
