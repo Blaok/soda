@@ -494,9 +494,9 @@ def _print_interface(printer, stencil):
       stencil.tensors[stencil.output_names[0]])
 
   outputs = [(stmt.name, bank) for stmt in stencil.output_stmts
-                               for bank in stmt.dram]
+                               for bank in sorted(stmt.dram)]
   inputs = [(stmt.name, bank) for stmt in stencil.input_stmts
-                              for bank in stmt.dram]
+                              for bank in sorted(stmt.dram)]
 
   get_port_name = util.get_port_name
   get_port_buf_name = util.get_port_buf_name

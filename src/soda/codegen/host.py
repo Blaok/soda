@@ -258,30 +258,81 @@ def print_wrapped(printer, stencil):
         stencil.input_names[0], d = d))
   println()
 
+  def for_banks():
+    return printer.for_('auto bank', '{{{}}}'.format(
+        ', '.join(map(str, range(util.MAX_DRAM_BANK)))))
+
   println('// change #bank if there is a env var defined')
-  println('int dram_bank = 1;')
-  println('bool dram_separate = false;')
-  println('if(nullptr!=getenv("DRAM_BANK"))')
-  do_scope()
-  println('dram_bank = atoi(getenv("DRAM_BANK"));')
-  un_scope()
-  println('if(nullptr!=getenv("DRAM_SEPARATE"))')
-  do_scope()
-  println('dram_separate = true;')
-  println('dram_bank /= 2;')
-  un_scope()
-  println()
+  println('unordered_map<string, array<bool, %d>> use_bank;' %
+          util.MAX_DRAM_BANK)
+  println('unordered_map<string, int> num_bank;')
+  println('unordered_map<string, array<int, %d>> bank_vec;' %
+          util.MAX_DRAM_BANK)
+  for name in stencil.output_names + stencil.input_names + stencil.param_names:
+    println('use_bank["{}"] = {{true{}}};'.format(
+        name, ', false' * (util.MAX_DRAM_BANK - 1)))
+  for env_var in 'DRAM_IN', 'DRAM_OUT':
+    do_scope()
+    println('const string env_var = getenv("{}");'.format(env_var))
+    with printer.if_('!env_var.empty()'):
+      with printer.if_("env_var.find(':') != string::npos"):
+        println('size_t pos = 0;')
+        println('size_t next_pos;')
+        with printer.do_while('next_pos != string::npos'):
+          println("next_pos = env_var.find(',', pos);")
+          println("const size_t colon_pos = env_var.find(':', pos);")
+          println("const string name = env_var.substr(pos, colon_pos - pos);")
+          println('pos = colon_pos + 1;')
+          with printer.if_('use_bank.count(name)'):
+            println('fill(use_bank[name].begin(), use_bank[name].end(), '
+                    'false);')
+            println('num_bank[name] = 0;')
+            println('int idx = 0;')
+            println('size_t dot_pos;')
+            with printer.do_while('dot_pos != string::npos && '
+                                  'dot_pos < next_pos'):
+              println("dot_pos = env_var.find('.', pos);")
+              println('int bank = stoi(env_var.substr(pos, dot_pos - pos));')
+              println('use_bank[name][bank] = true;')
+              println('++num_bank[name];')
+              println('bank_vec[name][idx++] = bank;')
+              println('pos = dot_pos + 1;')
+            with printer.else_():
+              println('fprintf(*error_report, '
+                      '"WARNING: unknown name %s\\n", name.c_str());')
+          println('pos = next_pos + 1;')
+        with printer.else_():
+          with printer.for_('const string name', '{"%s"}' % ', '.join(
+              stencil.input_names if env_var == 'DRAM_IN'
+              else stencil.output_names)):
+            println('fill(use_bank[name].begin(), use_bank[name].end(), false);')
+            println('num_bank[name] = 0;')
+            println('int idx = 0;')
+            println('size_t pos = 0;')
+            println('size_t dot_pos;')
+            with printer.do_while('dot_pos != string::npos'):
+              println("dot_pos = env_var.find('.', pos);")
+              println('int bank = stoi(env_var.substr(pos, dot_pos - pos));')
+              println('use_bank[name][bank] = true;')
+              println('++num_bank[name];')
+              println('bank_vec[name][idx++] = bank;')
+              println('pos = dot_pos + 1;')
+    un_scope()
+    println()
 
   println('// align each linearized tile to multiples of BURST_WIDTH')
   println('int64_t tile_pixel_num = %s*%s_size_dim_%d;' % (
       '*'.join('TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)),
       stencil.input_names[0], stencil.dim-1))
   println('int64_t tile_burst_num = '
-          '(tile_pixel_num-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1;')
+          '(tile_pixel_num-1)/(BURST_WIDTH/PIXEL_WIDTH_I*num_bank["%s"])+1;' %
+          stencil.input_names[0])
   println('int64_t tile_size_linearized_i = '
-          'tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank);')
+          'tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_I*num_bank["%s"]);' %
+          stencil.input_names[0])
   println('int64_t tile_size_linearized_o = '
-          'tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_O*dram_bank);')
+          'tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_O*num_bank["%s"]);' %
+          stencil.output_names[0])
   println()
 
   println('// prepare for opencl')
@@ -299,30 +350,28 @@ def print_wrapped(printer, stencil):
   println('char cl_platform_vendor[1001];')
   println()
 
-  for name in stencil.input_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('cl_mem var_%s_bank_%d_cl;' % (name, bank))
-  for name in stencil.output_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('cl_mem var_%s_bank_%d_cl;' % (name, bank))
+  for name in stencil.input_names + stencil.output_names:
+    println('cl_mem var_%s_cl_bank[%d] = {};' % (name, util.MAX_DRAM_BANK))
   println()
 
   for name in stencil.param_names:
-    println('cl_mem var_%s_cl;' % name)
+    println('cl_mem var_%s_cl = nullptr;' % name)
   println()
 
   for stmt in stencil.input_stmts:
-    println('uint64_t var_%s_buf_size = sizeof(%s)*(%s*tile_size_linearized_i/'
-            'dram_bank+((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*'
-            'dram_bank)+1)*(BURST_WIDTH/PIXEL_WIDTH_I));' % (
-                stmt.name, stmt.c_type,
-                '*'.join('tile_num_dim_%d'%_ for _ in range(stencil.dim-1))))
+    println('uint64_t var_{stmt.name}_buf_size = sizeof({stmt.c_type})*('
+            '{}*tile_size_linearized_i/num_bank["{stmt.name}"]+'
+            '((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*'
+            'num_bank["{stmt.name}"])+1)*(BURST_WIDTH/PIXEL_WIDTH_I));'.format(
+                '*'.join('tile_num_dim_%d'%_ for _ in range(stencil.dim-1)),
+                stmt=stmt))
   for stmt in stencil.output_stmts:
-    println('uint64_t var_%s_buf_size = sizeof(%s)*(%s*tile_size_linearized_o/'
-            'dram_bank+((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_O*'
-            'dram_bank)+1)*(BURST_WIDTH/PIXEL_WIDTH_O));' % (
-                stmt.name, stmt.c_type,
-                '*'.join('tile_num_dim_%d'%x for x in range(stencil.dim-1))))
+    println('uint64_t var_{stmt.name}_buf_size = sizeof({stmt.c_type})*('
+            '{}*tile_size_linearized_o/num_bank["{stmt.name}"]+'
+            '((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_O*'
+            'num_bank["{stmt.name}"])+1)*(BURST_WIDTH/PIXEL_WIDTH_O));'.format(
+                '*'.join('tile_num_dim_%d'%x for x in range(stencil.dim-1)),
+                stmt=stmt))
   println()
 
   println('unsigned char *kernel_binary;')
@@ -473,91 +522,70 @@ def print_wrapped(printer, stencil):
   un_scope()
   println()
 
-  for name in stencil.input_names + stencil.output_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('cl_mem_ext_ptr_t %s_ext_bank_%d;' % (name, bank))
-  println('if(dram_separate)')
-  do_scope()
-  println('switch(dram_bank)')
-  do_scope()
-  for num_banks in range(1, util.MAX_DRAM_BANK//2+1):
-    println('case %d:' % num_banks)
-    do_indent()
-    for name in stencil.input_names + stencil.output_names:
-      for bank in range(num_banks):
-        println('%s_ext_bank_%d.flags = XCL_MEM_DDR_BANK%d;' % (
-            name, bank%num_banks, bank))
-    println('break;')
-    un_indent()
-  un_scope()
-  un_scope()
-  println('else')
-  do_scope()
-  for name in stencil.input_names + stencil.output_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('{0}_ext_bank_{1}.flags = XCL_MEM_DDR_BANK{1};'.format(
-          name, bank))
-  un_scope()
+  println('const unsigned XCL_MEM_DDR_BANK[%d] = {%s};' % (
+      util.MAX_DRAM_BANK,
+      ', '.join('XCL_MEM_DDR_BANK%d' % _ for _ in range(util.MAX_DRAM_BANK))))
+  println('unordered_map<string, array<cl_mem_ext_ptr_t, %d>> mem_ext_bank;' %
+          util.MAX_DRAM_BANK)
+  with printer.for_('const auto& use_bank_pair', 'use_bank'):
+    with for_banks():
+      with printer.if_('use_bank_pair.second[bank]'):
+        println('mem_ext_bank[use_bank_pair.first][bank].flags = '
+                'XCL_MEM_DDR_BANK[bank];')
 
-  for name in stencil.input_names + stencil.output_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('%s_ext_bank_%d.obj = 0;' % (name, bank))
-      println('%s_ext_bank_%d.param = 0;' % (name, bank))
-  println()
-
-  for name in stencil.input_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('var_{name}_bank_{bank}_cl = dram_bank > {bank} ? '
-              'clCreateBuffer(context, CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX,'
-              ' var_{name}_buf_size, &{name}_ext_bank_{bank}, nullptr) : '
-              'nullptr;'.format(name=name, bank=bank))
-  for name in stencil.output_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('var_{name}_bank_{bank}_cl = dram_bank > {bank} ? '
-              'clCreateBuffer(context, '
-              'CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, var_{name}_buf_size, '
-              '&{name}_ext_bank_{bank}, nullptr) : nullptr;'.format(
-                  name=name, bank=bank))
+  with for_banks():
+    for name in stencil.input_names:
+      with printer.if_('use_bank["{name}"][bank]'.format(name=name)):
+        println('var_{name}_cl_bank[bank] = clCreateBuffer(context, '
+                'CL_MEM_READ_ONLY|CL_MEM_EXT_PTR_XILINX, var_{name}_buf_size, '
+                '&mem_ext_bank["{name}"][bank], nullptr);'.format(name=name))
+        with printer.if_('var_{name}_cl_bank[bank] == nullptr'
+                         ''.format(name=name)):
+          println('fprintf(*error_report, '
+                  '"ERROR: Failed to allocate device memory\\n");')
+          println('exit(EXIT_FAILURE);')
+    for name in stencil.output_names:
+      with printer.if_('use_bank["{name}"][bank]'.format(name=name)):
+        println('var_{name}_cl_bank[bank] = clCreateBuffer(context, '
+                'CL_MEM_WRITE_ONLY|CL_MEM_EXT_PTR_XILINX, var_{name}_buf_size, '
+                '&mem_ext_bank["{name}"][bank], nullptr);' .format(name=name))
+        with printer.if_('var_{name}_cl_bank[bank] == nullptr'
+                         ''.format(name=name)):
+          println('fprintf(*error_report, '
+                  '"ERROR: Failed to allocate device memory\\n");')
+          println('exit(EXIT_FAILURE);')
 
   for param in stencil.param_stmts:
     println('var_%s_cl = clCreateBuffer(context, CL_MEM_READ_ONLY, '
             '%s*sizeof(%s), nullptr, nullptr);' % (
                 param.name, '*'.join(map(str, param.size)), param.type))
-
-  println('if(%s)' % ' || '.join(['(dram_bank > %d && (%s || %s))' % (
-          bank, ' || '.join('!var_%s_bank_%d_cl' % (name, bank)
-                            for name in stencil.input_names),
-          ' || '.join('!var_%s_bank_%d_cl' % (name, bank)
-                      for name in stencil.output_names))
-      for bank in range(util.MAX_DRAM_BANK)] + [
-          '!var_%s_cl' % _ for _ in stencil.param_names]))
-  do_scope()
-  println('fprintf(*error_report, '
-          '"ERROR: Failed to allocate device memory\\n");')
-  println('exit(EXIT_FAILURE);')
-  un_scope()
+    with printer.if_('var_%s_cl == nullptr' % param.name):
+      println('fprintf(*error_report, '
+              '"ERROR: Failed to allocate device memory\\n");')
+      println('exit(EXIT_FAILURE);')
   println()
 
   println('cl_event write_events[%d];' % (
       util.MAX_DRAM_BANK*len(stencil.input_stmts)+len(stencil.param_stmts)))
-  idx = 0
+  println('cl_event* write_event_ptr = write_events;')
   for param in stencil.param_stmts:
     println('%s* var_%s_buf = (%s*)clEnqueueMapBuffer(commands, var_%s_cl, '
             'CL_FALSE, CL_MAP_WRITE, 0, %s*sizeof(%s), 0, nullptr, '
-            'write_events+%d, &err);' % (
+            'write_event_ptr++, &err);' % (
                 param.c_type, param.name, param.c_type, param.name,
-                '*'.join(map(str, param.size)), param.c_type, idx))
-    idx += 1
-  for bank in range(util.MAX_DRAM_BANK):
-    for stmt in stencil.input_stmts:
-      println('{stmt.c_type}* var_{stmt.name}_buf_bank_{bank} = '
-              'dram_bank>{bank} ? ({stmt.c_type}*)clEnqueueMapBuffer(commands,'
-              ' var_{stmt.name}_bank_{bank}_cl, CL_FALSE, CL_MAP_WRITE, 0, '
-              'var_{stmt.name}_buf_size, 0, nullptr, write_events+{idx}, &err)'
-              ' : nullptr;'.format(stmt=stmt, bank=bank, idx=idx))
-      idx += 1
-  println('clWaitForEvents(dram_bank*%d+%d, write_events);' % (
-      len(stencil.input_names), len(stencil.param_stmts)))
+                '*'.join(map(str, param.size)), param.c_type))
+  for stmt in stencil.input_stmts:
+    println('{stmt.c_type}* var_{stmt.name}_buf_bank[{}] = {{}};'.format(
+        util.MAX_DRAM_BANK, stmt=stmt))
+  for stmt in stencil.input_stmts:
+    with for_banks():
+      with printer.if_('use_bank["{name}"][bank]'.format(name=stmt.name)):
+        println('var_{stmt.name}_buf_bank[bank] = '
+                'reinterpret_cast<{stmt.c_type}*>(clEnqueueMapBuffer(commands,'
+                ' var_{stmt.name}_cl_bank[bank], CL_FALSE, '
+                'CL_MAP_WRITE, 0, var_{stmt.name}_buf_size, 0, nullptr, '
+                'write_event_ptr++, &err));'.format(stmt=stmt))
+  println('clWaitForEvents(write_event_ptr - write_events, write_events);')
   println()
 
   println('// tiling')
@@ -588,54 +616,52 @@ def print_wrapped(printer, stencil):
       util.COORDS_IN_TILE[x],
       ''.join('*TILE_SIZE_DIM_%d' % xx for xx in range(x)))
                             for x in range(stencil.dim))
-  println('int32_t burst_index = (%s)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank);' %
-          offset_in_tile)
-  println('int32_t burst_residue = (%s)%%(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)'
-          ';' % offset_in_tile)
+  println('int32_t burst_index = (%s) / '
+          '(BURST_WIDTH / PIXEL_WIDTH_I * num_bank["%s"]);' %
+          (offset_in_tile, stencil.input_names[0]))
+  println('int32_t burst_residue = (%s) %% '
+          '(BURST_WIDTH / PIXEL_WIDTH_I * num_bank["%s"]);' %
+          (offset_in_tile, stencil.input_names[0]))
   for dim in range(stencil.dim-1):
     println('int32_t {0} = tile_index_dim_{1}*(TILE_SIZE_DIM_{1}-STENCIL_DIM_'
             '{1}+1)+{2};'.format(util.COORDS_IN_ORIG[dim], dim,
                                  util.COORDS_IN_TILE[dim]))
   println('int32_t %c = %c;' % (util.COORDS_IN_ORIG[stencil.dim-1],
                                 util.COORDS_IN_TILE[stencil.dim-1]))
-  println('int64_t tiled_offset = (%s)*tile_size_linearized_i+burst_index*(BURS'
-          'T_WIDTH/PIXEL_WIDTH_I*dram_bank)+burst_residue;' % '+'.join(
+  println('int64_t tiled_offset = (%s) * tile_size_linearized_i + '
+          'burst_index * (BURST_WIDTH / PIXEL_WIDTH_I * num_bank["%s"]) + '
+          'burst_residue;' % ('+'.join(
               '%stile_index_dim_%d' % (''.join(
                   'tile_num_dim_%d*'%xx for xx in range(x)), x)
-              for x in range(stencil.dim-1)))
+              for x in range(stencil.dim-1)), stencil.input_names[0]))
   println('int64_t original_offset = %s;' % '+'.join(
       '%c*var_%s_stride_%d' % (util.COORDS_IN_ORIG[x], stencil.input_names[0],
                                x) for x in range(stencil.dim)))
-  println('switch(tiled_offset%dram_bank)')
-  do_scope()
-  for bank in range(util.MAX_DRAM_BANK):
-    println('case %d:' % bank)
-    do_indent()
-    for name in stencil.input_names:
-      println('var_{0}_buf_bank_{1}[tiled_offset/dram_bank] = var_{0}[original_'
-              'offset];'.format(name, bank))
-    println('break;')
-    un_indent()
-  for dim in range(stencil.dim*2):
+  println('var_{name}_buf_bank[bank_vec["{name}"]'
+          '[tiled_offset % num_bank["{name}"]]]'
+          '[tiled_offset / num_bank["{name}"]] = '
+          'var_{name}[original_offset];'.format(name=stencil.input_names[0]))
+  for dim in range(stencil.dim * 2 - 1):
     un_scope()
   println()
 
   for param in stencil.param_stmts:
     println('memcpy(var_{0}_buf, var_{0}, {1}*sizeof({2}));' % (
         param.name, '*'.join(map(str, param.size)), param.c_type))
-  println()
+  if stencil.param_stmts:
+    println()
 
   println('err = 0;')
   for idx, param in enumerate(stencil.param_stmts):
     println('err |= clEnqueueUnmapMemObject(commands, var_{0}_cl, var_{0}_buf, '
             '0, nullptr, write_events+{1});'.format(param.name, idx))
-  idx = 0
-  for bank in range(util.MAX_DRAM_BANK):
-    for name in stencil.input_names:
-      println('err |= dram_bank>{bank} ? clEnqueueUnmapMemObject(commands, var_'
-              '{name}_bank_{bank}_cl, var_{name}_buf_bank_{bank}, 0, nullptr, w'
-              'rite_events+{}) : err;'.format(idx, bank=bank, name=name))
-      idx += 1
+  for name in stencil.input_names:
+    println('write_event_ptr = write_events;')
+    with for_banks():
+      with printer.if_('use_bank["{}"][bank]'.format(name)):
+        println('err |= clEnqueueUnmapMemObject(commands, '
+                'var_{name}_cl_bank[bank], var_{name}_buf_bank[bank], 0, '
+                'nullptr, write_event_ptr++);'.format(name=name))
   println()
 
   println('if(err != CL_SUCCESS)')
@@ -646,8 +672,11 @@ def print_wrapped(printer, stencil):
   println()
 
   println('err = 0;')
-  println('fprintf(*error_report, "INFO: Using %d DRAM bank%s%s\\n", dram_bank,'
-          ' dram_bank>1 ? "s" : "", dram_separate ? ", separated" : "");')
+  for name in stencil.input_names + stencil.output_names:
+    with for_banks():
+      with printer.if_('use_bank["{name}"][bank]'.format(name=name)):
+        println('fprintf(*error_report, "INFO: Using DRAM bank %d for {}\\n", '
+                'bank);'.format(name))
   for d in range(stencil.dim-1):
     println('fprintf(*error_report, "INFO: tile_num_dim_{0} = %d, '
             'TILE_SIZE_DIM_{0} = %d\\n", tile_num_dim_{0}, '
@@ -669,16 +698,18 @@ def print_wrapped(printer, stencil):
   println()
 
   println('int kernel_arg = 0;')
-  println('int64_t tile_data_num = ((int64_t(%s_size_dim_%d)%s-1)/(BURST_WIDTH/'
-          'PIXEL_WIDTH_I*dram_bank)+1)*BURST_WIDTH/PIXEL_WIDTH_I*dram_bank/UNRO'
-          'LL_FACTOR;' % (
-              stencil.input_names[0], stencil.dim-1,
-              ''.join('*TILE_SIZE_DIM_%d'%_ for _ in range(stencil.dim-1))))
-  println('int64_t coalesced_data_num = ((int64_t(%s_size_dim_%d)%s*%s+STENCIL_'
-          'DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*dram_bank)+1);' % (
-              stencil.input_names[0], stencil.dim-1,
+  println('int64_t tile_data_num = ((int64_t({name}_size_dim_{dim}){} - 1) / '
+          '(BURST_WIDTH / PIXEL_WIDTH_I * num_bank["{name}"]) + 1) * '
+          'BURST_WIDTH / PIXEL_WIDTH_I * num_bank["{name}"] / '
+          'UNROLL_FACTOR;'.format(
+              ''.join(' * TILE_SIZE_DIM_%d'%_ for _ in range(stencil.dim-1)),
+          name=stencil.input_names[0], dim=stencil.dim-1))
+  println('int64_t coalesced_data_num = ((int64_t({name}_size_dim_{dim}){} * '
+          '{} + STENCIL_DISTANCE - 1) / (BURST_WIDTH / PIXEL_WIDTH_I * '
+          'num_bank["{name}"]) + 1);'.format(
               ''.join('*TILE_SIZE_DIM_%d'%_ for _ in range(stencil.dim-1)),
-              '*'.join('tile_num_dim_%d'%_ for _ in range(stencil.dim-1))))
+              '*'.join('tile_num_dim_%d'%_ for _ in range(stencil.dim-1)),
+              name=stencil.input_names[0], dim=stencil.dim-1))
   for d in range(stencil.dim-1):
     println('uint32_t input_bound_dim_{0} = tile_num_dim_{0}*(TILE_SIZE_DIM_{0}'
             '-STENCIL_DIM_{0}+1);'.format(d))
@@ -686,14 +717,11 @@ def print_wrapped(printer, stencil):
           'm = %ld\\n", tile_data_num, coalesced_data_num);')
   println()
 
-  for name in stencil.output_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('if(dram_bank>%d) err |= clSetKernelArg(kernel, kernel_arg++, '
-              'sizeof(cl_mem), &var_%s_bank_%d_cl);' % (bank, name, bank))
-  for name in stencil.input_names:
-    for bank in range(util.MAX_DRAM_BANK):
-      println('if(dram_bank>%d) err |= clSetKernelArg(kernel, kernel_arg++, '
-              'sizeof(cl_mem), &var_%s_bank_%d_cl);' % (bank, name, bank))
+  for name in stencil.output_names + stencil.input_names:
+    with for_banks():
+      with printer.if_('use_bank["{name}"][bank]'.format(name=name)):
+        println('err |= clSetKernelArg(kernel, kernel_arg++, '
+                'sizeof(cl_mem), &var_%s_cl_bank[bank]);' % name)
   for name in stencil.param_names:
     println('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), '
             '&var_%s_cl);' % name)
@@ -714,52 +742,50 @@ def print_wrapped(printer, stencil):
 
   println('timespec execute_begin, execute_end;')
   println('cl_event execute_event;')
-  println('err = clEnqueueTask(commands, kernel, dram_bank, write_events, '
-          '&execute_event);')
-  println('if(nullptr==getenv("XCL_EMULATION_MODE"))')
-  do_scope()
-  println('fprintf(*error_report, "INFO: FPGA warm up\\n");')
-  println('clWaitForEvents(1, &execute_event);')
-  println()
-  println('clock_gettime(CLOCK_MONOTONIC_RAW, &execute_begin);')
-  println('err = clEnqueueTask(commands, kernel, 0, nullptr, &execute_event);')
-  println('if(err)')
-  println('{')
-  println('  fprintf(*error_report, "ERROR: Failed to execute kernel %d\\n", '
-          'err);')
-  println('  exit(EXIT_FAILURE);')
-  println('}')
-  println('clWaitForEvents(1, &execute_event);')
-  println('clock_gettime(CLOCK_MONOTONIC_RAW, &execute_end);')
-  println()
-  println('double elapsed_time = 0.;')
-  println('elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+'
-          '(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;')
-  println('printf("Kernel execution time: %lf us\\n", elapsed_time);')
-  println('printf("Kernel throughput:   %%lf pixel/ns\\n", %s/elapsed_time/1e3)'
-          ';' % '*'.join('%s_size_dim_%d' % (stencil.input_names[0], _)
-                         for _ in range(stencil.dim)))
-  un_scope()
-  println('else')
-  do_scope()
-  println('clWaitForEvents(1, &execute_event);')
-  println('fprintf(*error_report, "INFO: Emulation mode\\n");')
-  un_scope()
+  println('err = clEnqueueTask(commands, kernel, '
+          'write_event_ptr - write_events, write_events, &execute_event);')
+  with printer.if_('getenv("XCL_EMULATION_MODE") == nullptr'):
+    println('fprintf(*error_report, "INFO: FPGA warm up\\n");')
+    println('clWaitForEvents(1, &execute_event);')
+    println()
+    println('clock_gettime(CLOCK_MONOTONIC_RAW, &execute_begin);')
+    println('err = clEnqueueTask(commands, kernel, 0, nullptr, '
+            '&execute_event);')
+    with printer.if_('err'):
+      println('fprintf(*error_report, "ERROR: Failed to execute kernel %d\\n", '
+              'err);')
+      println('  exit(EXIT_FAILURE);')
+    println('clWaitForEvents(1, &execute_event);')
+    println('clock_gettime(CLOCK_MONOTONIC_RAW, &execute_end);')
+    println()
+    println('double elapsed_time = 0.;')
+    println('elapsed_time = (double(execute_end.tv_sec-execute_begin.tv_sec)+'
+            '(execute_end.tv_nsec-execute_begin.tv_nsec)/1e9)*1e6;')
+    println('printf("Kernel execution time: %lf us\\n", elapsed_time);')
+    println('printf("Kernel throughput:   %%lf pixel/ns\\n", '
+            '%s / elapsed_time / 1e3);' % '*'.join(
+                '%s_size_dim_%d' % (stencil.input_names[0], _)
+                for _ in range(stencil.dim)))
+    with printer.else_():
+      println('clWaitForEvents(1, &execute_event);')
+      println('fprintf(*error_report, "INFO: Emulation mode\\n");')
   println()
 
   println('cl_event read_events[%d];' % (
       util.MAX_DRAM_BANK*len(stencil.output_stmts)))
-  idx = 0
-  for bank in range(util.MAX_DRAM_BANK):
-    for stmt in stencil.output_stmts:
-      println('{stmt.c_type}* var_{stmt.name}_buf_bank_{bank} = dram_bank>{bank'
-              '} ? ({stmt.c_type}*)clEnqueueMapBuffer(commands, var_{stmt.name}_b'
-              'ank_{bank}_cl, CL_FALSE, CL_MAP_READ, 0, var_{stmt.name}_buf_siz'
-              'e, 0, nullptr, read_events+{idx}, &err) : nullptr;'.format(
-                  stmt=stmt, bank=bank, idx=idx))
-      idx += 1
-  println('clWaitForEvents(dram_bank*%d, read_events);' %
-          len(stencil.output_names))
+  println('cl_event* read_event_ptr = read_events;')
+  for stmt in stencil.output_stmts:
+    println('{stmt.c_type}* var_{stmt.name}_buf_bank[{}] = {{}};'.format(
+        util.MAX_DRAM_BANK, stmt=stmt))
+  for stmt in stencil.output_stmts:
+    with for_banks():
+      with printer.if_('use_bank["{name}"][bank]'.format(name=stmt.name)):
+        println('var_{stmt.name}_buf_bank[bank] = '
+                'reinterpret_cast<{stmt.c_type}*>(clEnqueueMapBuffer('
+                'commands, var_{stmt.name}_cl_bank[bank], CL_FALSE, '
+                'CL_MAP_READ, 0, var_{stmt.name}_buf_size, 0, nullptr, '
+                'read_event_ptr++, &err));'.format(stmt=stmt))
+  println('clWaitForEvents(read_event_ptr - read_events, read_events);')
   println()
 
   for dim in range(stencil.dim-2, -1, -1):
@@ -821,53 +847,50 @@ def print_wrapped(printer, stencil):
       '%c%s' % (util.COORDS_IN_TILE[x],
                 ''.join('*TILE_SIZE_DIM_%d'%xx for xx in range(x)))
       for x in range(stencil.dim))
-  println('int32_t burst_index = (%s+STENCIL_OFFSET)/(BURST_WIDTH/PIXEL_WIDTH_O'
-          '*dram_bank);' % offset_in_tile)
-  println('int32_t burst_residue = (%s+STENCIL_OFFSET)%%(BURST_WIDTH/PIXEL_WIDT'
-          'H_O*dram_bank);' % offset_in_tile)
+  println('int32_t burst_index = (%s + STENCIL_OFFSET) / '
+          '(BURST_WIDTH / PIXEL_WIDTH_O * num_bank["%s"]);' %
+          (offset_in_tile, stencil.output_names[0]))
+  println('int32_t burst_residue = (%s + STENCIL_OFFSET) %% '
+          '(BURST_WIDTH / PIXEL_WIDTH_O * num_bank["%s"]);' %
+          (offset_in_tile, stencil.output_names[0]))
   for dim in range(stencil.dim-1):
     println('int32_t {0} = tile_index_dim_{1}*(TILE_SIZE_DIM_{1}-STENCIL_DIM_{1'
             '}+1)+{2};'.format(util.COORDS_IN_ORIG[dim], dim,
                                util.COORDS_IN_TILE[dim]))
   println('int32_t %c = %c;' % (util.COORDS_IN_ORIG[stencil.dim-1],
                                 util.COORDS_IN_TILE[stencil.dim-1]))
-  println('int64_t tiled_offset = (%s)*tile_size_linearized_o+burst_index*(BURS'
-          'T_WIDTH/PIXEL_WIDTH_O*dram_bank)+burst_residue;' % '+'.join(
+  println('int64_t tiled_offset = (%s) * tile_size_linearized_o + '
+          'burst_index * (BURST_WIDTH / PIXEL_WIDTH_O * num_bank["%s"]) + '
+          'burst_residue;' % ('+'.join(
               '%stile_index_dim_%d' % (''.join(
                   'tile_num_dim_%d*'%xx for xx in range(x)), x)
-              for x in range(stencil.dim-1)))
+              for x in range(stencil.dim-1)), stencil.output_names[0]))
   println('int64_t original_offset = %s;' % '+'.join(
       '%c*var_%s_stride_%d' % (
           util.COORDS_IN_ORIG[x], stencil.output_names[0], x)
       for x in range(stencil.dim)))
-  println('switch(tiled_offset%dram_bank)')
-  do_scope()
-  for bank in range(util.MAX_DRAM_BANK):
-    println('case %d:' % bank)
-    do_indent()
-    for name in stencil.output_names:
-      println('var_%s[original_offset] = var_%s_buf_bank_%d[tiled_offset/'
-              'dram_bank];' % (name, name, bank))
-    println('break;')
-    un_indent()
-  for dim in range(stencil.dim*2):
+  println('var_{name}[original_offset] = '
+          'var_{name}_buf_bank[bank_vec["{name}"]'
+          '[tiled_offset % num_bank["{name}"]]]'
+          '[tiled_offset / num_bank["{name}"]];'.format(
+              name=stencil.output_names[0]))
+  for dim in range(stencil.dim * 2 - 1):
     un_scope()
 
-  for bank in range(util.MAX_DRAM_BANK):
-    println()
-    println('if(dram_bank>%d)' % bank)
-    do_scope()
-    for name in stencil.output_names:
-      println('clEnqueueUnmapMemObject(commands, var_{name}_bank_{bank}_cl, var'
-              '_{name}_buf_bank_{bank}, 0, nullptr, read_events+{bank});'
-              ''.format(name=name, bank=bank))
-    for name in stencil.input_names + stencil.output_names:
-      println('clReleaseMemObject(var_%s_bank_%d_cl);' % (name, bank))
-    un_scope()
-  println('clWaitForEvents(dram_bank*%d, read_events);' %
-          len(stencil.output_stmts))
+  for name in stencil.output_names:
+    println('read_event_ptr = read_events;')
+    with for_banks():
+      with printer.if_('use_bank["{name}"][bank]'.format(name=name)):
+        println('clEnqueueUnmapMemObject(commands, var_{name}_cl_bank[bank], '
+                'var_{name}_buf_bank[bank], 0, nullptr, read_event_ptr++);'
+                ''.format(name=name))
+    println('clWaitForEvents(read_event_ptr - read_events, read_events);')
   println()
 
+  for name in stencil.input_names + stencil.output_names:
+    with for_banks():
+      with printer.if_('use_bank["{name}"][bank]'.format(name=name)):
+        println('clReleaseMemObject(var_%s_cl_bank[bank]);' % name)
   for name in stencil.param_names:
     println('clReleaseMemObject(var_%s_cl);' % name)
   println()
@@ -1171,7 +1194,7 @@ def print_code(stencil, host_file):
   print_define = lambda key, value: util.print_define(printer, key, value)
 
   print_header(printer)
-  println('#include"%s.h"' % stencil.app_name)
+  println('#include "%s.h"' % stencil.app_name)
   println()
 
   print_define('BURST_WIDTH', stencil.burst_width)
