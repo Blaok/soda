@@ -48,7 +48,7 @@ COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quie
 
 XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
 WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
-SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0 xilinx:adm-pcie-ku3:2ddr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:4.0 xilinx:vcu1525:dynamic:5.0 xilinx:aws-vu9p-f1-04261818:dynamic:5.0
+SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0 xilinx:adm-pcie-ku3:2ddr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:4.0 xilinx:vcu1525:dynamic:5.0 xilinx:vcu1525:dynamic:5.1 xilinx:aws-vu9p-f1-04261818:dynamic:5.0
 
 HOST_CFLAGS ?= -fopenmp -I$(TMP)
 HOST_LFLAGS ?= -fopenmp
