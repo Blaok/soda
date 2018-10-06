@@ -11,10 +11,27 @@ from soda import util
 logger = logging.getLogger('__main__').getChild(__name__)
 
 def print_header(printer):
-  for header in ['assert', 'float', 'math', 'stdbool', 'stdint', 'stdio',
-                 'stdlib', 'string', 'fcntl', 'time', 'unistd', 'sys/types',
-                 'sys/stat', 'CL/opencl', 'ap_int']:
-    printer.println('#include<%s.h>' % header)
+
+  # C headers
+  for header in ('assert', 'float', 'math', 'stdbool', 'stddef', 'stdint',
+                 'stdio', 'stdlib', 'string'):
+    printer.println('#include <c%s>' % header)
+  printer.println()
+
+  # C++ headers
+  for header in ('algorithm', 'array', 'string', 'unordered_map'):
+    printer.println('#include <%s>' % header)
+  printer.println()
+
+  # Other system headers
+  for header in ('ap_int', 'fcntl', 'time', 'unistd', 'sys/types',
+                 'sys/stat', 'CL/opencl'):
+    printer.println('#include <%s.h>' % header)
+  printer.println()
+
+  for name in ('std::array', 'std::count', 'std::fill', 'std::string',
+               'std::unordered_map'):
+    printer.println('using %s;' % name)
   printer.println()
 
 def print_load_xclbin2(printer):
