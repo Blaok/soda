@@ -207,7 +207,7 @@ class Stencil(object):
     if 'dram_in' in kwargs:
       dram_in = kwargs.pop('dram_in')
       if dram_in is not None:
-        if ',' in dram_in or ':' in dram_in:
+        if ':' in dram_in:
           input_stmt_map = {_.name : _ for _ in self.input_stmts}
           for dram_map in dram_in.split(','):
             var_name, bank_list = dram_map.split(':')
@@ -221,7 +221,7 @@ class Stencil(object):
     if 'dram_out' in kwargs:
       dram_out = kwargs.pop('dram_out')
       if dram_out is not None:
-        if ',' in dram_out or ':' in dram_out:
+        if ':' in dram_out:
           output_stmt_map = {_.name : _ for _ in self.output_stmts}
           for dram_map in dram_out.split(','):
             var_name, bank_list = dram_map.split(':')
