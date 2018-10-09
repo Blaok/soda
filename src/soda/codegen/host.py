@@ -1,6 +1,4 @@
-from collections import deque
 from functools import reduce
-import copy
 import logging
 import operator
 
@@ -268,13 +266,17 @@ def print_wrapped(printer, stencil):
   println('unordered_map<string, int> num_bank;')
   println('unordered_map<string, array<int, %d>> bank_vec;' %
           util.MAX_DRAM_BANK)
-  for name in stencil.output_names + stencil.input_names + stencil.param_names:
-    println('use_bank["{}"] = {{true{}}};'.format(
-        name, ', false' * (util.MAX_DRAM_BANK - 1)))
+  for stmt in stencil.output_stmts + stencil.input_stmts + stencil.param_stmts:
+    name = stmt.name
+    println('use_bank["{}"] = {{{}}};'.format(
+        name, ', '.join('true' if _ in stmt.dram else 'false'
+                        for _ in range(util.MAX_DRAM_BANK))))
+    println('num_bank["{}"] = {{{}}};'.format(name, len(stmt.dram)))
+    println('bank_vec["{}"] = {{{}}};'.format(
+        name, ', '.join(map(str, stmt.dram))))
   for env_var in 'DRAM_IN', 'DRAM_OUT':
-    do_scope()
-    println('const string env_var = getenv("{}");'.format(env_var))
-    with printer.if_('!env_var.empty()'):
+    with printer.if_('const char* env_var_char = getenv("{}")'.format(env_var)):
+      println('const string env_var(env_var_char);')
       with printer.if_("env_var.find(':') != string::npos"):
         println('size_t pos = 0;')
         println('size_t next_pos;')
@@ -317,7 +319,6 @@ def print_wrapped(printer, stencil):
               println('++num_bank[name];')
               println('bank_vec[name][idx++] = bank;')
               println('pos = dot_pos + 1;')
-    un_scope()
     println()
 
   println('// align each linearized tile to multiples of BURST_WIDTH')
@@ -646,7 +647,7 @@ def print_wrapped(printer, stencil):
   println()
 
   for param in stencil.param_stmts:
-    println('memcpy(var_{0}_buf, var_{0}, {1}*sizeof({2}));' % (
+    println('memcpy(var_{0}_buf, var_{0}, {1}*sizeof({2}));'.format(
         param.name, '*'.join(map(str, param.size)), param.c_type))
   if stencil.param_stmts:
     println()
