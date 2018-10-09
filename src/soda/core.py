@@ -483,18 +483,19 @@ class Stencil(object):
                 loads.setdefault(obj.name, []).append(obj.idx)
               return obj
             tensor.visit_loads(get_load_list, loads)
-            _logger.debug(
-                'loads: %s', ', '.join('%s@[%s]' % (name, ', '.join(
-                  '(%s)' % ', '.join(map(str, idx)) for idx in indices))
-                    for name, indices in loads.items()))
+            _logger.debug('loads: %s', ', '.join(
+                '%s@%s' % (name, util.lst2str(map(util.idx2str, indices)))
+                for name, indices in loads.items()))
             for n in loads:
               loads[n] = util.serialize_iter(loads[n], self.tile_size)
             for l in loads.values():
               l[0], l[-1] = (stage_offset - max(l), stage_offset - min(l))
               del l[1:-1]
+              if len(l) == 1:
+                l.append(l[-1])
             _logger.debug('load offset range in tensor %s: %s',
                           tensor.name, '{%s}' % (', '.join(
-                            '%s: [%d:%d]' % (n, *v) for n, v in loads.items())))
+                              '%s: [%d:%d]' % (n, *v) for n, v in loads.items())))
             for parent in tensor.parents.values():
               tensor_distance = next(reversed(tensor.ld_offsets[parent.name]))
               _logger.debug('tensor distance: %s', tensor_distance)
@@ -507,7 +508,7 @@ class Stencil(object):
               if offset < tensor_offset:
                 _logger.debug(
                   'but tensor <%s> won\'t be available until offset %d',
-                  tensor.name, tensor_offset)
+                  parent.name, tensor_offset)
                 offset = tensor_offset
                 _logger.debug('need to access tensor <%s> at offset [%d, %d] '
                               'to generate tensor <%s> at offset %d',
@@ -544,7 +545,7 @@ class Stencil(object):
                   child.ld_offsets[sibling.name]))-stage_offset,
                 child.st_delay)
             child.ld_delays[sibling.name] = max(delay, 0)
-            _logger.debug('set delay of %s <- %s to %d' %
+            _logger.debug('set delay of |%s <- %s| to %d' %
               (child.name, sibling.name, child.ld_delays[sibling.name]))
 
           processing_queue.append(child.name)
