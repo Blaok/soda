@@ -1,9 +1,7 @@
 kernel: jacobi3d
 burst width: 512
-dram separate: no
-dram bank: 1
 unroll factor: 2
-input float: t1(32, 32,)
+input float: t1(32, 32, *)
 output float: t0(0, 0, 0) ~68= (t1(0, 0, 0)
     + t1(1, 0, 0) + t1(-1,  0,  0)
     + t1(0, 1, 0) + t1( 0, -1,  0)
@@ -12,4 +10,3 @@ output float: t0(0, 0, 0) ~68= (t1(0, 0, 0)
 iterate: 2
 border: ignore
 cluster: none
-
