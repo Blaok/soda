@@ -397,6 +397,12 @@ class Call(Node):
     return '{}({})'.format(self.name, ', '.join(map(str, self.arg)))
 
   @property
+  def soda_type(self):
+    if self.name in ('select',):
+      return self.arg[1].soda_type
+    return self.arg[0].soda_type
+
+  @property
   def c_expr(self):
     return '{}({})'.format(self.name, ', '.join(_.c_expr for _ in self.arg))
 
