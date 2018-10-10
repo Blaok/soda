@@ -1041,6 +1041,15 @@ def get_stencil_dim(points):
 
 _overall_stencil_window_cache = {}
 def get_overall_stencil_window(input_tensor, output_tensor):
+  if isinstance(input_tensor, Iterable):
+    all_points = tuple(sorted(set.union(*(
+        set(get_overall_stencil_window(_, output_tensor))
+        for _ in input_tensor))))
+    _logger.debug(
+        'overall stencil window of %s (%s) <- {%s} is %s (%d points)',
+        output_tensor.name, ', '.join(['0']*len(output_tensor.st_idx)),
+        ', '.join(_.name for _ in input_tensor), all_points, len(all_points))
+    return all_points
   # normalize store index to 0
   idx = (id(input_tensor), id(output_tensor))
   if idx in _overall_stencil_window_cache:

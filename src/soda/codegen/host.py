@@ -1058,9 +1058,7 @@ def print_test(printer, stencil):
     println('// produce %s, can be parallelized with -fopenmp' % tensor.name)
     println('#pragma omp parallel for', 0)
     stencil_window = core.get_overall_stencil_window(
-        next(iter(tensor.parents.values())), tensor)
-    stencil_window = core.get_overall_stencil_window(
-        stencil.tensors[next(iter(stencil.input_names))], tensor)
+        tuple(map(stencil.tensors.get, stencil.input_names)), tensor)
     stencil_dim = core.get_stencil_dim(stencil_window)
     output_idx = core.get_stencil_window_offset(stencil_window)
     for d in range(0, stencil.dim):
