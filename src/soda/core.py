@@ -177,8 +177,8 @@ class Stencil(object):
 
   Cached properties:
     input_names: Tuple of str, names of input tensors.
-    param_names: Set of str, names of param tensors.
-    local_names: Set of str, names of local tensors.
+    param_names: Tuple of str, names of param tensors.
+    local_names: Tuple of str, names of local tensors.
     output_names: Tuple of str, names of output tensors.
   """
   def __init__(self, **kwargs):

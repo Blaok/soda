@@ -1043,9 +1043,9 @@ def print_test(printer, stencil):
       un_scope()
     println()
 
-  println('%s(&%s, &%s, %sxclbin);' % (
-      stencil.app_name, *stencil.input_names, *stencil.output_names,
-      ''.join('&%s, ' % param.name for param in stencil.param_stmts)))
+  println('{}({}xclbin);'.format(stencil.app_name, ''.join(
+      map('&{}, '.format,
+          stencil.input_names + stencil.output_names + stencil.param_names))))
   println()
 
   println('int error_count = 0;')
