@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from collections import defaultdict
 import logging
 
 from haoda import ir
@@ -84,11 +85,13 @@ class ComputeNode(ir.Module):
   Attributes:
     tensor: Tensor corresponding to this node.
     pe_id: Int representing the PE id.
+    fifo_map: {str: {idx: Node}}
   """
   def __init__(self, **kwargs):
     super().__init__()
     self.tensor = kwargs.pop('tensor')
     self.pe_id = kwargs.pop('pe_id')
+    self.fifo_map = defaultdict(dict)
 
   def __repr__(self):
     return '\033[31mcompute %s #%d\033[0m' % (self.tensor.name, self.pe_id)
@@ -289,6 +292,16 @@ def create_dataflow_graph(stencil):
                           var=dst_node.tensor.name,
                           offset=stencil.unroll_factor-1-dst_node.offset)
       elif isinstance(src_node, ForwardNode):
+        if isinstance(dst_node, ComputeNode):
+          dst = src_node.tensor.children[dst_node.tensor.name]
+          src_name = src_node.tensor.name
+          unroll_idx = dst_node.pe_id
+          point = all_points[src_name][dst.name][src_node.offset][unroll_idx]
+          idx = list(dst.ld_indices[src_name].values())[point].idx
+          _logger.debug('%s%s referenced by <%s> @ unroll_idx=%d is %s',
+                        src_name, util.idx2str(idx), dst.name, unroll_idx,
+                        print_node(src_node))
+          dst_node.fifo_map[src_name][idx] = fifo
         lets = []
         delay = stencil.reuse_buffer_lengths[src_node.tensor.name]\
                                             [src_node.offset]
@@ -317,18 +330,9 @@ def create_dataflow_graph(stencil):
       elif isinstance(src_node, ComputeNode):
         def replace_refs_callback(obj, args):
           if isinstance(obj, grammar.Ref):
-            # to confirm -- is this right?
-            # TODO: build an index somewhere
-            offset = reuse_buffers[obj.name][0] - 1 - src_node.pe_id \
-                     - util.serialize(obj.idx, stencil.tile_size) \
-                     + min(src_node.tensor.ld_offsets[obj.name])
-            for parent in src_node.parents:
-              if parent.tensor.name == obj.name and parent.offset == offset:
-                for fifo_r in parent.fifos:
-                  if fifo_r.edge == (parent, src_node):
-                    _logger.debug('replace %s with %s', obj, fifo_r)
-                    return fifo_r
-            raise util.InternalError('cannot replace Ref %s' % obj)
+            _logger.debug('replace %s with %s', obj,
+                          src_node.fifo_map[obj.name][obj.idx])
+            return src_node.fifo_map[obj.name][obj.idx]
           return obj
         _logger.debug('lets: %s', src_node.tensor.lets)
         lets = [_.visit(replace_refs_callback) for _ in src_node.tensor.lets]
