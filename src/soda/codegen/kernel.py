@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from collections import defaultdict
 from functools import reduce
 import logging
 import operator
@@ -1059,70 +1060,92 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   drams = ()
   dram_read_map = OrderedDict()
   dram_write_map = OrderedDict()
+  all_dram_reads = ()
+  num_bank_map = {}
   if dram_reads:  # this is an unpacking module
     assert not dram_writes, 'cannot read and write DRAM in the same module'
     for dram_read in dram_reads:
-      dram_read_map.setdefault(dram_read.dram, []).append(dram_read)
+      dram_read_map.setdefault(dram_read.var, OrderedDict()).setdefault(
+          dram_read.dram, []).append(dram_read)
+    _logger.debug('dram read map: %s', dram_read_map)
     burst_width = kwargs.pop('burst_width')
-    for dram in dram_read_map:
-      batch_size = len(dram_read_map[dram])   # number of elements per cycle
-      dram_read_map[dram] = OrderedDict((_.offset, _)
-                                        for _ in dram_read_map[dram])
-      dram_reads = dram_read_map[dram]
-      num_banks = len(next(iter(dram_reads.values())).dram)
-      assert tuple(sorted(dram_reads.keys())) == tuple(range(batch_size)), \
-             'unexpected DRAM accesses pattern %s' % dram_reads
-      batch_width = sum(util.get_width_in_bits(_.soda_type)
-                        for _ in dram_reads.values())
-      del dram_reads
-      if burst_width > batch_width:
-        assert burst_width % batch_width == 0, 'cannot process such a burst'
-        # a single burst consumed in multiple cycles
-        coalescing_factor = burst_width * num_banks // batch_width
-        ii = coalescing_factor
-      else:
-        assert batch_width % burst_width == 0, 'cannot process such a burst'
-        # multiple bursts consumed in a single cycle
-        reassemble_factor = batch_width // (burst_width * num_banks)
-        raise util.InternalError('cannot process such a burst yet')
-    dram_reads = tuple(next(iter(_.values())) for _ in dram_read_map.values())
-    fifo_loads += tuple(
-        '/* input*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
-        '{bank_name}'.format(
-            burst_width=burst_width, bank_name=_.dram_fifo_name(bank))
-        for _ in dram_reads for bank in _.dram)
+    for var in dram_read_map:
+      for dram in dram_read_map[var]:
+        # number of elements per cycle
+        batch_size = len(dram_read_map[var][dram])
+        dram_read_map[var][dram] = OrderedDict(
+            (_.offset, _) for _ in dram_read_map[var][dram])
+        dram_reads = dram_read_map[var][dram]
+        num_banks = len(next(iter(dram_reads.values())).dram)
+        if var in num_bank_map:
+          assert num_bank_map[var] == num_banks, 'inconsistent num banks'
+        else:
+          num_bank_map[var] = num_banks
+        _logger.debug('dram reads: %s', dram_reads)
+        assert tuple(sorted(dram_reads.keys())) == tuple(range(batch_size)), \
+               'unexpected DRAM accesses pattern %s' % dram_reads
+        batch_width = sum(util.get_width_in_bits(_.soda_type)
+                          for _ in dram_reads.values())
+        del dram_reads
+        if burst_width > batch_width:
+          assert burst_width % batch_width == 0, 'cannot process such a burst'
+          # a single burst consumed in multiple cycles
+          coalescing_factor = burst_width * num_banks // batch_width
+          ii = coalescing_factor
+        else:
+          assert batch_width % burst_width == 0, 'cannot process such a burst'
+          # multiple bursts consumed in a single cycle
+          reassemble_factor = batch_width // (burst_width * num_banks)
+          raise util.InternalError('cannot process such a burst yet')
+      dram_reads = tuple(next(iter(_.values()))
+                         for _ in dram_read_map[var].values())
+      all_dram_reads += dram_reads
+      fifo_loads += tuple(
+          '/* input*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
+          '{bank_name}'.format(
+              burst_width=burst_width, bank_name=_.dram_fifo_name(bank))
+          for _ in dram_reads for bank in _.dram)
   elif dram_writes:   # this is a packing module
     for dram_write in dram_writes:
-      dram_write_map.setdefault(dram_write.dram, []).append(dram_write)
+      dram_write_map.setdefault(dram_write.var, OrderedDict()).setdefault(
+          dram_write.dram, []).append(dram_write)
+    _logger.debug('dram write map: %s', dram_write_map)
     burst_width = kwargs.pop('burst_width')
-    for dram in dram_write_map:
-      batch_size = len(dram_write_map[dram])  # number of elements per cycle
-      dram_write_map[dram] = OrderedDict((_.offset, _)
-                                         for _ in dram_write_map[dram])
-      dram_writes = dram_write_map[dram]
-      num_banks = len(next(iter(dram_writes.values())).dram)
-      assert tuple(sorted(dram_writes.keys())) == tuple(range(batch_size)), \
-             'unexpected DRAM accesses pattern %s' % dram_writes
-      batch_width = sum(util.get_width_in_bits(_.soda_type)
-                        for _ in dram_writes.values())
-      del dram_writes
-      if burst_width > batch_width:
-        assert burst_width % batch_width == 0, 'cannot process such a burst'
-        # a single burst consumed in multiple cycles
-        coalescing_factor = (burst_width * num_banks) // batch_width
-        ii = coalescing_factor
-      else:
-        assert batch_width % burst_width == 0, 'cannot process such a burst'
-        # multiple bursts consumed in a single cycle
-        reassemble_factor = batch_width // (burst_width * num_banks)
-        raise util.InternalError('cannot process such a burst yet')
-    dram_writes = tuple(next(iter(_.values()))
-                        for _ in dram_write_map.values())
-    fifo_stores += tuple(
-        '/*output*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
-        '{bank_name}'.format(
-            burst_width=burst_width, bank_name=_.dram_fifo_name(bank))
-        for _ in dram_writes for bank in _.dram)
+    for var in dram_write_map:
+      for dram in dram_write_map[var]:
+        # number of elements per cycle
+        batch_size = len(dram_write_map[var][dram])
+        dram_write_map[var][dram] = OrderedDict(
+            (_.offset, _) for _ in dram_write_map[var][dram])
+        dram_writes = dram_write_map[var][dram]
+        num_banks = len(next(iter(dram_writes.values())).dram)
+        if var in num_bank_map:
+          assert num_bank_map[var] == num_banks, 'inconsistent num banks'
+        else:
+          num_bank_map[var] = num_banks
+        _logger.debug('dram writes: %s', dram_writes)
+        assert tuple(sorted(dram_writes.keys())) == tuple(range(batch_size)), \
+               'unexpected DRAM accesses pattern %s' % dram_writes
+        batch_width = sum(util.get_width_in_bits(_.soda_type)
+                          for _ in dram_writes.values())
+        del dram_writes
+        if burst_width > batch_width:
+          assert burst_width % batch_width == 0, 'cannot process such a burst'
+          # a single burst consumed in multiple cycles
+          coalescing_factor = burst_width * num_banks // batch_width
+          ii = coalescing_factor
+        else:
+          assert batch_width % burst_width == 0, 'cannot process such a burst'
+          # multiple bursts consumed in a single cycle
+          reassemble_factor = batch_width // (burst_width * num_banks)
+          raise util.InternalError('cannot process such a burst yet')
+      dram_writes = tuple(next(iter(_.values()))
+                          for _ in dram_write_map[var].values())
+      fifo_stores += tuple(
+          '/*output*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
+          '{bank_name}'.format(
+              burst_width=burst_width, bank_name=_.dram_fifo_name(bank))
+          for _ in dram_writes for bank in _.dram)
 
   # print function
   printer.print_func('void {func_name}'.format(**locals()),
@@ -1145,28 +1168,30 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
 
   # print emptyness tests
   println('if (%s)' % (' && '.join(
-      '!{fifo}->empty()'.format(fifo=_)
-      for _ in tuple(_.ld_name for _ in module_trait.loads) +
-               tuple(_.dram_fifo_name(bank)
-                     for _ in dram_reads for bank in _.dram))))
+      '!{fifo}->empty()'.format(fifo=fifo)
+      for fifo in tuple(_.ld_name for _ in module_trait.loads) +
+                  tuple(_.dram_fifo_name(bank)
+                        for _ in all_dram_reads for bank in _.dram))))
   do_scope('if not empty')
 
   # print intra-iteration declarations
   for fifo_in in module_trait.loads:
     println('{fifo_in.c_type} {fifo_in.ref_name};'.format(**locals()))
-  for dram in (next(iter(_.values())) for _ in dram_read_map.values()):
-    for bank in dram.dram:
-      println('ap_uint<{}> {};'.format(burst_width, dram.dram_buf_name(bank)))
-  for dram in (next(iter(_.values())) for _ in dram_write_map.values()):
-    for bank in dram.dram:
-      println('ap_uint<{}> {};'.format(burst_width, dram.dram_buf_name(bank)))
+  for var in dram_read_map:
+    for dram in (next(iter(_.values())) for _ in dram_read_map[var].values()):
+      for bank in dram.dram:
+        println('ap_uint<{}> {};'.format(burst_width, dram.dram_buf_name(bank)))
+  for var in dram_write_map:
+    for dram in (next(iter(_.values())) for _ in dram_write_map[var].values()):
+      for bank in dram.dram:
+        println('ap_uint<{}> {};'.format(burst_width, dram.dram_buf_name(bank)))
 
   # print enable conditions
   if not dram_write_map:
     for fifo_in in module_trait.loads:
       println('const bool {fifo_in.ref_name}_enable = '
         'ReadData(&{fifo_in.ref_name}, {fifo_in.ld_name});'.format(**locals()))
-  for dram in dram_reads:
+  for dram in all_dram_reads:
     for bank in dram.dram:
       println('const bool {dram_buf_name}_enable = '
               'ReadData(&{dram_buf_name}, {dram_fifo_name});'.format(
@@ -1177,7 +1202,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       ' && '.join(tuple('{_.ref_name}_enable'.format(_=_)
                         for _ in module_trait.loads) +
                   tuple('{}_enable'.format(_.dram_buf_name(bank))
-                        for _ in dram_reads for bank in _.dram))))
+                        for _ in all_dram_reads for bank in _.dram))))
     println('enable = enabled;')
 
   # print delays (if any)
@@ -1191,7 +1216,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       unroll_factor = kwargs.pop('unroll_factor')
       type_width = util.get_width_in_bits(obj.soda_type)
       elem_idx = coalescing_idx * unroll_factor + obj.offset
-      num_banks = len(obj.dram)
+      num_banks = num_bank_map[obj.var]
       bank = obj.dram[elem_idx % num_banks]
       lsb = (elem_idx // num_banks) * type_width
       msb = lsb + type_width - 1
@@ -1224,10 +1249,12 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         println('{} = Reinterpret<ap_uint<{width}>>({});'.format(
             let.name, let.expr.c_expr,
             width=util.get_width_in_bits(let.expr.soda_type)))
-    for dram in map(lambda _: next(iter(_.values())), dram_write_map.values()):
-      for bank in dram.dram:
-        println('WriteData({}, {}, enabled);'.format(
-            dram.dram_fifo_name(bank), dram.dram_buf_name(bank)))
+    for var in dram_write_map:
+      for dram in (next(iter(_.values()))
+                   for _ in dram_write_map[var].values()):
+        for bank in dram.dram:
+          println('WriteData({}, {}, enabled);'.format(
+              dram.dram_fifo_name(bank), dram.dram_buf_name(bank)))
   else:
     for let in module_trait.lets:
       println(let.c_expr)
@@ -1238,7 +1265,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       unroll_factor = kwargs.pop('unroll_factor')
       type_width = util.get_width_in_bits(obj.soda_type)
       elem_idx = coalescing_idx * unroll_factor + obj.offset
-      num_banks = len(expr.dram)
+      num_banks = num_bank_map[obj.var]
       bank = expr.dram[elem_idx % num_banks]
       lsb = (elem_idx // num_banks) * type_width
       msb = lsb + type_width - 1
@@ -1255,9 +1282,10 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
       for idx, expr in enumerate(module_trait.exprs):
         println('WriteData({}{}, {}, {});'.format(
             fifo_st_prefix, idx,
-            expr.visit(mutate_dram_ref_for_reads,
-                       {'coalescing_idx': coalescing_idx,
-                        'unroll_factor': len(module_trait.exprs)}).c_expr,
+            expr.visit(mutate_dram_ref_for_reads, {
+                'coalescing_idx': coalescing_idx,
+                'unroll_factor': len(
+                    dram_read_map[expr.var][expr.dram])}).c_expr,
             'true' if coalescing_idx < coalescing_factor - 1 else 'enabled'))
   else:
     for idx, expr in enumerate(module_trait.exprs):
