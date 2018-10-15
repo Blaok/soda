@@ -1243,9 +1243,9 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
                             for _ in dram_reads for bank in _.dram))))
         println('enable = enabled;')
       for idx, let in enumerate(module_trait.lets):
-        let = let.visit(mutate_dram_ref_for_writes,
-                        {'coalescing_idx': coalescing_idx,
-                         'unroll_factor': len(module_trait.lets)})
+        let = let.visit(mutate_dram_ref_for_writes, {
+            'coalescing_idx': coalescing_idx, 'unroll_factor': len(
+                dram_write_map[let.name.var][let.name.dram])})
         println('{} = Reinterpret<ap_uint<{width}>>({});'.format(
             let.name, let.expr.c_expr,
             width=util.get_width_in_bits(let.expr.soda_type)))
@@ -1283,8 +1283,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         println('WriteData({}{}, {}, {});'.format(
             fifo_st_prefix, idx,
             expr.visit(mutate_dram_ref_for_reads, {
-                'coalescing_idx': coalescing_idx,
-                'unroll_factor': len(
+                'coalescing_idx': coalescing_idx, 'unroll_factor': len(
                     dram_read_map[expr.var][expr.dram])}).c_expr,
             'true' if coalescing_idx < coalescing_factor - 1 else 'enabled'))
   else:
