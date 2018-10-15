@@ -21,11 +21,11 @@ FACTOR_ARGUMENT := --unroll-factor $(UNROLL_FACTOR)
 FACTOR_SUFFIX := unroll$(UNROLL_FACTOR)
 endif
 
-CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr$(DRAM_IN)-$(DRAM_OUT)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
-COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr$(DRAM_IN)-$(DRAM_OUT)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
-HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr$(DRAM_IN)-$(DRAM_OUT)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+CSIM_XCLBIN ?= $(APP)-csim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr-$(subst :,_,$(DRAM_IN))-$(subst :,_,$(DRAM_OUT))-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+COSIM_XCLBIN ?= $(APP)-cosim-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr-$(subst :,_,$(DRAM_IN))-$(subst :,_,$(DRAM_OUT))-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+HW_XCLBIN ?= $(APP)-hw-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr-$(subst :,_,$(DRAM_IN))-$(subst :,_,$(DRAM_OUT))-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
 
-KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr$(DRAM_IN)-$(DRAM_OUT)-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.cpp
+KERNEL_SRCS ?= $(APP)_kernel-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr$(subst :,_,$(DRAM_IN))-$(subst :,_,$(DRAM_OUT))-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.cpp
 KERNEL_NAME ?= $(APP)_kernel
 HOST_BIN ?= $(APP)-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-iterate$(ITERATE)-border-$(BORDER)d
 HOST_SRCS += $(HOST_BIN).cpp
