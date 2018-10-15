@@ -638,10 +638,11 @@ def print_wrapped(printer, stencil):
   println('int64_t original_offset = %s;' % '+'.join(
       '%c*var_%s_stride_%d' % (util.COORDS_IN_ORIG[x], stencil.input_names[0],
                                x) for x in range(stencil.dim)))
-  println('var_{name}_buf_bank[bank_vec["{name}"]'
-          '[tiled_offset % num_bank["{name}"]]]'
-          '[tiled_offset / num_bank["{name}"]] = '
-          'var_{name}[original_offset];'.format(name=stencil.input_names[0]))
+  for name in stencil.input_names:
+    println('var_{name}_buf_bank[bank_vec["{name}"]'
+            '[tiled_offset % num_bank["{name}"]]]'
+            '[tiled_offset / num_bank["{name}"]] = '
+            'var_{name}[original_offset];'.format(name=name))
   for dim in range(stencil.dim * 2 - 1):
     un_scope()
   println()
@@ -733,6 +734,7 @@ def print_wrapped(printer, stencil):
         ['%s_size_dim_%d' % (name, _) for _ in range(stencil.dim)]):
       println('err |= clSetKernelArg(kernel, kernel_arg++, sizeof({0}), '
               '&{0});'.format(variable))
+    break
   println('if(err != CL_SUCCESS)')
   do_scope()
   println('fprintf(*error_report, "ERROR: Failed to set kernel arguments %d'
@@ -1207,7 +1209,7 @@ def print_code(stencil, host_file):
       stencil.output.parent.preserve_border_from(), stencil.output)
   else:
     overall_stencil_window = core.get_overall_stencil_window(
-      stencil.tensors[stencil.input_names[0]],
+      map(stencil.tensors.get, stencil.input_names),
       stencil.tensors[stencil.output_names[0]])
 
   overall_stencil_distance = core.get_stencil_distance(overall_stencil_window,
