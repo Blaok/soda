@@ -304,9 +304,12 @@ def print_wrapped(printer, stencil):
                       '"WARNING: unknown name %s\\n", name.c_str());')
           println('pos = next_pos + 1;')
         with printer.else_():
-          with printer.for_('const string name', '{"%s"}' % ', '.join(
-              stencil.input_names if env_var == 'DRAM_IN'
-              else stencil.output_names)):
+          if env_var == 'DRAM_IN':
+            var_names = stencil.input_names
+          else:
+            var_names = stencil.output_names
+          with printer.for_('const string name', '{%s}' % ', '.join(
+              map('"{}"'.format, var_names))):
             println('fill(use_bank[name].begin(), use_bank[name].end(), false);')
             println('num_bank[name] = 0;')
             println('int idx = 0;')
