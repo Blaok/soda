@@ -125,6 +125,10 @@ class Node(object):
   def c_type(self):
     return util.get_c_type(self.soda_type)
 
+  @property
+  def width_in_bits(self):
+    return util.get_width_in_bits(self.soda_type)
+
   def visit(self, callback, args=None):
     """A general-purpose, flexible, and powerful visitor.
 

@@ -329,14 +329,15 @@ def print_wrapped(printer, stencil):
       '*'.join('TILE_SIZE_DIM_%d'%x for x in range(stencil.dim-1)),
       stencil.input_names[0], stencil.dim-1))
   println('int64_t tile_burst_num = '
-          '(tile_pixel_num-1)/(BURST_WIDTH/PIXEL_WIDTH_I*num_bank["%s"])+1;' %
-          stencil.input_names[0])
-  println('int64_t tile_size_linearized_i = '
-          'tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_I*num_bank["%s"]);' %
-          stencil.input_names[0])
-  println('int64_t tile_size_linearized_o = '
-          'tile_burst_num*(BURST_WIDTH/PIXEL_WIDTH_O*num_bank["%s"]);' %
-          stencil.output_names[0])
+          '(tile_pixel_num-1)/(BURST_WIDTH/%d*num_bank["%s"])+1;' %
+          (util.get_width_in_bits(stencil.input_stmts[0].soda_type),
+           stencil.input_names[0]))
+  println('int64_t tile_size_linearized_i = tile_burst_num*(BURST_WIDTH/'
+          '{stmt.width_in_bits}*num_bank["{stmt.name}"]);'.format(
+              stmt=stencil.input_stmts[0]))
+  println('int64_t tile_size_linearized_o = tile_burst_num*(BURST_WIDTH/'
+          '{stmt.width_in_bits}*num_bank["{stmt.name}"]);'.format(
+              stmt=stencil.output_stmts[0]))
   println()
 
   println('// prepare for opencl')
@@ -363,17 +364,17 @@ def print_wrapped(printer, stencil):
   println()
 
   for stmt in stencil.input_stmts:
-    println('uint64_t var_{stmt.name}_buf_size = sizeof({stmt.c_type})*('
-            '{}*tile_size_linearized_i/num_bank["{stmt.name}"]+'
-            '((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_I*'
-            'num_bank["{stmt.name}"])+1)*(BURST_WIDTH/PIXEL_WIDTH_I));'.format(
+    println('uint64_t var_{stmt.name}_buf_size = sizeof({stmt.c_type})*({}*tile'
+            '_size_linearized_i/num_bank["{stmt.name}"]+((STENCIL_DISTANCE-1)/('
+            'BURST_WIDTH/{stmt.width_in_bits}*num_bank["{stmt.name}"])+1)*(BURS'
+            'T_WIDTH/{stmt.width_in_bits}));'.format(
                 '*'.join('tile_num_dim_%d'%_ for _ in range(stencil.dim-1)),
                 stmt=stmt))
   for stmt in stencil.output_stmts:
-    println('uint64_t var_{stmt.name}_buf_size = sizeof({stmt.c_type})*('
-            '{}*tile_size_linearized_o/num_bank["{stmt.name}"]+'
-            '((STENCIL_DISTANCE-1)/(BURST_WIDTH/PIXEL_WIDTH_O*'
-            'num_bank["{stmt.name}"])+1)*(BURST_WIDTH/PIXEL_WIDTH_O));'.format(
+    println('uint64_t var_{stmt.name}_buf_size = sizeof({stmt.c_type})*({}*tile'
+            '_size_linearized_o/num_bank["{stmt.name}"]+((STENCIL_DISTANCE-1)/('
+            'BURST_WIDTH/{stmt.width_in_bits}*num_bank["{stmt.name}"])+1)*(BURS'
+            'T_WIDTH/{stmt.width_in_bits}));'.format(
                 '*'.join('tile_num_dim_%d'%x for x in range(stencil.dim-1)),
                 stmt=stmt))
   println()
@@ -620,24 +621,24 @@ def print_wrapped(printer, stencil):
       util.COORDS_IN_TILE[x],
       ''.join('*TILE_SIZE_DIM_%d' % xx for xx in range(x)))
                             for x in range(stencil.dim))
-  println('int32_t burst_index = (%s) / '
-          '(BURST_WIDTH / PIXEL_WIDTH_I * num_bank["%s"]);' %
-          (offset_in_tile, stencil.input_names[0]))
-  println('int32_t burst_residue = (%s) %% '
-          '(BURST_WIDTH / PIXEL_WIDTH_I * num_bank["%s"]);' %
-          (offset_in_tile, stencil.input_names[0]))
+  println('int32_t burst_index = ({}) / (BURST_WIDTH / {stmt.width_in_bits} * '
+          'num_bank["{stmt.name}"]);'.format(
+              offset_in_tile, stmt=stencil.input_stmts[0]))
+  println('int32_t burst_residue = ({}) % (BURST_WIDTH / {stmt.width_in_bits} '
+          '* num_bank["{stmt.name}"]);'.format(
+              offset_in_tile, stmt=stencil.input_stmts[0]))
   for dim in range(stencil.dim-1):
     println('int32_t {0} = tile_index_dim_{1}*(TILE_SIZE_DIM_{1}-STENCIL_DIM_'
             '{1}+1)+{2};'.format(util.COORDS_IN_ORIG[dim], dim,
                                  util.COORDS_IN_TILE[dim]))
   println('int32_t %c = %c;' % (util.COORDS_IN_ORIG[stencil.dim-1],
                                 util.COORDS_IN_TILE[stencil.dim-1]))
-  println('int64_t tiled_offset = (%s) * tile_size_linearized_i + '
-          'burst_index * (BURST_WIDTH / PIXEL_WIDTH_I * num_bank["%s"]) + '
-          'burst_residue;' % ('+'.join(
+  println('int64_t tiled_offset = ({}) * tile_size_linearized_i + burst_index *'
+          ' (BURST_WIDTH / {stmt.width_in_bits} * num_bank["{stmt.name}"]) + bu'
+          'rst_residue;'.format('+'.join(
               '%stile_index_dim_%d' % (''.join(
                   'tile_num_dim_%d*'%xx for xx in range(x)), x)
-              for x in range(stencil.dim-1)), stencil.input_names[0]))
+              for x in range(stencil.dim-1)), stmt=stencil.input_stmts[0]))
   println('int64_t original_offset = %s;' % '+'.join(
       '%c*var_%s_stride_%d' % (util.COORDS_IN_ORIG[x], stencil.input_names[0],
                                x) for x in range(stencil.dim)))
@@ -703,18 +704,18 @@ def print_wrapped(printer, stencil):
   println()
 
   println('int kernel_arg = 0;')
-  println('int64_t tile_data_num = ((int64_t({name}_size_dim_{dim}){} - 1) / '
-          '(BURST_WIDTH / PIXEL_WIDTH_I * num_bank["{name}"]) + 1) * '
-          'BURST_WIDTH / PIXEL_WIDTH_I * num_bank["{name}"] / '
+  println('int64_t tile_data_num = ((int64_t({stmt.name}_size_dim_{dim}){} - 1)'
+          ' / (BURST_WIDTH / {stmt.width_in_bits} * num_bank["{stmt.name}"]) + '
+          '1) * BURST_WIDTH / {stmt.width_in_bits} * num_bank["{stmt.name}"] / '
           'UNROLL_FACTOR;'.format(
               ''.join(' * TILE_SIZE_DIM_%d'%_ for _ in range(stencil.dim-1)),
-          name=stencil.input_names[0], dim=stencil.dim-1))
-  println('int64_t coalesced_data_num = ((int64_t({name}_size_dim_{dim}){} * '
-          '{} + STENCIL_DISTANCE - 1) / (BURST_WIDTH / PIXEL_WIDTH_I * '
-          'num_bank["{name}"]) + 1);'.format(
+              stmt=stencil.input_stmts[0], dim=stencil.dim-1))
+  println('int64_t coalesced_data_num = ((int64_t({stmt.name}_size_dim_{dim}){}'
+          ' * {} + STENCIL_DISTANCE - 1) / (BURST_WIDTH / {stmt.width_in_bits} '
+          '* num_bank["{stmt.name}"]) + 1);'.format(
               ''.join('*TILE_SIZE_DIM_%d'%_ for _ in range(stencil.dim-1)),
               '*'.join('tile_num_dim_%d'%_ for _ in range(stencil.dim-1)),
-              name=stencil.input_names[0], dim=stencil.dim-1))
+              stmt=stencil.input_stmts[0], dim=stencil.dim-1))
   for d in range(stencil.dim-1):
     println('uint32_t input_bound_dim_{0} = tile_num_dim_{0}*(TILE_SIZE_DIM_{0}'
             '-STENCIL_DIM_{0}+1);'.format(d))
@@ -853,33 +854,42 @@ def print_wrapped(printer, stencil):
       '%c%s' % (util.COORDS_IN_TILE[x],
                 ''.join('*TILE_SIZE_DIM_%d'%xx for xx in range(x)))
       for x in range(stencil.dim))
-  println('int32_t burst_index = (%s + STENCIL_OFFSET) / '
-          '(BURST_WIDTH / PIXEL_WIDTH_O * num_bank["%s"]);' %
-          (offset_in_tile, stencil.output_names[0]))
-  println('int32_t burst_residue = (%s + STENCIL_OFFSET) %% '
-          '(BURST_WIDTH / PIXEL_WIDTH_O * num_bank["%s"]);' %
-          (offset_in_tile, stencil.output_names[0]))
   for dim in range(stencil.dim-1):
     println('int32_t {0} = tile_index_dim_{1}*(TILE_SIZE_DIM_{1}-STENCIL_DIM_{1'
             '}+1)+{2};'.format(util.COORDS_IN_ORIG[dim], dim,
                                util.COORDS_IN_TILE[dim]))
   println('int32_t %c = %c;' % (util.COORDS_IN_ORIG[stencil.dim-1],
                                 util.COORDS_IN_TILE[stencil.dim-1]))
-  println('int64_t tiled_offset = (%s) * tile_size_linearized_o + '
-          'burst_index * (BURST_WIDTH / PIXEL_WIDTH_O * num_bank["%s"]) + '
-          'burst_residue;' % ('+'.join(
-              '%stile_index_dim_%d' % (''.join(
-                  'tile_num_dim_%d*'%xx for xx in range(x)), x)
-              for x in range(stencil.dim-1)), stencil.output_names[0]))
   println('int64_t original_offset = %s;' % '+'.join(
       '%c*var_%s_stride_%d' % (
           util.COORDS_IN_ORIG[x], stencil.output_names[0], x)
       for x in range(stencil.dim)))
-  println('var_{name}[original_offset] = '
-          'var_{name}_buf_bank[bank_vec["{name}"]'
-          '[tiled_offset % num_bank["{name}"]]]'
-          '[tiled_offset / num_bank["{name}"]];'.format(
-              name=stencil.output_names[0]))
+  for stmt in stencil.output_stmts:
+    overall_stencil_window = core.get_overall_stencil_window(
+        map(stencil.tensors.get, stencil.input_names),
+        stencil.tensors[stmt.name])
+    overall_stencil_distance = core.get_stencil_distance(
+        overall_stencil_window, stencil.tile_size)
+    stencil_offset = overall_stencil_distance - util.serialize(
+        core.get_stencil_window_offset(overall_stencil_window),
+        stencil.tile_size)
+    println('int32_t burst_index_{stmt.name} = ({} + {}) / (BURST_WIDTH / {stmt'
+            '.width_in_bits} * num_bank["{stmt.name}"]);'.format(
+                offset_in_tile, stencil_offset, stmt=stmt))
+    println('int32_t burst_residue_{stmt.name} = ({} + {}) % (BURST_WIDTH / {s'
+            'tmt.width_in_bits} * num_bank["{stmt.name}"]);'.format(
+                offset_in_tile, stencil_offset, stmt=stmt))
+    println('int64_t tiled_offset_{stmt.name} = ({}) * tile_size_linearized_o +'
+            ' burst_index_{stmt.name} * (BURST_WIDTH / {stmt.width_in_bits} * n'
+            'um_bank["{stmt.name}"]) + burst_residue_{stmt.name};'.format(
+                '+'.join('%stile_index_dim_%d' % (''.join(
+                    'tile_num_dim_%d*'%xx for xx in range(x)), x)
+                         for x in range(stencil.dim-1)), stmt=stmt))
+    println('var_{name}[original_offset] = '
+            'var_{name}_buf_bank[bank_vec["{name}"]'
+            '[tiled_offset_{name} % num_bank["{name}"]]]'
+            '[tiled_offset_{name} / num_bank["{name}"]];'.format(
+                name=stmt.name))
   for dim in range(stencil.dim * 2 - 1):
     un_scope()
 
@@ -1202,10 +1212,6 @@ def print_code(stencil, host_file):
   println()
 
   print_define('BURST_WIDTH', stencil.burst_width)
-  print_define('PIXEL_WIDTH_I', sum(map(util.get_width_in_bits,
-                                        stencil.input_types)))
-  print_define('PIXEL_WIDTH_O', sum(map(util.get_width_in_bits,
-                                        stencil.output_types)))
 
   if stencil.preserve_border:
     overall_stencil_window = core.get_overall_stencil_window(
@@ -1227,7 +1233,6 @@ def print_code(stencil, host_file):
 
   overall_stencil_distance = max(overall_stencil_distance, stencil_offset)
 
-  print_define('STENCIL_OFFSET', stencil_offset)
   print_define('STENCIL_DISTANCE', overall_stencil_distance)
   println()
 
