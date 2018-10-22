@@ -176,6 +176,7 @@ def print_halide_error_report(printer):
   println('}')
   println()
 
+# pylint: disable=too-many-branches,too-many-statements
 def print_wrapped(printer, stencil):
   println = printer.println
   do_indent = printer.do_indent
@@ -200,7 +201,7 @@ def print_wrapped(printer, stencil):
     do_scope('var_%s_host_and_dev_are_null' % output_name)
     output_str = [", 0, 0, 0"]*4
     for dim in range(stencil.dim):
-      stride  = '1'
+      stride = '1'
       if dim > 0:
         stride = '*'.join(('%s_size_dim_%d' % (output_name, d))
                           for d in range(dim))
@@ -225,7 +226,7 @@ def print_wrapped(printer, stencil):
               stencil.tensors[stencil.output_names[0]]))[dim]-1))
     input_str = [', 0, 0, 0']*4
     for dim in range(stencil.dim):
-      stride  = '1'
+      stride = '1'
       if dim > 0:
         stride = '*'.join([last_var(x-stencil.dim) for x in range(dim)])
       input_str[dim] = (
@@ -252,8 +253,7 @@ def print_wrapped(printer, stencil):
   for d in range(stencil.dim-1):
     println('int32_t tile_num_dim_{d} = ({}_size_dim_{d}-STENCIL_DIM_{d}+1+'
             'TILE_SIZE_DIM_{d}-STENCIL_DIM_{d})/(TILE_SIZE_DIM_{d}-'
-            'STENCIL_DIM_{d}+1);'.format(
-        stencil.input_names[0], d = d))
+            'STENCIL_DIM_{d}+1);'.format(stencil.input_names[0], d=d))
   println()
 
   def for_banks():
@@ -310,7 +310,8 @@ def print_wrapped(printer, stencil):
             var_names = stencil.output_names
           with printer.for_('const string name', '{%s}' % ', '.join(
               map('"{}"'.format, var_names))):
-            println('fill(use_bank[name].begin(), use_bank[name].end(), false);')
+            println('fill(use_bank[name].begin(), use_bank[name].end(), '
+                    'false);')
             println('num_bank[name] = 0;')
             println('int idx = 0;')
             println('size_t pos = 0;')
@@ -383,43 +384,51 @@ def print_wrapped(printer, stencil):
   println('const char *device_name;')
   println('char target_device_name[64];')
   println('fprintf(*error_report, "INFO: Loading %s\\n", xclbin);')
-  println('int64_t kernel_binary_size = load_xclbin2_to_memory(xclbin, (char **) &kernel_binary, (char**)&device_name);')
+  println('int64_t kernel_binary_size = load_xclbin2_to_memory(xclbin, (char **'
+          ') &kernel_binary, (char**)&device_name);')
   println('if (strlen(device_name) == 0)')
   do_scope()
   println('device_name = getenv("XDEVICE");')
   un_scope()
   println('if(kernel_binary_size < 0)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to load kernel from xclbin: %s\\n", xclbin);')
+  println('fprintf(*error_report, "ERROR: Failed to load kernel from xclbin: %s'
+          '\\n", xclbin);')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println('for(int i = 0; i<64; ++i)')
   do_scope()
-  println("target_device_name[i] = (device_name[i]==':'||device_name[i]=='.') ? '_' : device_name[i];")
+  println("target_device_name[i] = (device_name[i]==':'||device_name[i]=='.') ?"
+          " '_' : device_name[i];")
   un_scope()
   println()
 
   println('err = clGetPlatformIDs(16, platforms, &platform_count);')
   println('if(err != CL_SUCCESS)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to find an OpenCL platform\\n");')
+  println('fprintf(*error_report, "ERROR: Failed to find an OpenCL platform\\n"'
+          ');')
   println('exit(EXIT_FAILURE);')
   un_scope()
-  println('fprintf(*error_report, "INFO: Found %d platforms\\n", platform_count);')
+  println('fprintf(*error_report, "INFO: Found %d platforms\\n", platform_count'
+          ');')
   println()
 
   println('int platform_found = 0;')
   println('for (unsigned iplat = 0; iplat<platform_count; iplat++)')
   do_scope()
-  println('err = clGetPlatformInfo(platforms[iplat], CL_PLATFORM_VENDOR, 1000, (void *)cl_platform_vendor,nullptr);')
+  println('err = clGetPlatformInfo(platforms[iplat], CL_PLATFORM_VENDOR, 1000, '
+          '(void *)cl_platform_vendor,nullptr);')
   println('if(err != CL_SUCCESS)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: clGetPlatformInfo(CL_PLATFORM_VENDOR) failed\\n");')
+  println('fprintf(*error_report, "ERROR: clGetPlatformInfo(CL_PLATFORM_VENDOR)'
+          ' failed\\n");')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println('if(strcmp(cl_platform_vendor, "Xilinx") == 0)')
   do_scope()
-  println('fprintf(*error_report, "INFO: Selected platform %d from %s\\n", iplat, cl_platform_vendor);')
+  println('fprintf(*error_report, "INFO: Selected platform %d from %s\\n", ipla'
+          't, cl_platform_vendor);')
   println('platform_id = platforms[iplat];')
   println('platform_found = 1;')
   un_scope()
@@ -439,32 +448,38 @@ def print_wrapped(printer, stencil):
   println('           16, devices, &device_count);')
   println('if(err != CL_SUCCESS)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to create a device group\\n");')
+  println('fprintf(*error_report, "ERROR: Failed to create a device group\\n")'
+          ';')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println()
 
   println('for (unsigned int i=0; i<device_count; ++i)')
   do_scope()
-  println('err = clGetDeviceInfo(devices[i], CL_DEVICE_NAME, 1024, cl_device_name, 0);')
+  println('err = clGetDeviceInfo(devices[i], CL_DEVICE_NAME, 1024, cl_device_na'
+          'me, 0);')
   println('if(err != CL_SUCCESS)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to get device name for device %d\\n", i);')
+  println('fprintf(*error_report, "ERROR: Failed to get device name for device '
+          '%d\\n", i);')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println('printf("INFO: Find device %s\\n", cl_device_name);')
-  println('if(strcmp(cl_device_name, target_device_name) == 0 || strcmp(cl_device_name, device_name) == 0)')
+  println('if(strcmp(cl_device_name, target_device_name) == 0 || strcmp(cl_devi'
+          'ce_name, device_name) == 0)')
   do_scope()
   println('device_id = devices[i];')
   println('device_found = 1;')
-  println('fprintf(*error_report, "INFO: Selected %s as the target device\\n", device_name);')
+  println('fprintf(*error_report, "INFO: Selected %s as the target device\\n",'
+          ' device_name);')
   un_scope()
   un_scope()
   println()
 
   println('if(!device_found)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Target device %s not found\\n", target_device_name);')
+  println('fprintf(*error_report, "ERROR: Target device %s not found\\n", targe'
+          't_device_name);')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println()
@@ -473,15 +488,18 @@ def print_wrapped(printer, stencil):
   println('           1, &device_id, nullptr);')
   println('if(err != CL_SUCCESS)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to create a device group\\n");')
+  println('fprintf(*error_report, "ERROR: Failed to create a device group\\n")'
+          ';')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println()
 
-  println('context = clCreateContext(nullptr, 1, &device_id, nullptr, nullptr, &err);')
+  println('context = clCreateContext(nullptr, 1, &device_id, nullptr, nullptr, '
+          '&err);')
   println('if(!context)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to create a compute context\\n");')
+  println('fprintf(*error_report, "ERROR: Failed to create a compute context\\n'
+          '");')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println()
@@ -489,7 +507,8 @@ def print_wrapped(printer, stencil):
   println('commands = clCreateCommandQueue(context, device_id, 0, &err);')
   println('if(!commands)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to create a command commands %i\\n",err);')
+  println('fprintf(*error_report, "ERROR: Failed to create a command commands %'
+          'i\\n",err);')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println()
@@ -497,32 +516,40 @@ def print_wrapped(printer, stencil):
   println('int status;')
   println('size_t kernel_binary_sizes[1] = {static_cast<size_t>('
           'kernel_binary_size)};')
-  println('program = clCreateProgramWithBinary(context, 1, &device_id, kernel_binary_sizes,')
-  println('                   (const unsigned char **) &kernel_binary, &status, &err);')
+  println('program = clCreateProgramWithBinary(context, 1, &device_id, kernel_b'
+          'inary_sizes,')
+  println('                   (const unsigned char **) &kernel_binary, &status,'
+          ' &err);')
   println('if((!program) || (err!=CL_SUCCESS))')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to create compute program from binary %d\\n", err);')
+  println('fprintf(*error_report, "ERROR: Failed to create compute program from'
+          ' binary %d\\n", err);')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println('delete[] kernel_binary;')
   println()
 
-  println('err = clBuildProgram(program, 0, nullptr, nullptr, nullptr, nullptr);')
+  println('err = clBuildProgram(program, 0, nullptr, nullptr, nullptr, nullptr)'
+          ';')
   println('if(err != CL_SUCCESS)')
   do_scope()
   println('size_t len;')
   println('char buffer[2048];')
-  println('fprintf(*error_report, "ERROR: Failed to build program executable\\n");')
-  println('clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);')
+  println('fprintf(*error_report, "ERROR: Failed to build program executable\\n'
+          '");')
+  println('clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, size'
+          'of(buffer), buffer, &len);')
   println('fprintf(*error_report, "%s\\n", buffer);')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println()
 
-  println('kernel = clCreateKernel(program, "%s_kernel", &err);' % stencil.app_name)
+  println('kernel = clCreateKernel(program, "%s_kernel", &err);' %
+          stencil.app_name)
   println('if(!kernel || err != CL_SUCCESS)')
   do_scope()
-  println('fprintf(*error_report, "ERROR: Failed to create compute kernel %d\\n", err);')
+  println('fprintf(*error_report, "ERROR: Failed to create compute kernel %d\\n'
+          '", err);')
   println('exit(EXIT_FAILURE);')
   un_scope()
   println()
@@ -1137,6 +1164,8 @@ def print_test(printer, stencil):
       un_scope()
     println()
 
+    # pylint: disable=pointless-string-statement
+    '''
     if False and s.preserve_border_from():
       println('// handle borders for iterative stencil')
       println('#pragma omp parallel for', 0)
@@ -1146,16 +1175,28 @@ def print_test(printer, stencil):
       output_idx = util.get_stencil_window_offset(stencil_window)
       for d in range(0, stencil.dim):
         dim = stencil.dim-d-1
-        println('for(int32_t %c = 0; %c<dims[%d]; ++%c)' % (util.COORDS_IN_ORIG[dim], util.COORDS_IN_ORIG[dim], dim, util.COORDS_IN_ORIG[dim]))
+        println('for(int32_t {var} = 0; {var} < dims[{dim}]; ++{var})'.format(
+            var=util.COORDS_IN_ORIG[dim], dim=dim))
         do_scope()
-      println('if(!(%s))' % ' && '.join('%c>=%d && %c<dims[%d]-%d' % (util.COORDS_IN_ORIG[d], output_idx[d], util.COORDS_IN_ORIG[d], d, stencil_dim[d]-output_idx[d]-1) for d in range(stencil.dim)))
+      println('if(!(%s))' % ' && '.join(
+          '{var} >= {} && {var}<dims[{}]-{}'.format(
+              output_idx[d], d, stencil_dim[d]-output_idx[d]-1,
+              var=util.COORDS_IN_ORIG[d]) for d in range(stencil.dim)))
       do_scope()
-      GroudTruth = lambda c: '%s_img[%s+%d*%s.stride[%d]]' % (bb.name, '+'.join(['%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], bb.name, d) for d in range(stencil.dim)]), c, bb.name, stencil.dim)
+      GroudTruth = lambda c: '%s_img[%s + %d * %s.stride[%d]]' % (
+          bb.name, '+'.join('%c*%s.stride[%d]' % (
+              util.COORDS_IN_ORIG[d], bb.name, d) for d in range(stencil.dim)),
+          c, bb.name, stencil.dim)
       for e in s.expr:
         println('%s = %s;' % (StorePrinter(e), GroudTruth(e.chan)))
-      if len(s.output.children)==0:
+      if len(s.output.children) == 0:
         for c in range(stencil.output.chan):
-          run_result = '%s_img[%s+%d*%s.stride[%d]]' % (stencil.output.name, '+'.join(['%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], stencil.output.name, d) for d in range(stencil.dim)]), c, stencil.output.name, stencil.dim)
+          run_result = '%s_img[%s+%d*%s.stride[%d]]' % (
+              stencil.output.name, '+'.join(
+                  '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d],
+                                        stencil.output.name, d)
+                  for d in range(stencil.dim)), c, stencil.output.name,
+              stencil.dim)
           println('%s val_fpga = %s;' % (stencil.output.type, run_result))
           println('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
           if util.is_float(stencil.output.type):
@@ -1165,21 +1206,27 @@ def print_test(printer, stencil):
             println('threshold = atof(getenv("THRESHOLD"));')
             un_scope()
             println('threshold *= threshold;')
-            println('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double(val_cpu)*double(val_cpu)) > threshold)')
+            println('if (double(val_fpga - val_cpu) * double(val_fpga - val_cpu'
+                    ') / (double(val_cpu) * double(val_cpu)) > threshold)')
             do_scope()
-            params = (c, ', '.join(['%d']*stencil.dim), ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
-            println('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double(val_fpga), double(val_cpu), %s);' % params)
+            params = (c, ', '.join(['%d']*stencil.dim),
+                      ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
+            println('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double'
+                    '(val_fpga), double(val_cpu), %s);' % params)
           else:
             println('if(val_fpga!=val_cpu)')
             do_scope()
-            params = (c, ', '.join(['%d']*stencil.dim), ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
-            println('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_t(val_fpga), int64_t(val_cpu), %s);' % params)
+            params = (c, ', '.join(['%d']*stencil.dim),
+                      ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
+            println('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_'
+                    't(val_fpga), int64_t(val_cpu), %s);' % params)
           println('++error_count;')
           un_scope()
       un_scope()
       for d in range(0, stencil.dim):
         un_scope()
       println()
+  '''
 
   println('if(error_count==0)')
   do_scope()
