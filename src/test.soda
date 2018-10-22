@@ -1,19 +1,22 @@
 kernel: test
 burst width: 512
-dram separate: no
-dram bank: 4
 unroll factor: 16
-input uint16: input[2](2000, )
-param uint16, partition cyclic factor=2 dim=1, partition cyclic factor=2 dim=2: p1[20][30]
-param uint16, dup 3, partition complete: p2[20]
+input uint16: input_0
+input uint16: input_1(2000, *)
+#param uint16, partition cyclic factor=2 dim=1, partition cyclic factor=2 dim=2: p1[20][30]
+#param uint16, dup 3, partition complete: p2[20]
 output uint16:
-output[0](0, 0) = (p1(0, 2)+p2(2)+
-    input[0](0, 0) + input[1](2, 0)+
-    input[0](1, 0) + input[0](0, 2) + input[1](0, 1)) / 3
-output[1](0, 0) = (p2(0)+p1(1, 1)+
-    input[0](0, 0) + input[1](2, 0)+
-    input[0](1, 0) + input[0](0, 2) + input[0](0, 1)) / 4
-output[2](0, 0) = (p1(0, 0)+p2(1)+
-    input[1](0, 0) + input[0](2, 0)+
-    input[1](1, 0) + input[1](0, 2) + input[1](1, 1)) / 5
-
+output_0(0, 1) = (#p1(0, 2)+p2(2)+
+    input_0(0, 0) + input_1(2, 0)+
+    input_0(1, 0) + input_0(0, 2) + input_1(0, 1)) / 3
+output uint16:
+output_1(0, 1) = (#p2(0)+p1(1, 1)+
+    input_0(0, 0) + input_1(2, 0)+
+    input_0(1, 0) + input_0(0, 2) + input_0(0, 1)) / 4
+output uint16:
+output_2(0, 1) = (#p1(0, 0)+p2(1)+
+    input_1(0, 0) + input_0(2, 0)+
+    input_1(1, 0) + input_1(0, 2) + input_1(1, 1)) / 5
+border: ignore
+cluster: none
+iterate: 1

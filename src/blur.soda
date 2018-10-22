@@ -1,17 +1,14 @@
 kernel: blur
 burst width: 512
-dram separate: no
-dram bank: 1
 unroll factor: 16
-input uint16: input(2000,)
+input dram 0 uint16: input(2000, *)
 local uint16: tmp(0,0)=(input(-1,0)+input(0,0)+input(1,0))/3
-output uint16: output(0,0)=(tmp(0,-1)+tmp(0,0)+tmp(0,1))/3
+output dram 0 uint16: output(0,0)=(tmp(0,-1)+tmp(0,0)+tmp(0,1))/3
 #local uint16: tmp(1,-1)=(input(-1,-1)+input(0,-1)+input(1,-1))/3
 #local uint16: tmp(1,0)=(input(-1,0)+input(0,0)+input(1,0))/3
 #local uint16: tmp(1,1)=(input(-1,1)+input(0,1)+input(1,1))/3
 #output uint16: output(1,1)=(tmp(1,-1)+tmp(1,0)+tmp(1,1))/3
 #output uint16: output(1,1) = ( (input(-1,-1)+input(0,-1)+input(1,-1))/3 + (input(-1,0)+input(0,0)+input(1,0))/3 + (input(-1,1)+input(0,1)+input(1,1))/3 )/3
 iterate: 2
-border: preserve
+border: ignore
 cluster: none
-
