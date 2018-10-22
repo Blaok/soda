@@ -1,7 +1,4 @@
-import copy
 import unittest
-
-import textx
 
 from soda import util
 
