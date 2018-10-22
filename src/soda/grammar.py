@@ -240,8 +240,6 @@ class OutputStmt(LocalStmtOrOutputStmt):
 
 class Let(Node):
   SCALAR_ATTRS = 'soda_type', 'name', 'expr'
-  def __init__(self, **kwargs):
-    super().__init__(**kwargs)
 
   def __str__(self):
     result = '{} = {}'.format(self.name, self.expr)
@@ -269,6 +267,8 @@ class Ref(Node):
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     self.idx = tuple(self.idx)
+    # self.lat will be defined in super().__init__(**kwargs)
+    # pylint: disable=access-member-before-definition
     if isinstance(self.lat, str):
       self.lat = str2int(self.lat)
 
