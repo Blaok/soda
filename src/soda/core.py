@@ -1,5 +1,4 @@
 from collections import Iterable, OrderedDict, deque
-from functools import reduce
 import copy
 import itertools
 import logging
@@ -138,11 +137,6 @@ class Tensor(object):
       name=self.name, soda_type=self.soda_type, expr=self.expr,
       parents=util.idx2str(self.parents), children=util.idx2str(self.children),
       st_ref=str(self.st_ref), st_delay=self.st_delay)
-    #return 'Tensor:\n  {}'.format('\n  '.join(
-    #    '{}: {}'.format(k, v) for k, v in sorted(self.__dict__.items())))
-    return '%s(%s)' % (
-      type(self).__name__,
-      ', '.join('%s = %s' % (k, v) for k, v in self.__dict__.items()))
 
   def is_output(self):
     return len(self.children) == 0
@@ -251,6 +245,8 @@ class Stencil(object):
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.output_stmts)))
 
+    # triggers cached property
+    # pylint: disable=pointless-statement
     self.tensors
     _logger.debug('producer tensors: [%s]',
                   ', '.join(tensor.name for tensor in self.producer_tensors))
@@ -493,9 +489,10 @@ class Stencil(object):
               del l[1:-1]
               if len(l) == 1:
                 l.append(l[-1])
-            _logger.debug('load offset range in tensor %s: %s',
-                          tensor.name, '{%s}' % (', '.join(
-                              '%s: [%d:%d]' % (n, *v) for n, v in loads.items())))
+            _logger.debug(
+                'load offset range in tensor %s: %s', tensor.name, '{%s}' % (
+                    ', '.join('%s: [%d:%d]' % (n, *v)
+                              for n, v in loads.items())))
             for parent in tensor.parents.values():
               tensor_distance = next(reversed(tensor.ld_offsets[parent.name]))
               _logger.debug('tensor distance: %s', tensor_distance)
@@ -685,135 +682,11 @@ class Stencil(object):
     _logger.debug('next_fifo: %s' % self.next_fifo)
     return self.next_fifo
 
-  def get_forwarders(self):
-    if not hasattr(self, 'forwarders'):
-      all_points = self.get_all_points()
-      self.forwarders = set()
-      self.forwarders_with_border = set()
-      next_fifo = self.get_next_fifo()
-      for src_name, dsts in all_points.items():
-        for dst_name, dst_point_dicts in dsts.items():
-          for offset, points in sorted(dst_point_dicts.items()):
-            if (
-              offset < self.unroll_factor and
-              self.tensors[src_name].preserve_border_to() and
-              not self.tensors[src_name].is_input()):
-              self.forwarders_with_border |= {(
-                src_name,
-                len(self.get_forwardings(src_name)[offset][1]))}
-            else:
-              self.forwarders |= {
-                len(self.get_forwardings(src_name)[offset][1])}
-      self.forwarders = sorted(self.forwarders)
-      self.forwarders_with_border = sorted(self.forwarders_with_border)
-    return self.forwarders
-
-  def get_forwarders_with_border(self):
-    if not hasattr(self, 'forwarders_with_border'):
-      self.get_forwarders()
-    return self.forwarders_with_border
-
   @cached_property
   def reuse_buffer_lengths(self):
     # pylint: disable=pointless-statement
     self.reuse_buffers
     return self.reuse_buffer_lengths
-
-  def get_forwardings(self, src_name):
-    if hasattr(self, 'forwardings'):
-      if src_name in self.forwardings:
-        return self.forwardings[src_name]
-    else:
-      self.forwardings = {}
-    next_fifo = self.next_fifo
-    unroll_factor = self.unroll_factor
-    dsts = self.all_points[src_name]
-    reuse_buffer = self.reuse_buffers[src_name]
-
-    # {offset: [func_name, outputs, inputs, params, temp_param]}
-    forwardings = {}
-
-    for dst_name, dst_point_dicts in dsts.items():
-      for offset, points in dst_point_dicts.items():
-        forwardings.setdefault(offset, ['', [], [], [], None])
-        func_name = forwardings[offset][0]
-        outputs = forwardings[offset][1]
-        inputs = forwardings[offset][2]
-        params = forwardings[offset][3]
-        for unroll_idx, point_index in points.items():
-          outputs.insert(
-            0,
-            '/* output */ '
-            'from_%s_to_%s_param_%d_chan_%%d_pe_%d' %
-            (src_name, dst_name, point_index, unroll_idx))
-
-        if func_name:
-          continue
-        if offset in next_fifo[src_name]:
-          outputs.append(
-            '/* output */ %s_offset_%d_chan_%%d' %
-            (src_name, next_fifo[src_name][offset]))
-        inputs.append(
-          '/*  input */ %s_offset_%d_chan_%%d' %
-          (src_name, offset))
-        func_name = 'forward'
-        temp_param = self.reuse_buffer_lengths[src_name][offset]
-        forward_num = len(params)-1
-        if (
-          offset < self.unroll_factor and False and
-          self.tensors[src_name].preserve_border_to() and
-          not self.tensors[src_name].is_input()):
-          stage = self.stages[src_name]
-          if stage.preserve_border_from():
-            self_window_input = stage.preserve_border_from()
-          else:
-            self_window_input = self.input
-          self_window = get_overall_stencil_window(
-            self_window_input, stage.output)
-          overall_idx = get_stencil_window_offset(self_window)
-          self_dim = get_stencil_dim(self_window)
-          iteration = 1
-          parent = stage.preserve_border_from()
-          while (
-            parent is not None and
-            parent.parent is not None):
-            parent = parent.parent.preserve_border_from()
-            iteration += 1
-          delay = (
-            get_stencil_distance(self_window, self.tile_size)-
-            util.serialize(overall_idx, self.tile_size))*iteration
-
-          func_name += '_'+src_name
-          temp_param = '%d-%d' % (unroll_idx, delay)
-          for d in range(self.dim-1):
-            param_offset = (
-              (self.tile_size[d]-self_dim[d]+1)*
-              reduce(
-                operator.mul,
-                [self.tile_size[dd] for dd in range(d)],
-                1))
-            param = (
-              src_name, d,
-              (unroll_idx+param_offset)%self.unroll_factor)
-            inputs.append(
-              '/*  input */ border_from_%s_dim_%d_'
-              'left_chan_%%d_pe_%d' % param)
-            param = (
-              src_name, d,
-              (unroll_idx-param_offset)%self.unroll_factor)
-            inputs.append(
-              '/*  input */ border_from_%s_dim_%d_'
-              'right_chan_%%d_pe_%d' % param)
-          for d in range(self.dim-1):
-            params.append('/*  param */ input_bound_dim_%d' % d)
-          for d in range(self.dim):
-            params.append('/*  param */ input_size_dim_%d' % d)
-
-        params.append('/*  param */ epoch_num')
-        forwardings[offset][0] = func_name
-        forwardings[offset][4] = temp_param
-    self.forwardings[src_name] = forwardings
-    return forwardings
 
   def get_replicated_next_fifo(self):
     if not hasattr(self, 'replicated_next_fifo'):
@@ -887,7 +760,7 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
 
   _logger.debug('get reuse chains of tensor %s', tensor.name)
 
-  def unroll_offsets(offsets):
+  def unroll_offsets(offsets, child):
     unrolled_offsets = set()
     for unroll_idx in range(unroll_factor):
       for offset in offsets:
@@ -898,7 +771,7 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
   A_dag = set()
   for child in tensor.children.values():
     A_dag |= unroll_offsets(
-      util.serialize_iter(child.ld_indices[tensor.name], tile_size))
+      util.serialize_iter(child.ld_indices[tensor.name], tile_size), child)
   _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
