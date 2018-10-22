@@ -19,7 +19,7 @@ class TestStencil(unittest.TestCase):
         soda_type=self.soda_type, name='foo_i', tile_size=self.tile_size,
         dram=())
     self.param_stmt = core.grammar.ParamStmt(
-        soda_type=self.soda_type, name='foo_p', attr=(), size=())
+        soda_type=self.soda_type, name='foo_p', attr=(), size=(), dram=())
     self.local_ref = core.grammar.Ref(name='foo_l', idx=(0, 0), lat=None)
     self.local_stmt = core.grammar.LocalStmt(
       soda_type=self.soda_type, let=(), ref=self.local_ref, expr=self.expr)
