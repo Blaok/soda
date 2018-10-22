@@ -196,7 +196,7 @@ class InputStmt(Node):
   def __str__(self):
     result = 'input {}: {}'.format(self.soda_type, self.name)
     if self.tile_size[:-1]:
-      result += '({},)'.format(', '.join(map(str, self.tile_size[:-1])))
+      result += '({}, *)'.format(', '.join(map(str, self.tile_size[:-1])))
     return result
 
 class LocalStmtOrOutputStmt(Node):
@@ -209,7 +209,7 @@ class LocalStmtOrOutputStmt(Node):
     for let in self.let:
       var_types[let.name] = let.soda_type
     def set_var_type(obj, var_types):
-      if isinstance(obj, Var):
+      if isinstance(obj, Var) and obj.name in var_types:
         obj.soda_type = var_types[obj.name]
       return obj
     self.let = tuple(_.visit(set_var_type, var_types) for _ in self.let)
@@ -269,7 +269,7 @@ class Ref(Node):
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     self.idx = tuple(self.idx)
-    if self.lat is not None:
+    if isinstance(self.lat, str):
       self.lat = str2int(self.lat)
 
   def __str__(self):
@@ -422,6 +422,7 @@ class Var(Node):
 
 class ParamStmt(Node):
   SCALAR_ATTRS = 'soda_type', 'attr', 'name', 'size'
+  LINEAR_ATTRS = ('dram',)
   def __str__(self):
     return 'param {}{}: {}{}'.format(
       self.soda_type, ''.join(map(', {}'.format, self.attr)),
