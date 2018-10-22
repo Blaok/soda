@@ -10,6 +10,7 @@ class TestGrammar(unittest.TestCase):
   def setUp(self):
     self.ref = grammar.Ref(name='foo', idx=(0, 23), lat=None)
     self.expr_ref = grammar.Ref(name='bar', idx=(233, 42), lat=None)
+    self.expr_ref.soda_type = 'int8'
     self.expr = grammar.Expr(operand=(self.expr_ref,), operator=())
     self.let_ref = grammar.Ref(name='bar_l', idx=(42, 2333), lat=None)
     self.let_expr = grammar.Expr(operand=(self.let_ref,), operator=())
@@ -29,13 +30,11 @@ r'''
 border: ignore
 burst width: 512
 cluster: none
-dram bank: 1
-dram separate: no
 iterate: 2
 kernel: name
 unroll factor: 1
 input float: bbb
-input uint6: a(233,)
+input uint6: a(233, *)
 param int8: p0
 param int9, dup 3: p1[23]
 param int10, partition complete: p2[23]
@@ -55,52 +54,54 @@ output double:
   e(0, 0) = float15(l + l / 2)
 '''.strip('\n')
       soda_program = soda_mm.model_from_str(soda_program_str)
-      self.assertEqual(str(soda_program), soda_program_str)
+      self.maxDiff = None
+      self.assertEqual(str(soda_program),
+                       soda_program_str.replace('  l = ', '  float18_3 l = '))
       return
     except TextXSyntaxError as e:
       msg = str(e)
     self.fail(msg)
 
   def test_input(self):
-    self.assertEqual(
-      str(grammar.InputStmt(soda_type='int8', name='foo', tile_size=[])),
-      'input int8: foo')
-    self.assertEqual(
-      str(grammar.InputStmt(soda_type='int8', name='foo', tile_size=[23])),
-      'input int8: foo(23,)')
-    self.assertEqual(
-      str(grammar.InputStmt(soda_type='int8', name='foo', tile_size=[23, 233])),
-      'input int8: foo(23, 233,)')
+    self.assertEqual(str(grammar.InputStmt(soda_type='int8', name='foo',
+                                           tile_size=[], dram=())),
+                     'input int8: foo')
+    self.assertEqual(str(grammar.InputStmt(soda_type='int8', name='foo',
+                                           tile_size=[23], dram=())),
+                     'input int8: foo(23, *)')
+    self.assertEqual(str(grammar.InputStmt(soda_type='int8', name='foo',
+                                           tile_size=[23, 233], dram=())),
+                     'input int8: foo(23, 233, *)')
 
   def test_local(self):
     self.assertEqual(
       str(grammar.LocalStmt(soda_type='int8', let=[],
-                ref=self.ref, expr=self.expr)),
+                ref=self.ref, expr=self.expr, dram=())),
       'local int8: foo(0, 23) = bar(233, 42)')
     self.assertEqual(
       str(grammar.LocalStmt(soda_type='int8', let=[self.let],
-                ref=self.ref, expr=self.expr)),
+                ref=self.ref, expr=self.expr, dram=())),
       'local int8:\n  int8 foo_l = bar_l(42, 2333)\n'
       '  foo(0, 23) = bar(233, 42)')
     self.assertEqual(
       str(grammar.LocalStmt(soda_type='int8', let=[self.let, self.let2],
-                ref=self.ref, expr=self.expr)),
+                ref=self.ref, expr=self.expr, dram=())),
       'local int8:\n  int8 foo_l = bar_l(42, 2333)\n'
       '  int8 foo_l2 = bar_l2(0, 42)\n  foo(0, 23) = bar(233, 42)')
 
   def test_output(self):
     self.assertEqual(
       str(grammar.OutputStmt(soda_type='int8', let=[],
-                 ref=self.ref, expr=self.expr)),
+                 ref=self.ref, expr=self.expr, dram=())),
       'output int8: foo(0, 23) = bar(233, 42)')
     self.assertEqual(
       str(grammar.OutputStmt(soda_type='int8', let=[self.let],
-                 ref=self.ref, expr=self.expr)),
+                 ref=self.ref, expr=self.expr, dram=())),
       'output int8:\n  int8 foo_l = bar_l(42, 2333)\n'
       '  foo(0, 23) = bar(233, 42)')
     self.assertEqual(
       str(grammar.OutputStmt(soda_type='int8', let=[self.let, self.let2],
-                 ref=self.ref, expr=self.expr)),
+                 ref=self.ref, expr=self.expr, dram=())),
       'output int8:\n  int8 foo_l = bar_l(42, 2333)\n'
       '  int8 foo_l2 = bar_l2(0, 42)\n  foo(0, 23) = bar(233, 42)')
 
@@ -110,7 +111,7 @@ output double:
                      'int8 foo = bar(233, 42)')
     self.assertEqual(str(grammar.Let(soda_type=None, name='foo',
                                      expr=self.expr)),
-                     'foo = bar(233, 42)')
+                     'int8 foo = bar(233, 42)')
 
   def test_ref(self):
     self.assertEqual(str(grammar.Ref(name='foo', idx=[0], lat=None)),
