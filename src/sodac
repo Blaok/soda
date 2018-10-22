@@ -249,9 +249,9 @@ def main():
       if args.kernel_file is None:
         with open(os.path.join(
           args.output_dir if args.output_dir is not None else '',
-          '%s_kernel-tile%s-unroll%d-%dddr%s.cpp' % (
+          '%s_kernel-tile%s-unroll%d-ddr%s.cpp' % (
             soda_model.app_name, 'x'.join(
-              ['%d'%x for x in soda_model.tile_size[0:-1]]),
+              '%d'%x for x in soda_model.tile_size[0:-1]),
             soda_model.unroll_factor, soda_model.dram_in + '-' +
             soda_model.dram_out)),
           'w') as kernel_file:
