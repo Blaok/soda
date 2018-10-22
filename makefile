@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp check-git-status
+.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp check-git-status unittest pylint pre-commit
 
 APP ?= blur
 SDA_VER ?= 2017.4
@@ -102,3 +102,12 @@ $(OBJ)/%.o: $(TMP)/%.cpp $(TMP)/$(APP).h
 $(SRC)/$(APP)_run.cpp: $(SODA_SRC)/$(APP)_run.cpp $(SRC)/$(APP).h
 	@mkdir -p $(SRC)
 	ln -sf $(abspath $<) $@
+
+unittest:
+	@echo python3 -m unittest
+	@cd src;python3 -m unittest
+
+pylint:
+	@+exec src/pylint.sh src src/sodac
+
+pre-commit: unittest pylint
