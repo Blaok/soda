@@ -1,4 +1,8 @@
-# SODA: Stencil with Unrolling and Pipelining Optimizations
+# SODA: Stencil with Optimized Dataflow Architecture
+
+## Publication
+
++ **Yuze Chi**, Jason Cong, Peng Wei, Peipei Zhou. SODA: Stencil with Optimized Dataflow Architecture. To appear in ICCAD, 2018. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/iccad18.pdf)
 
 ## SODA DSL Example
 
