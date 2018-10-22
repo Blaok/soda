@@ -100,6 +100,7 @@ class ComputeNode(ir.Module):
   def name(self):
     return '{}_pe_{}'.format(self.tensor.name, self.pe_id)
 
+# pylint: disable=too-many-branches
 def create_dataflow_graph(stencil):
   chronological_tensors = stencil.chronological_tensors
   super_source = SuperSourceNode()
@@ -259,6 +260,7 @@ def create_dataflow_graph(stencil):
       else:
         add_fwd_nodes(tensor.name)
 
+  # pylint: disable=too-many-nested-blocks
   for src_node in super_source.tpo_node_gen():
     for dst_node in src_node.children:
       # 5 possible edge types:
@@ -288,6 +290,7 @@ def create_dataflow_graph(stencil):
           raise util.InternalError('cannot find tensor %s' %
                                    dst_node.tensor.name)
         expr = ir.DRAMRef(soda_type=dst_node.tensor.soda_type,
+                          # pylint: disable=undefined-loop-variable
                           dram=stmt.dram,
                           var=dst_node.tensor.name,
                           offset=stencil.unroll_factor-1-dst_node.offset)
@@ -313,12 +316,14 @@ def create_dataflow_graph(stencil):
         if delay > 0:
           # TODO: build an index somewhere
           for let in src_node.lets:
+            # pylint: disable=undefined-loop-variable
             if isinstance(let.expr, ir.DelayedRef) and let.expr.ref == fifo_r:
               var_name = let.name
               var_type = let.soda_type
               break
           else:
             var_name = 'let_%d' % len(src_node.lets)
+            # pylint: disable=undefined-loop-variable
             var_type = fifo_r.soda_type
             lets.append(grammar.Let(
               soda_type=var_type, name=var_name,
@@ -326,12 +331,14 @@ def create_dataflow_graph(stencil):
           expr = grammar.Var(name=var_name, idx=[])
           expr.soda_type = var_type
         else:
-          expr = fifo_r
+          expr = fifo_r   # pylint: disable=undefined-loop-variable
       elif isinstance(src_node, ComputeNode):
         def replace_refs_callback(obj, args):
           if isinstance(obj, grammar.Ref):
             _logger.debug('replace %s with %s', obj,
+                          # pylint: disable=cell-var-from-loop
                           src_node.fifo_map[obj.name][obj.idx])
+            # pylint: disable=cell-var-from-loop
             return src_node.fifo_map[obj.name][obj.idx]
           return obj
         _logger.debug('lets: %s', src_node.tensor.lets)
@@ -349,6 +356,7 @@ def create_dataflow_graph(stencil):
             raise util.InternalError('cannot find tensor %s' %
                                      src_node.tensor.name)
           dram_ref = ir.DRAMRef(soda_type=src_node.tensor.soda_type,
+                                # pylint: disable=undefined-loop-variable
                                 dram=stmt.dram, var=src_node.tensor.name,
                                 offset=src_node.pe_id)
           dst_node.lets.append(grammar.Let(
