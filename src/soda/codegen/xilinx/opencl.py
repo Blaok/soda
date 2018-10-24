@@ -1,26 +1,26 @@
 import sys
 import os
 
-from soda.codegen import header
-from soda.codegen import host
-from soda.codegen import kernel
+from soda.codegen.xilinx import header
+from soda.codegen.xilinx import host
+from soda.codegen.xilinx import hls_kernel as kernel
 
 def add_arguments(parser):
   parser.add_argument(
-      '--xocl', type=str, dest='output_dir', metavar='dir',
-      help='directory to generate kernel, source, and header; default names '
+      '--xocl', type=str, dest='output_dir', metavar='dir', nargs='?', const='',
+      help='directory to generate kernel and host code; default names are'
       'used; default to the current working directory; may be overridden by '
-      '--xocl-kernel, --xocl-host, or --header')
+      '--xocl-header, --xocl-host, or --xocl-kernel')
   parser.add_argument(
-      '--xocl-kernel', type=str, dest='kernel_file', metavar='file',
-      help='Vivado HLS C++ kernel code for the Xilinx OpenCL flow; overrides '
-      '--xocl')
+      '--xocl-header', type=str, dest='header_file', metavar='file',
+      help='host C++ header code; overrides --xocl')
   parser.add_argument(
       '--xocl-host', type=str, dest='host_file', metavar='file',
       help='host C++ source code for the Xilinx OpenCL flow; overrides --xocl')
   parser.add_argument(
-      '--header', type=str, dest='header_file', metavar='file',
-      help='host C++ header code; overrides --xocl')
+      '--xocl-kernel', type=str, dest='kernel_file', metavar='file',
+      help='Vivado HLS C++ kernel code for the Xilinx OpenCL flow; overrides '
+      '--xocl')
 
 def print_code(stencil, args):
   if args.kernel_file is not None:
