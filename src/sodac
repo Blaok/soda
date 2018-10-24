@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 import argparse
 import logging
-import os
 import sys
 
 from textx import metamodel_from_str
@@ -10,9 +9,7 @@ from textx.exceptions import TextXSyntaxError
 from soda import core
 from soda import grammar
 from soda import util
-from soda.codegen import header
-from soda.codegen import host
-from soda.codegen import kernel
+from soda.codegen.xilinx import opencl as xocl
 from soda.model import xilinx as model
 
 logging.basicConfig(level=logging.WARNING,
@@ -85,30 +82,9 @@ def main():
             dest='soda_src',
             metavar='file',
             help='soda source code')
-  parser.add_argument('--output-dir', '-o',
-            type=str,
-            dest='output_dir',
-            metavar='dir',
-            help='directory to generate kernel, source, and '
-               'header; default names used; default to the '
-               'current working directory; may be overridden by '
-               '--kernel-file, --source-file, or --header-file')
-  parser.add_argument('--kernel-file',
-            type=str,
-            dest='kernel_file',
-            metavar='file',
-            help='Vivado HLS C++ kernel code; '
-               'overrides --output-dir')
-  parser.add_argument('--source-file',
-            type=str,
-            dest='host_file',
-            metavar='file',
-            help='host C++ source code; overrides --output-dir')
-  parser.add_argument('--header-file',
-            type=str,
-            dest='header_file',
-            metavar='file',
-            help='host C++ header code; overrides --output-dir')
+
+  xocl.add_arguments(parser.add_argument_group('Xilinx OpenCL backend'))
+
   parser.add_argument('--model-file',
             type=str,
             dest='model_file',
@@ -191,26 +167,7 @@ def main():
 
     logger.debug('stencil obtained: %s', stencil)
 
-    if args.kernel_file is not None:
-      if args.kernel_file == '-':
-        kernel.print_code(stencil, sys.stdout)
-      else:
-        with open(args.kernel_file, 'w') as kernel_file:
-          kernel.print_code(stencil, kernel_file)
-
-    if args.host_file is not None:
-      if args.host_file == '-':
-        host.print_code(stencil, sys.stdout)
-      else:
-        with open(args.host_file, 'w') as host_file:
-          host.print_code(stencil, host_file)
-
-    if args.header_file is not None:
-      if args.header_file == '-':
-        header.print_code(stencil, sys.stdout)
-      else:
-        with open(args.header_file, 'w') as header_file:
-          header.print_code(stencil, header_file)
+    xocl.print_code(stencil, args)
 
     if args.estimation_file is not None:
       if args.model_file is None:
@@ -241,37 +198,6 @@ def main():
           print_estimation()
 
 
-    if (args.output_dir is not None or
-        args.kernel_file is None and
-        args.host_file is None and
-        args.header_file is None and
-        args.estimation_file is None):
-      if args.kernel_file is None:
-        with open(os.path.join(
-          args.output_dir if args.output_dir is not None else '',
-          '%s_kernel-tile%s-unroll%d-ddr%s.cpp' % (
-            soda_model.app_name, 'x'.join(
-              '%d'%x for x in soda_model.tile_size[0:-1]),
-            soda_model.unroll_factor, soda_model.dram_in + '-' +
-            soda_model.dram_out)),
-          'w') as kernel_file:
-          kernel.print_code(stencil, kernel_file)
-      if args.host_file is None:
-        if args.output_dir is not None:
-          host_file_dir = args.output_dir
-          header_file_dir = args.output_dir
-        else:
-          host_file_dir = ''
-          header_file_dir = ''
-        host_file_name = soda_model.app_name+'.cpp'
-        header_file_name = soda_model.app_name+'.h'
-        with open(os.path.join(host_file_dir, host_file_name),
-              'w') as host_file:
-          host.print_code(stencil, host_file)
-      if args.header_file is None:
-        with open(os.path.join(header_file_dir, header_file_name),
-              'w') as header_file:
-          header.print_code(stencil, header_file)
   except TextXSyntaxError as e:
     logger.error(e)
     sys.exit(1)
