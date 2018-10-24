@@ -743,9 +743,6 @@ def print_wrapped(printer, stencil):
               ''.join('*TILE_SIZE_DIM_%d'%_ for _ in range(stencil.dim-1)),
               '*'.join('tile_num_dim_%d'%_ for _ in range(stencil.dim-1)),
               stmt=stencil.input_stmts[0], dim=stencil.dim-1))
-  for d in range(stencil.dim-1):
-    println('uint32_t input_bound_dim_{0} = tile_num_dim_{0}*(TILE_SIZE_DIM_{0}'
-            '-STENCIL_DIM_{0}+1);'.format(d))
   println('fprintf(*error_report, "INFO: tile_data_num = %ld, coalesced_data_nu'
           'm = %ld\\n", tile_data_num, coalesced_data_num);')
   println()
@@ -758,14 +755,8 @@ def print_wrapped(printer, stencil):
   for name in stencil.param_names:
     println('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(cl_mem), '
             '&var_%s_cl);' % name)
-  for name in stencil.input_names:
-    for variable in (
-        ['coalesced_data_num', 'tile_data_num']+
-        ['input_bound_dim_%d'%x for x in range(stencil.dim-1)]+
-        ['%s_size_dim_%d' % (name, _) for _ in range(stencil.dim)]):
-      println('err |= clSetKernelArg(kernel, kernel_arg++, sizeof({0}), '
-              '&{0});'.format(variable))
-    break
+  println('err |= clSetKernelArg(kernel, kernel_arg++, sizeof(coalesced_data_nu'
+          'm), &coalesced_data_num);')
   println('if(err != CL_SUCCESS)')
   do_scope()
   println('fprintf(*error_report, "ERROR: Failed to set kernel arguments %d'

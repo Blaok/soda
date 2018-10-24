@@ -10,94 +10,62 @@ from soda import util
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
-def _print_interface(printer, stencil):
+def _print_interface(printer, kernel_name, inputs, outputs, super_source):
+  """Prints the top-level module for the given arguments.
+
+  Prints the top-level interfaces and sub-module instances with proper interface
+  pragmas, hls::stream declarations and references, and module function calls.
+  Currently only streaming applications are supported.
+
+  Args:
+    printer: Printer to which the code is emitted.
+    kernel_name: str, name of the kernel.
+    inputs: Sequence of (name, c_type, bank, depth) tuples, specifies the m_axi
+      input interfaces.
+    outputs: Sequence of (name, c_type, bank, depth) tuples, specifies the m_axi
+      output interfaces.
+    super_source: SuperSourceNode of a DAG of HAODA nodes.
+  """
   println = printer.println
   do_indent = printer.do_indent
   un_indent = printer.un_indent
   do_scope = printer.do_scope
   un_scope = printer.un_scope
-  tile_size = stencil.tile_size
-  unroll_factor = stencil.unroll_factor
-  app_name = stencil.app_name
-  super_source = stencil.dataflow_super_source
-  burst_width = stencil.burst_width
 
-  _logger.info('generate reuse buffers')
-  reuse_buffers = stencil.reuse_buffers
-  all_points = stencil.all_points
-  next_fifo = stencil.next_fifo
-  overall_stencil_window = core.get_overall_stencil_window(
-      stencil.tensors[stencil.input_names[0]],
-      stencil.tensors[stencil.output_names[0]])
-
-  outputs = [(stmt.name, bank) for stmt in stencil.output_stmts
-                               for bank in sorted(stmt.dram)]
-  inputs = [(stmt.name, bank) for stmt in stencil.input_stmts
-                              for bank in sorted(stmt.dram)]
-
+  get_bundle_name = util.get_bundle_name
   get_port_name = util.get_port_name
   get_port_buf_name = util.get_port_buf_name
-  get_fifo_name = util.get_fifo_name
-  get_tensor_name_at = util.get_tensor_name_at
 
   println('extern "C"')
   println('{')
   println()
-  println('void %s_kernel(' % app_name)
+  println('void %s(' % kernel_name)
   do_indent()
-  for name, bank in outputs + inputs:
-    println('ap_uint<BURST_WIDTH>* {},'.format(get_port_name(name, bank)))
-  for param in stencil.param_names:
-    println('%s* var_%s,' % (param.type, param.name))
-  println('uint64_t coalesced_data_num,')
-  println('uint64_t tile_data_num,')
-  for i in range(stencil.dim-1):
-    println('uint32_t input_bound_dim_%d,' % i)
-  for d in range(stencil.dim-1):
-    println('uint32_t input_size_dim_%d,' % d)
-  println('uint32_t input_size_dim_%d)' % (stencil.dim-1))
+  for name, c_type, bank, _ in outputs + inputs:
+    println('{}* {},'.format(c_type, get_port_name(name, bank)))
+  println('uint64_t coalesced_data_num)')
   un_indent()
   do_scope()
 
-  for name, bank in outputs:
-    println('#pragma HLS interface m_axi port={} offset=slave depth=65536 '
-            'bundle={} latency=120'.format(get_port_name(name, bank),
-                                           get_port_name(name, bank)), 0)
-  for name, bank in inputs:
-    println('#pragma HLS interface m_axi port={} offset=slave depth=65536 '
-            'bundle={} latency=120'.format(get_port_name(name, bank),
-                                           get_port_name(name, bank)), 0)
-
-  for idx, param in enumerate(stencil.param_stmts):
-    println('#pragma HLS interface m_axi port=var_{} offset=slave depth={} '
-            'bundle=gmem{} latency=120'.format(
-                param.name, reduce(operator.mul, param.size), idx), 0)
+  for name, c_type, bank, depth in outputs + inputs:
+    println('#pragma HLS interface m_axi port={} offset=slave depth={} bundle={'
+            '}'.format(get_port_name(name, bank), depth,
+                       get_bundle_name(c_type, bank)), 0)
 
   println()
-  for name, bank in outputs + inputs:
-    println('#pragma HLS interface s_axilite port={} '
-            'bundle=control'.format(get_port_name(name, bank)), 0)
+  for name, _, bank, _ in outputs + inputs:
+    println('#pragma HLS interface s_axilite port={} bundle=control'.format(
+        get_port_name(name, bank)), 0)
 
-  for param in stencil.param_stmts:
-    println('#pragma HLS interface s_axilite port=var_{} '
-            'bundle=control'.format(param.name), 0)
   println('#pragma HLS interface s_axilite port=coalesced_data_num '
           'bundle=control', 0)
-  println('#pragma HLS interface s_axilite port=tile_data_num '
-          'bundle=control', 0)
-  for d in range(stencil.dim-1):
-    println('#pragma HLS interface s_axilite port=input_bound_dim_%d '
-            'bundle=control' % d, 0)
-  for d in range(stencil.dim):
-    println('#pragma HLS interface s_axilite port=input_size_dim_%d '
-            'bundle=control' % d, 0)
   println('#pragma HLS interface s_axilite port=return bundle=control', 0)
   println()
 
   # port buf declarations
-  for name, bank in inputs + outputs:
-    println('hls::stream<Data<ap_uint<BURST_WIDTH>>> {0}("{0}");'.format(
-        get_port_buf_name(name, bank)))
+  for name, c_type, bank, _ in inputs + outputs:
+    println('hls::stream<Data<{c_type}>> {name}("{name}");'.format(
+        name=get_port_buf_name(name, bank), c_type=c_type))
   # port buf depths
     println('#pragma HLS stream variable={} depth=32'.format(
         get_port_buf_name(name, bank)), 0)
@@ -106,7 +74,7 @@ def _print_interface(printer, stencil):
   println()
 
   # internal fifos
-  for node in stencil.dataflow_super_source.tpo_node_gen():
+  for node in super_source.tpo_node_gen():
     for fifo in node.fifos:
       println('hls::stream<Data<{0}>> {1}("{1}");'.format(fifo.c_type,
                                                           fifo.c_expr))
@@ -175,11 +143,6 @@ def _print_interface(printer, stencil):
   extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
   '''
 
-  # TODO: fix this number
-  println('uint64_t epoch_num = coalesced_data_num*{}/{};'.format(
-      stencil.burst_width//sum(util.get_width_in_bits(_)
-                               for _ in stencil.input_types),
-      unroll_factor))
   println()
 
   # TODO: replication not supported
@@ -279,15 +242,15 @@ def _print_interface(printer, stencil):
   '''
 
   println('#pragma HLS dataflow', 0)
-  for name, bank in inputs:
+  for name, _, bank, _ in inputs:
     println('BurstRead(&{}, {}, coalesced_data_num);'.format(
         get_port_buf_name(name, bank), get_port_name(name, bank)))
 
   for node in super_source.tpo_node_gen():
-    module_trait_id = stencil.module_table[node][1]
+    module_trait_id = super_source.module_table[node][1]
     _print_module_func_call(printer, node, module_trait_id)
 
-  for name, bank in outputs:
+  for name, _, bank, _ in outputs:
     println('BurstWrite({}, &{}, coalesced_data_num);'.format(
         get_port_name(name, bank), get_port_buf_name(name, bank)))
 
@@ -406,7 +369,21 @@ def print_code(stencil, output_file):
   printer.println()
   '''
 
-  _print_interface(printer, stencil)
+  outputs = []
+  inputs = []
+  for stmt in stencil.output_stmts:
+    for bank in sorted(stmt.dram):
+      outputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
+                      65536))
+  for stmt in stencil.input_stmts:
+    for bank in sorted(stmt.dram):
+      inputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
+                     65536))
+  for stmt in stencil.param_stmts:
+    inputs.append(('var_%s' % stmt.name, stmt.type, 0,
+                    reduce(operator.mul, stmt.size)))
+  _print_interface(printer, stencil.app_name + '_kernel', inputs, outputs,
+                   stencil.dataflow_super_source)
 
 def _print_module_func_call(printer, node, module_trait_id, **kwargs):
   println = printer.println

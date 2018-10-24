@@ -268,25 +268,13 @@ class Stencil(object):
   def dataflow_super_source(self):
     return dataflow.create_dataflow_graph(self)
 
-  @cached_property
+  @property
   def module_table(self):
-    """
-    Node -> module_trait, module_trait_id
-    """
-    self._module_traits = OrderedDict()
-    module_table = OrderedDict()
-    for node in self.dataflow_super_source.tpo_node_gen():
-      self._module_traits.setdefault(ir.ModuleTrait(node), []).append(node)
-    for idx, module_trait in enumerate(self._module_traits):
-      for node in self._module_traits[module_trait]:
-        module_table[node] = module_trait, idx
-    return module_table
+    return self.dataflow_super_source.module_table
 
-  @cached_property
+  @property
   def module_traits(self):
-    # pylint: disable=pointless-statement
-    self.module_table
-    return tuple(self._module_traits)
+    return self.dataflow_super_source.module_traits
 
   @cached_property
   def input_types(self):

@@ -137,9 +137,11 @@ def print_define(printer, var, val):
   printer.println('#endif//%s' % var)
 
 def print_guard(printer, var, val):
+  printer.println('#ifdef %s' % var)
   printer.println('#if %s != %d' % (var, val))
   printer.println('#error %s != %d' % (var, val))
   printer.println('#endif//%s != %d' % (var, val))
+  printer.println('#endif//%s' % var)
 
 def get_c_type(soda_type):
   if soda_type in {
@@ -209,7 +211,5 @@ def get_func_name(module_id):
 
 get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
 get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)
-def get_fifo_name(name, offset):
-  return 'stream_{}_offset_{}'.format(name, offset)
-def get_tensor_name_at(name, offset):
-  return 'tensor_{}_offset_{}'.format(name, offset)
+def get_bundle_name(c_type, bank):
+  return '{}_bank_{}'.format(c_type.replace('<', '_').replace('>', ''), bank)
