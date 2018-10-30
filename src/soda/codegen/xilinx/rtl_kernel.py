@@ -174,10 +174,10 @@ def print_top_module(printer, super_source, inputs, outputs):
     println('output {port_name}_V_V{write_enable};'.format(**kwargs))
   for port_name, _, soda_type, _ in inputs:
     kwargs = dict(port_name=port_name, **FIFO_PORT_SUFFIXES)
-    println('input  [{}:0] {}_V_V{data_out};'.format(
+    println('input  [{}:0] {port_name}_V_V{data_out};'.format(
         util.get_width_in_bits(soda_type) - 1, **kwargs))
-    println('input  {}_V_V{not_empty};'.format(**kwargs))
-    println('output {}_V_V{read_enable};'.format(**kwargs))
+    println('input  {port_name}_V_V{not_empty};'.format(**kwargs))
+    println('output {port_name}_V_V{read_enable};'.format(**kwargs))
   println('input  done_V%s;' % FIFO_PORT_SUFFIXES['data_out'])
   println('input  done_V%s;' % FIFO_PORT_SUFFIXES['not_empty'])
   println('output done_V%s;' % FIFO_PORT_SUFFIXES['read_enable'])
