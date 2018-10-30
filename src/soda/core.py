@@ -6,7 +6,6 @@ import operator
 
 from cached_property import cached_property
 
-from haoda import ir
 from soda import dataflow
 from soda import grammar
 from soda import util
@@ -943,14 +942,3 @@ def get_stencil_window_offset(stencil_window):
   # only works if window is normalized to store at 0
   return tuple(-min(p[d] for p in stencil_window)
          for d in range(len(next(iter(stencil_window)))))
-
-def get_dram_refs(obj):
-  if isinstance(obj, Iterable):
-    return sum(map(get_dram_refs, obj), [])
-  dram_refs = []
-  def get_dram_refs_callback(obj, args):
-    if isinstance(obj, ir.DRAMRef):
-      args.append(obj)
-    return obj
-  obj.visit(get_dram_refs_callback, dram_refs)
-  return dram_refs

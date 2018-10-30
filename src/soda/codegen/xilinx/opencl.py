@@ -6,6 +6,7 @@ import tempfile
 from soda.codegen.xilinx import header
 from soda.codegen.xilinx import host
 from soda.codegen.xilinx import hls_kernel as kernel
+from soda.codegen.xilinx import rtl_kernel
 
 def add_arguments(parser):
   parser.add_argument(
@@ -23,6 +24,11 @@ def add_arguments(parser):
       '--xocl-kernel', type=str, dest='kernel_file', metavar='file',
       help='Vivado HLS C++ kernel code for the Xilinx OpenCL flow; overrides '
       '--xocl')
+  parser.add_argument(
+      '--xocl-platform', type=str, dest='xocl_platform', metavar='dir',
+      help='SDAccel platform directory of the Xilinx OpenCL flow')
+  parser.add_argument('--xocl-hw-xo', type=str, dest='xo_file', metavar='file',
+                      help='hardware object file for the Xilinx OpenCL flow')
 
 def print_code(stencil, args):
   if args.kernel_file is not None:
@@ -54,6 +60,16 @@ def print_code(stencil, args):
       else:
         with open(args.header_file, 'w') as header_file:
           shutil.copyfileobj(tmp, header_file)
+
+  if args.xo_file is not None:
+    with tempfile.TemporaryFile(mode='w+b') as tmp:
+      rtl_kernel.print_code(stencil, tmp, platform=args.xocl_platform)
+      tmp.seek(0)
+      if args.xo_file == '-':
+        shutil.copyfileobj(tmp, sys.stdout)
+      else:
+        with open(args.xo_file, 'wb') as xo_file:
+          shutil.copyfileobj(tmp, xo_file)
 
   if args.output_dir is not None and (args.kernel_file is None or
                                       args.host_file is None or

@@ -4,7 +4,6 @@ import logging
 import operator
 
 from haoda import ir
-from soda import core
 from soda import grammar
 from soda import util
 
@@ -389,36 +388,15 @@ def _print_module_func_call(printer, node, module_trait_id, **kwargs):
   println = printer.println
   print_func = printer.print_func
   func_name = util.get_func_name(module_trait_id)
-  func_lower_name = util.get_module_name(module_trait_id)
 
-  def get_load_set(obj, loads):
-    if isinstance(obj, ir.FIFO):
-      loads[obj] = None
-    return obj
-  loads = OrderedDict()
-  node.visit_loads(get_load_set, loads)
-  loads = tuple(loads)
-
-  # find dram reads
-  reads_in_lets = tuple(_.expr for _ in node.lets)
-  reads_in_exprs = tuple(node.exprs.values())
-  dram_reads = OrderedDict()
-  for dram_ref in core.get_dram_refs(reads_in_lets + reads_in_exprs):
-    for bank in dram_ref.dram:
-      dram_reads[util.get_port_buf_name(dram_ref.var, bank)] = None
-  dram_reads = tuple('/* input*/ &' + _ for _ in dram_reads)
-
-  # find dram writes
-  writes_in_lets = tuple(_.name for _ in node.lets
-                         if not isinstance(_.name, str))
-  dram_writes = OrderedDict()
-  for dram_ref in core.get_dram_refs(writes_in_lets):
-    for bank in dram_ref.dram:
-      dram_writes[util.get_port_buf_name(dram_ref.var, bank)] = None
-  dram_writes = tuple('/*output*/ &' + _ for _ in dram_writes)
-
-  output_fifos = tuple('/*output*/ &' + _.c_expr for _ in node.exprs)
-  input_fifos = tuple('/* input*/ &' + _.c_expr for _ in loads)
+  dram_reads = tuple(
+      '/* input*/ &' + util.get_port_buf_name(dram_ref.var, bank)
+      for dram_ref, bank in node.dram_reads)
+  dram_writes = tuple(
+      '/*output*/ &' + util.get_port_buf_name(dram_ref.var, bank)
+      for dram_ref, bank in node.dram_writes)
+  output_fifos = tuple('/*output*/ &' + _ for _ in node.output_fifos)
+  input_fifos = tuple('/* input*/ &' + _ for _ in node.input_fifos)
   params = dram_writes + output_fifos + input_fifos + dram_reads
 
   print_func(func_name, params, suffix=';', align=0)
@@ -430,8 +408,6 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   un_scope = printer.un_scope
   do_indent = printer.do_indent
   un_indent = printer.un_indent
-  fifo_st_prefix = 'fifo_st_'
-  fifo_ref_prefix = 'fifo_ref_'
   read_fifo_func = 'ReadFIFO'
   func_name = util.get_func_name(module_trait_id)
   func_lower_name = util.get_module_name(module_trait_id)
@@ -451,7 +427,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   fifo_loads = tuple('/* input*/ hls::stream<Data<{}>>* {}'.format(
       _.c_type, _.ld_name) for _ in module_trait.loads)
   fifo_stores = tuple('/*output*/ hls::stream<Data<{}>>* {}{}'.format(
-      expr.c_type, fifo_st_prefix, idx)
+      expr.c_type, ir.FIFORef.ST_PREFIX, idx)
     for idx, expr in enumerate(module_trait.exprs))
 
   # look for DRAM access
@@ -459,8 +435,8 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   writes_in_lets = tuple(_.name for _ in module_trait.lets
                          if not isinstance(_.name, str))
   reads_in_exprs = module_trait.exprs
-  dram_reads = core.get_dram_refs(reads_in_lets + reads_in_exprs)
-  dram_writes = core.get_dram_refs(writes_in_lets)
+  dram_reads = ir.get_dram_refs(reads_in_lets + reads_in_exprs)
+  dram_writes = ir.get_dram_refs(writes_in_lets)
   drams = ()
   dram_read_map = OrderedDict()
   dram_write_map = OrderedDict()
@@ -555,6 +531,17 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   printer.print_func('void {func_name}'.format(**locals()),
                      fifo_stores+fifo_loads, align=0)
   do_scope(func_name)
+
+  for dram_ref, bank in module_trait.dram_writes:
+    println('#pragma HLS data_pack variable = {}'.format(
+        dram_ref.dram_fifo_name(bank)), 0)
+  for arg in module_trait.output_fifos:
+    println('#pragma HLS data_pack variable = %s' % arg, 0)
+  for arg in module_trait.input_fifos:
+    println('#pragma HLS data_pack variable = %s' % arg, 0)
+  for dram_ref, bank in module_trait.dram_reads:
+    println('#pragma HLS data_pack variable = {}'.format(
+        dram_ref.dram_fifo_name(bank)), 0)
 
   # print inter-iteration declarations
   for delay in delays:
@@ -685,7 +672,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     for coalescing_idx in range(coalescing_factor):
       for idx, expr in enumerate(module_trait.exprs):
         println('WriteData({}{}, {}, {});'.format(
-            fifo_st_prefix, idx,
+            ir.FIFORef.ST_PREFIX, idx,
             expr.visit(mutate_dram_ref_for_reads, {
                 'coalescing_idx': coalescing_idx, 'unroll_factor': len(
                     dram_read_map[expr.var][expr.dram])}).c_expr,
@@ -693,7 +680,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   else:
     for idx, expr in enumerate(module_trait.exprs):
       println('WriteData({}{}, {}({}), enabled);'.format(
-              fifo_st_prefix, idx, expr.c_type, expr.c_expr))
+              ir.FIFORef.ST_PREFIX, idx, expr.c_type, expr.c_expr))
 
   for delay in delays:
     println(delay.c_buf_store)
