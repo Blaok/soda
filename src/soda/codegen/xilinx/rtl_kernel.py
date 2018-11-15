@@ -37,10 +37,14 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
 
   for stmt in stencil.output_stmts:
     for bank in stmt.dram:
+      soda_type = 'uint%d' % stencil.burst_width
+      bundle_name = util.get_bundle_name(util.get_c_type(soda_type), bank)
       outputs.append((util.get_port_name(stmt.name, bank), bundle_name,
                       soda_type, util.get_port_buf_name(stmt.name, bank)))
   for stmt in stencil.input_stmts:
     for bank in stmt.dram:
+      soda_type = 'uint%d' % stencil.burst_width
+      bundle_name = util.get_bundle_name(util.get_c_type(soda_type), bank)
       inputs.append((util.get_port_name(stmt.name, bank), bundle_name,
                      soda_type, util.get_port_buf_name(stmt.name, bank)))
 
@@ -61,24 +65,11 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
       print_dataflow_hls_interface(
           util.Printer(dataflow_kernel_obj), top_name, inputs, outputs)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     kernel_xml = os.path.join(tmpdir, 'kernel.xml')
     with open(kernel_xml, 'w') as kernel_xml_obj:
       backend.print_kernel_xml(top_name, outputs + inputs, kernel_xml_obj)
-    kernel_file = os.path.join(tmpdir, 'kernel.cpp')
 
+    kernel_file = os.path.join(tmpdir, 'kernel.cpp')
     with open(kernel_file, 'w') as kernel_fileobj:
       hls_kernel.print_code(stencil, kernel_fileobj)
 
