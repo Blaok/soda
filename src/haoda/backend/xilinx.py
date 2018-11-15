@@ -20,17 +20,19 @@ class Vivado(subprocess.Popen):
     args: sequence of arguments
   """
   def __init__(self, commands, *args):
-    self.tcl_file = tempfile.NamedTemporaryFile(mode='w+', prefix='vivado-')
+    self.cwd = tempfile.TemporaryDirectory(prefix='vivado-')
+    self.tcl_file = open(os.path.join(self.cwd.name, 'tcl'), mode='w+')
     self.tcl_file.write(commands)
     self.tcl_file.flush()
     cmd_args = ['vivado', '-mode', 'batch', '-source', self.tcl_file.name,
                 '-nojournal', '-nolog', '-tclargs', *args]
     pipe_args = {'stdout' : subprocess.PIPE, 'stderr' : subprocess.PIPE}
-    super().__init__(cmd_args, **pipe_args)
+    super().__init__(cmd_args, cwd=self.cwd.name, **pipe_args)
 
   def __exit__(self, *args):
     super().__exit__(*args)
     self.tcl_file.close()
+    self.cwd.cleanup()
 
 class VivadoHls(subprocess.Popen):
   """Call vivado_hls with the given tcl commands.
@@ -39,16 +41,18 @@ class VivadoHls(subprocess.Popen):
     commands: string of tcl commands
   """
   def __init__(self, commands):
-    self.tcl_file = tempfile.NamedTemporaryFile(mode='w+', prefix='vivado-hls-')
+    self.cwd = tempfile.TemporaryDirectory(prefix='vivado-hls-')
+    self.tcl_file = open(os.path.join(self.cwd.name, 'tcl'), mode='w+')
     self.tcl_file.write(commands)
     self.tcl_file.flush()
     cmd_args = ['vivado_hls', '-f', self.tcl_file.name, '-l', '/dev/null']
     pipe_args = {'stdout' : subprocess.PIPE, 'stderr' : subprocess.PIPE}
-    super().__init__(cmd_args, **pipe_args)
+    super().__init__(cmd_args, cwd=self.cwd.name, **pipe_args)
 
   def __exit__(self, *args):
     super().__exit__(*args)
     self.tcl_file.close()
+    self.cwd.cleanup()
 
 PACKAGEXO_COMMANDS = r'''
 set tmp_ip_dir "{tmpdir}/tmp_ip_dir"
