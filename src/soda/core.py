@@ -202,7 +202,7 @@ class Stencil(object):
       if dram_in is not None:
         if ':' in dram_in:
           input_stmt_map = {_.name : _ for _ in self.input_stmts}
-          for dram_map in dram_in.split(','):
+          for dram_map in dram_in.split('^'):
             var_name, bank_list = dram_map.split(':')
             if var_name not in input_stmt_map:
               raise util.SemanticError('no input named `{}`'.format(var_name))
