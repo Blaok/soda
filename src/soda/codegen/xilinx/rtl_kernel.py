@@ -88,13 +88,13 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
         log_func(stdout.decode())
         log_func(stderr.decode())
 
-    verilog_dir = os.path.join(tmpdir, 'verilog')
-    with open(os.path.join(verilog_dir, 'Dataflow.v'), mode='w') as dataflow_v:
+    hdl_dir = os.path.join(tmpdir, 'hdl')
+    with open(os.path.join(hdl_dir, 'Dataflow.v'), mode='w') as dataflow_v:
       print_top_module(backend.VerilogPrinter(dataflow_v),
                        stencil.dataflow_super_source, inputs, outputs)
 
     xo_filename = os.path.join(tmpdir, stencil.app_name + '.xo')
-    with backend.PackageXo(xo_filename, top_name, kernel_xml, verilog_dir,
+    with backend.PackageXo(xo_filename, top_name, kernel_xml, hdl_dir,
                            m_axi_names, [dataflow_kernel]) as proc:
       stdout, stderr = proc.communicate()
     log_func = _logger.error if proc.returncode != 0 else _logger.debug
@@ -117,7 +117,7 @@ def synthesis_module(tmpdir, kernel_files, module_name, device_info):
     if proc.returncode == 0:
       tarfileobj.seek(0)
       with tarfile.open(mode='r', fileobj=tarfileobj) as tar:
-        tar.extractall(tmpdir, filter(lambda _: _.name.startswith('verilog'),
+        tar.extractall(tmpdir, filter(lambda _: _.name.startswith('hdl'),
                                       tar.getmembers()))
   return proc.returncode, stdout, stderr
 

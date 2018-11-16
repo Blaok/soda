@@ -59,7 +59,7 @@ set tmp_ip_dir "{tmpdir}/tmp_ip_dir"
 set tmp_project "{tmpdir}/tmp_project"
 
 create_project -force kernel_pack ${{tmp_project}}
-add_files -norecurse [glob {verilog_dir}/*.v {verilog_dir}/*.sv]
+add_files -norecurse [glob {hdl_dir}/*.v {hdl_dir}/*.sv {hdl_dir}/*.vhd]
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
 ipx::package_project -root_dir ${{tmp_ip_dir}} -vendor xilinx.com -library RTLKernel -taxonomy /KernelIP -import_files -set_current false
@@ -91,17 +91,21 @@ class PackageXo(Vivado):
     xo_file: name of the generated xo file.
     top_name: top-level module name.
     kernel_xml: xml description of the kernel.
-    verilog_dir: directory of all Verilog files.
+    hdl_dir: directory of all HDL files.
     m_axi_names: variable names connected to the m_axi bus.
     cpp_kernels: sequence of file names of C++ kernels.
   """
-  def __init__(self, xo_file, top_name, kernel_xml, verilog_dir, m_axi_names,
+  def __init__(self, xo_file, top_name, kernel_xml, hdl_dir, m_axi_names,
                cpp_kernels=()):
     self.tmpdir = tempfile.TemporaryDirectory(prefix='package-xo-')
+    if _logger.isEnabledFor(logging.INFO):
+      for _, _, files in os.walk(hdl_dir):
+        for filename in files:
+          _logger.info('packing: %s', filename)
     kwargs = {
         'top_name' : top_name,
         'kernel_xml' : kernel_xml,
-        'verilog_dir' : verilog_dir,
+        'hdl_dir' : hdl_dir,
         'xo_file' : xo_file,
         'bus_ifaces' : '\n'.join(map(
             'ipx::associate_bus_interfaces -busif m_axi_{} -clock ap_clk '
@@ -126,14 +130,15 @@ create_clock -period {clock_period} -name default
 config_compile -name_max_length 253
 config_interface -m_axi_addr64
 csynth_design
+export_design
 exit
 '''
 
 class RunHls(VivadoHls):
-  """Runs Vivado HLS for the given kernels and generate Verilog files
+  """Runs Vivado HLS for the given kernels and generate HDL files
 
   Args:
-    tarfileobj: file object that will contain the reports and verilog files.
+    tarfileobj: file object that will contain the reports and HDL files.
     kernel_files: file names of the kernels.
     top_name: top-level module name.
     clock_period: target clock period.
@@ -161,11 +166,19 @@ class RunHls(VivadoHls):
     super().__exit__(*args)
     if self.returncode == 0:
       with tarfile.open(mode='w', fileobj=self.tarfileobj) as tar:
-        syn_dir = os.path.join(self.project_dir.name, self.project_name,
-                               self.solution_name, 'syn')
-        tar.add(os.path.join(syn_dir, 'report'), arcname='report')
-        tar.add(os.path.join(syn_dir, 'verilog'), arcname='verilog')
-        tar.add(os.path.join(syn_dir, '..', self.solution_name + '.log'),
+        solution_dir = os.path.join(self.project_dir.name, self.project_name,
+                                    self.solution_name)
+        tar.add(os.path.join(solution_dir, 'syn/report'), arcname='report')
+        tar.add(os.path.join(solution_dir, 'impl/ip/hdl/verilog'),
+                arcname='hdl')
+        # some IP cores are generated as VHDL files in the ip directory
+        try:
+          tar.add(os.path.join(solution_dir, 'impl/ip/hdl/ip'),
+                  arcname='hdl')
+        except FileNotFoundError:
+          # if no IP cores are generated, that directory won't exist
+          pass
+        tar.add(os.path.join(solution_dir, self.solution_name + '.log'),
                 arcname=self.solution_name + '.log')
     self.project_dir.cleanup()
 
