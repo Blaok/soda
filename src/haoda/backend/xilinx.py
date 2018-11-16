@@ -194,7 +194,7 @@ def get_device_info(platform_path):
 KERNEL_XML_TEMPLATE = r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <root versionMajor="1" versionMinor="5">
-  <kernel name="blur_kernel" language="ip" vlnv="xilinx.com:RTLKernel:{top_name}:1.0" attributes="" preferredWorkGroupSizeMultiple="0" workGroupSize="1" debug="true" compileOptions=" -g" profileType="none">
+  <kernel name="{top_name}" language="ip" vlnv="xilinx.com:RTLKernel:{top_name}:1.0" attributes="" preferredWorkGroupSizeMultiple="0" workGroupSize="1" debug="true" compileOptions=" -g" profileType="none">
     <ports>{m_axi_ports}
       <port name="s_axi_control" mode="slave" range="0x1000" dataWidth="32" portType="addressable" base="0x0"/>
     </ports>
