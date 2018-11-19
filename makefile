@@ -65,10 +65,10 @@ ifneq (,$(findstring aws-vu9p-f1,$(XDEVICE)))
 CLCXX_OPT += --xp "vivado_param:project.runs.noReportGeneration=false"
 endif
 ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_0' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank0";done)
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_1' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank1";done)
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_2' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank2";done)
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_3' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank3";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_0' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank0 ";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_1' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank1 ";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_2' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank2 ";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_3' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank3 ";done)
 endif # ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
 
 ifeq ($(SYNTHESIS_FLOW),rtl)

@@ -49,7 +49,7 @@ def _print_interface(printer, kernel_name, inputs, outputs, super_source):
   for name, c_type, bank, depth in outputs + inputs:
     println('#pragma HLS interface m_axi port={} offset=slave depth={} bundle={'
             '}'.format(get_port_name(name, bank), depth,
-                       get_bundle_name(c_type, bank)), 0)
+                       get_bundle_name(name, bank)), 0)
 
   println()
   for name, _, bank, _ in outputs + inputs:

@@ -211,5 +211,5 @@ def get_func_name(module_id):
 
 get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
 get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)
-def get_bundle_name(c_type, bank):
-  return '{}_bank_{}'.format(c_type.replace('<', '_').replace('>', ''), bank)
+def get_bundle_name(name, bank):
+  return '{}_bank_{}'.format(name.replace('<', '_').replace('>', ''), bank)

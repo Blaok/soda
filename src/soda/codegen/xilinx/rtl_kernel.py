@@ -31,20 +31,20 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
   for stmt in stencil.output_stmts + stencil.input_stmts:
     for bank in stmt.dram:
       soda_type = 'uint%d' % stencil.burst_width
-      bundle_name = util.get_bundle_name(util.get_c_type(soda_type), bank)
+      bundle_name = util.get_bundle_name(stmt.name, bank)
       m_axi_names.append(bundle_name)
       m_axi_bundles.append((bundle_name, soda_type))
 
   for stmt in stencil.output_stmts:
     for bank in stmt.dram:
       soda_type = 'uint%d' % stencil.burst_width
-      bundle_name = util.get_bundle_name(util.get_c_type(soda_type), bank)
+      bundle_name = util.get_bundle_name(stmt.name, bank)
       outputs.append((util.get_port_name(stmt.name, bank), bundle_name,
                       soda_type, util.get_port_buf_name(stmt.name, bank)))
   for stmt in stencil.input_stmts:
     for bank in stmt.dram:
       soda_type = 'uint%d' % stencil.burst_width
-      bundle_name = util.get_bundle_name(util.get_c_type(soda_type), bank)
+      bundle_name = util.get_bundle_name(stmt.name, bank)
       inputs.append((util.get_port_name(stmt.name, bank), bundle_name,
                      soda_type, util.get_port_buf_name(stmt.name, bank)))
 
