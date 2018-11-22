@@ -129,6 +129,7 @@ set_part {{{part_num}}}
 create_clock -period {clock_period} -name default
 config_compile -name_max_length 253
 config_interface -m_axi_addr64
+config_rtl -disable_start_propagation
 csynth_design
 export_design
 exit
