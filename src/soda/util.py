@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from functools import reduce
 import logging
 import operator
+import signal
 
 # constants
 COORDS_TILED = 'xyzw'
@@ -213,3 +214,11 @@ get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
 get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)
 def get_bundle_name(name, bank):
   return '{}_bank_{}'.format(name.replace('<', '_').replace('>', ''), bank)
+
+def pause_for_debugging():
+  if _logger.isEnabledFor(logging.DEBUG):
+    try:
+      _logger.debug('pausing for debugging... send Ctrl-C to resume')
+      signal.pause()
+    except KeyboardInterrupt:
+      pass

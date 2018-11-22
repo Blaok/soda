@@ -3,6 +3,7 @@ import concurrent
 import logging
 import os
 import shutil
+import sys
 import tarfile
 import tempfile
 
@@ -85,13 +86,20 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
       for future in concurrent.futures.as_completed(threads):
         returncode, stdout, stderr = future.result()
         log_func = _logger.error if returncode != 0 else _logger.debug
-        log_func(stdout.decode())
-        log_func(stderr.decode())
+        if stdout:
+          log_func(stdout.decode())
+        if stderr:
+          log_func(stderr.decode())
+        if returncode != 0:
+          util.pause_for_debugging()
+          sys.exit(returncode)
 
     hdl_dir = os.path.join(tmpdir, 'hdl')
     with open(os.path.join(hdl_dir, 'Dataflow.v'), mode='w') as dataflow_v:
       print_top_module(backend.VerilogPrinter(dataflow_v),
                        stencil.dataflow_super_source, inputs, outputs)
+
+    util.pause_for_debugging()
 
     xo_filename = os.path.join(tmpdir, stencil.app_name + '.xo')
     with backend.PackageXo(xo_filename, top_name, kernel_xml, hdl_dir,
