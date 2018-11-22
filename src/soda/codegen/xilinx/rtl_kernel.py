@@ -152,9 +152,6 @@ def print_top_module(printer, super_source, inputs, outputs):
     args.append('{}_V_V{data_out}'.format(port_name, **FIFO_PORT_SUFFIXES))
     args.append('{}_V_V{not_empty}'.format(port_name, **FIFO_PORT_SUFFIXES))
     args.append('{}_V_V{read_enable}'.format(port_name, **FIFO_PORT_SUFFIXES))
-  args.append('done_V{data_out}'.format(**FIFO_PORT_SUFFIXES))
-  args.append('done_V{not_empty}'.format(**FIFO_PORT_SUFFIXES))
-  args.append('done_V{read_enable}'.format(**FIFO_PORT_SUFFIXES))
   printer.module('Dataflow', args)
   println()
 
@@ -177,9 +174,6 @@ def print_top_module(printer, super_source, inputs, outputs):
         util.get_width_in_bits(soda_type) - 1, **kwargs))
     println('input  {port_name}_V_V{not_empty};'.format(**kwargs))
     println('output {port_name}_V_V{read_enable};'.format(**kwargs))
-  println('input  done_V%s;' % FIFO_PORT_SUFFIXES['data_out'])
-  println('input  done_V%s;' % FIFO_PORT_SUFFIXES['not_empty'])
-  println('output done_V%s;' % FIFO_PORT_SUFFIXES['read_enable'])
   println()
 
   println("reg ap_done = 1'b0;")
@@ -193,9 +187,6 @@ def print_top_module(printer, super_source, inputs, outputs):
     println('wire {port_name}_V_V{write_enable};'.format(**kwargs))
   for port_name, _, soda_type, _ in inputs:
     println('wire {}_V_V{read_enable};'.format(port_name, **FIFO_PORT_SUFFIXES))
-  println('wire done_V%s;' % FIFO_PORT_SUFFIXES['read_enable'])
-  println('assign done_V%s = done_V%s;' % (FIFO_PORT_SUFFIXES['read_enable'],
-                                       FIFO_PORT_SUFFIXES['not_empty']))
   println('reg ap_rst_n_inv;')
   with printer.always('*'):
     println('ap_rst_n_inv = ap_rst;')
@@ -207,19 +198,12 @@ def print_top_module(printer, super_source, inputs, outputs):
       println("ap_idle <= 1'b1;")
       println("ap_ready <= 1'b0;")
       printer.else_()
-      with printer.if_(
-          '~ap_done & done_V{data_out} & done_V{not_empty}'.format(
-              **FIFO_PORT_SUFFIXES)):
-        println("ap_done <= 1'b1;")
-        println("ap_ready <= 1'b1;")
-      println('ap_idle = ~ap_start;')
+      println('ap_idle <= ~ap_start;')
 
   for port_name, _, _, _ in outputs:
     println('reg {}_V_V{not_block};'.format(port_name, **FIFO_PORT_SUFFIXES))
   for port_name, _, _, _ in inputs:
     println('reg {}_V_V{not_block};'.format(port_name, **FIFO_PORT_SUFFIXES))
-  println('reg done_V{not_block};'.format(**FIFO_PORT_SUFFIXES))
-
 
   with printer.always('*'):
     for port_name, _, _, _ in outputs:
@@ -228,8 +212,6 @@ def print_top_module(printer, super_source, inputs, outputs):
     for port_name, _, _, _ in inputs:
       println('{port_name}_V_V{not_block} = {port_name}_V_V{not_empty};'.format(
           port_name=port_name, **FIFO_PORT_SUFFIXES))
-    println('done_V{not_block} = done_V{not_empty};'.format(
-        **FIFO_PORT_SUFFIXES))
   println()
 
   for module in super_source.tpo_node_gen():
@@ -273,7 +255,7 @@ def print_top_module(printer, super_source, inputs, outputs):
     module_trait, module_trait_id = super_source.module_table[module]
     args = OrderedDict((('ap_clk', 'ap_clk'),
                         ('ap_rst', 'ap_rst_n_inv'),
-                        ('ap_start', 'ap_start')))
+                        ('ap_start', "1'b1")))
     for dram_ref, bank in module.dram_writes:
       kwargs = dict(port=dram_ref.dram_fifo_name(bank),
                     fifo=util.get_port_name(dram_ref.var, bank),
@@ -331,6 +313,7 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
   m_axi_ports = outputs + inputs
   print_func = printer.print_func
 
+  println('#include <cstddef>')
   println('#include <cstdint>')
   println('#include <ap_int.h>')
   println('#include <hls_stream.h>')
@@ -338,13 +321,12 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
   println('template<int kBurstWidth>')
   print_func('void BurstRead', [
       'hls::stream<ap_uint<kBurstWidth>>* to', 'ap_uint<kBurstWidth>* from',
-      'hls::stream<bool>* done', 'uint64_t data_num'], align=0)
+      'uint64_t data_num'], align=0)
   do_scope()
   println('load_epoch:', 0)
   with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
     println('#pragma HLS pipeline II=1', 0)
     println('to->write(from[epoch]);')
-    println('done->write(!(epoch + 1 < data_num));')
   un_scope()
 
   println('template<int kBurstWidth>')
@@ -358,33 +340,19 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
     println('to[epoch] = from->read();')
   un_scope()
 
-  print_func('void GenerateDone', ['hls::stream<bool>* done'] + [
-      'hls::stream<bool>* {name}_done'.format(name=port_name)
-      for port_name, _, _, _ in inputs], align=0)
-  do_scope()
-  println('bool is_done = false;')
-  with printer.for_('', '!is_done', ''):
-    println('done->write(is_done = {});'.format(' && '.join(
-        '{}_done->read()'.format(port_name) for port_name, _, _, _ in inputs)))
-  un_scope()
-
   params = ['hls::stream<{}>* {}'.format(util.get_c_type(soda_type), name)
             for name, _, soda_type, _ in m_axi_ports]
-  params.append('hls::stream<bool>* done')
   print_func('void Dataflow', params, align=0)
   do_scope()
   for name, _, soda_type, _ in inputs:
     println('volatile {c_type} {name}_read;'.format(
         c_type=util.get_c_type(soda_type), name=name))
-  println('bool is_done = false;')
-  with printer.for_('', '!is_done', ''):
-    for name, _, soda_type, _ in inputs:
-      println('{name}_read = {name}->read();'.format(name=name))
-    for name, _, soda_type, _ in outputs:
-      println(
-          '{name}->write({c_type}());'.format(
-          c_type=util.get_c_type(soda_type), name=name))
-    println('is_done = done->read();')
+  for name, _, soda_type, _ in inputs:
+    println('{name}_read = {name}->read();'.format(name=name))
+  for name, _, soda_type, _ in outputs:
+    println(
+        '{name}->write({c_type}());'.format(
+        c_type=util.get_c_type(soda_type), name=name))
   un_scope()
 
   params = ['{}* {}'.format(util.get_c_type(soda_type), name)
@@ -410,25 +378,13 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
     println('hls::stream<{c_type}> {name}("{name}");'.format(
         c_type=util.get_c_type(soda_type), name=name))
     println('#pragma HLS stream variable={name} depth=32'.format(name=name), 0)
-  println('hls::stream<bool> done("done");')
-  println('#pragma HLS stream variable=done depth=32', 0)
-  for name, _, _, _ in inputs:
-    println('hls::stream<bool> {name}_done("{name}_done");'.format(name=name))
-    println('#pragma HLS stream variable={name}_done depth=32'.format(
-        name=name), 0)
 
   for port_name, _, soda_type, buf_name in inputs:
     print_func('BurstRead', [
         '&{name}'.format(name=buf_name), '{name}'.format(name=port_name),
-        '&{name}_done'.format(name=port_name),
         'coalesced_data_num'], suffix=';', align=0)
 
-  print_func('GenerateDone', ['&done'] + [
-      '&{name}_done'.format(name=port_name) for port_name, _, _, _ in inputs],
-             suffix=';', align=0)
-
   params = ['&{}'.format(name) for _, _, _, name in m_axi_ports]
-  params.append('&done')
   printer.print_func('Dataflow', params, suffix=';', align=0)
 
   for port_name, _, soda_type, buf_name in outputs:
