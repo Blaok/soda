@@ -59,7 +59,10 @@ set tmp_ip_dir "{tmpdir}/tmp_ip_dir"
 set tmp_project "{tmpdir}/tmp_project"
 
 create_project -force kernel_pack ${{tmp_project}}
-add_files -norecurse [glob {hdl_dir}/*.v {hdl_dir}/*.sv {hdl_dir}/*.vhd]
+add_files -norecurse [glob {hdl_dir}/*.v]
+foreach tcl_file [glob -nocomplain {hdl_dir}/*.tcl] {{
+  source ${{tcl_file}}
+}}
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
 ipx::package_project -root_dir ${{tmp_ip_dir}} -vendor xilinx.com -library RTLKernel -taxonomy /KernelIP -import_files -set_current false
@@ -131,7 +134,6 @@ config_compile -name_max_length 253
 config_interface -m_axi_addr64
 config_rtl -disable_start_propagation
 csynth_design
-export_design
 exit
 '''
 
@@ -170,15 +172,7 @@ class RunHls(VivadoHls):
         solution_dir = os.path.join(self.project_dir.name, self.project_name,
                                     self.solution_name)
         tar.add(os.path.join(solution_dir, 'syn/report'), arcname='report')
-        tar.add(os.path.join(solution_dir, 'impl/ip/hdl/verilog'),
-                arcname='hdl')
-        # some IP cores are generated as VHDL files in the ip directory
-        try:
-          tar.add(os.path.join(solution_dir, 'impl/ip/hdl/ip'),
-                  arcname='hdl')
-        except FileNotFoundError:
-          # if no IP cores are generated, that directory won't exist
-          pass
+        tar.add(os.path.join(solution_dir, 'syn/verilog'), arcname='hdl')
         tar.add(os.path.join(solution_dir, self.solution_name + '.log'),
                 arcname=self.solution_name + '.log')
     self.project_dir.cleanup()
