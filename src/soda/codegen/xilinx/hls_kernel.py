@@ -467,13 +467,15 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         batch_width = sum(util.get_width_in_bits(_.soda_type)
                           for _ in dram_reads.values())
         del dram_reads
-        if burst_width > batch_width:
-          assert burst_width % batch_width == 0, 'cannot process such a burst'
+        if burst_width * num_banks >= batch_width:
+          assert burst_width * num_banks % batch_width == 0, \
+              'cannot process such a burst'
           # a single burst consumed in multiple cycles
           coalescing_factor = burst_width * num_banks // batch_width
           ii = coalescing_factor
         else:
-          assert batch_width % burst_width == 0, 'cannot process such a burst'
+          assert batch_width * num_banks % burst_width == 0, \
+              'cannot process such a burst'
           # multiple bursts consumed in a single cycle
           reassemble_factor = batch_width // (burst_width * num_banks)
           raise util.InternalError('cannot process such a burst yet')
@@ -509,13 +511,15 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         batch_width = sum(util.get_width_in_bits(_.soda_type)
                           for _ in dram_writes.values())
         del dram_writes
-        if burst_width > batch_width:
-          assert burst_width % batch_width == 0, 'cannot process such a burst'
+        if burst_width * num_banks >= batch_width:
+          assert burst_width * num_banks % batch_width == 0, \
+              'cannot process such a burst'
           # a single burst consumed in multiple cycles
           coalescing_factor = burst_width * num_banks // batch_width
           ii = coalescing_factor
         else:
-          assert batch_width % burst_width == 0, 'cannot process such a burst'
+          assert batch_width * num_banks % burst_width == 0, \
+              'cannot process such a burst'
           # multiple bursts consumed in a single cycle
           reassemble_factor = batch_width // (burst_width * num_banks)
           raise util.InternalError('cannot process such a burst yet')

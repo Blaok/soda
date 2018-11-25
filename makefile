@@ -45,7 +45,7 @@ COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quie
 
 SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0 xilinx:adm-pcie-ku3:2ddr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:4.0 xilinx:vcu1525:dynamic:5.0 xilinx:vcu1525:dynamic:5.1 xilinx:aws-vu9p-f1-04261818:dynamic:5.0
 
-HOST_CFLAGS ?= -fopenmp -I$(TMP)
+HOST_CFLAGS ?= -O2 -fopenmp -I$(TMP)
 HOST_LFLAGS ?= -fopenmp
 
 ifdef AWS_BUCKET
@@ -61,9 +61,7 @@ endif
 HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 
 CLCXX_OPT += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
-ifneq (,$(findstring aws-vu9p-f1,$(XDEVICE)))
-CLCXX_OPT += --xp "vivado_param:project.runs.noReportGeneration=false"
-endif
+CLCXX_OPT += --xp "vivado_param:project.runs.noReportGeneration=0"
 ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_0' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank0 ";done)
 CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_1' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank1 ";done)

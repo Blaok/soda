@@ -36,6 +36,11 @@ def print_load_xclbin2(printer):
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope
+  def invalid_xclbin2():
+    println('*kernel_binary = nullptr;')
+    println('fprintf(*error_report, '
+            '"ERROR: %s is not a valid xclbin2 file\\n", filename);')
+    println('return -2;')
 
   println('FILE* const* error_report = &stderr;')
   println()
@@ -54,18 +59,18 @@ def print_load_xclbin2(printer):
   println('unsigned char cipher[32];')
   println('unsigned char key_block[256];')
   println('uint64_t unique_id;')
-  println('fread(magic, sizeof(magic), 1, f);')
-  println('if(strcmp(magic, "xclbin2")!=0)')
-  do_scope()
-  println('*kernel_binary = nullptr;')
-  println('fprintf(*error_report, "ERROR: %s is not a valid xclbin2 file\\n", '
-          'filename);')
-  println('return -2;')
-  un_scope()
-  println('fread(cipher, sizeof(cipher), 1, f);')
-  println('fread(key_block, sizeof(key_block), 1, f);')
-  println('fread(&unique_id, sizeof(unique_id), 1, f);')
-  println('fread(&size, sizeof(size), 1, f);')
+  with printer.if_('fread(magic, sizeof(magic), 1, f) != 1'):
+    invalid_xclbin2()
+  with printer.if_('strcmp(magic, "xclbin2") != 0'):
+    invalid_xclbin2()
+  with printer.if_('fread(cipher, sizeof(cipher), 1, f) != 1'):
+    invalid_xclbin2()
+  with printer.if_('fread(key_block, sizeof(key_block), 1, f) != 1'):
+    invalid_xclbin2()
+  with printer.if_('fread(&unique_id, sizeof(unique_id), 1, f) != 1'):
+    invalid_xclbin2()
+  with printer.if_('fread(&size, sizeof(size), 1, f) != 1'):
+    invalid_xclbin2()
   println('char* p = new char[size+1]();')
   println('*kernel_binary = p;')
   println('memcpy(p, magic, sizeof(magic));')
@@ -345,7 +350,7 @@ def print_wrapped(printer, stencil):
   println('int err;')
   println()
   println('cl_platform_id platforms[16];')
-  println('cl_platform_id platform_id;')
+  println('cl_platform_id platform_id = 0;')
   println('cl_uint platform_count;')
   println('cl_device_id device_id;')
   println('cl_context context;')
@@ -630,6 +635,7 @@ def print_wrapped(printer, stencil):
             '1)*tile_index_dim_{0} : TILE_SIZE_DIM_{0};'.format(
                 dim, stencil.input_names[0]))
 
+  println('#pragma omp parallel for', 0)
   println('for(int32_t {0} = 0; {0} < {1}_size_dim_{2}; ++{0})'.format(
       util.COORDS_IN_TILE[stencil.dim-1], stencil.input_names[0],
       stencil.dim-1))
@@ -847,6 +853,7 @@ def print_wrapped(printer, stencil):
     overall_stencil_offset = core.get_stencil_window_offset(
         overall_stencil_window)
     overall_stencil_dim = core.get_stencil_dim(overall_stencil_window)
+    println('#pragma omp parallel for', 0)
     println('for(int32_t {var} = {}; {var} < {}_size_dim_{}-{}; ++{var})'
             ''.format(overall_stencil_offset[stencil.dim-1],
                       stencil.output_names[0], stencil.dim-1,
