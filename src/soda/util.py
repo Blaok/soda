@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from functools import reduce
 import logging
 import operator
+import signal
 
 # constants
 COORDS_TILED = 'xyzw'
@@ -137,9 +138,11 @@ def print_define(printer, var, val):
   printer.println('#endif//%s' % var)
 
 def print_guard(printer, var, val):
+  printer.println('#ifdef %s' % var)
   printer.println('#if %s != %d' % (var, val))
   printer.println('#error %s != %d' % (var, val))
   printer.println('#endif//%s != %d' % (var, val))
+  printer.println('#endif//%s' % var)
 
 def get_c_type(soda_type):
   if soda_type in {
@@ -209,7 +212,13 @@ def get_func_name(module_id):
 
 get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
 get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)
-def get_fifo_name(name, offset):
-  return 'stream_{}_offset_{}'.format(name, offset)
-def get_tensor_name_at(name, offset):
-  return 'tensor_{}_offset_{}'.format(name, offset)
+def get_bundle_name(name, bank):
+  return '{}_bank_{}'.format(name.replace('<', '_').replace('>', ''), bank)
+
+def pause_for_debugging():
+  if _logger.isEnabledFor(logging.DEBUG):
+    try:
+      _logger.debug('pausing for debugging... send Ctrl-C to resume')
+      signal.pause()
+    except KeyboardInterrupt:
+      pass

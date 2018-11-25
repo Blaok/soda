@@ -1,4 +1,4 @@
-.PHONY: csim cosim hw hls exe kernel bitstream check-afi-status mktemp check-git-status unittest pylint pre-commit
+.PHONY: check-git-status unittest pylint pre-commit
 
 APP ?= blur
 SDA_VER ?= 2017.4
@@ -12,6 +12,7 @@ DRAM_OUT ?= 0
 ITERATE ?= 1
 CLUSTER ?= none
 BORDER ?= ignore
+SYNTHESIS_FLOW ?= hls
 
 ifneq ("$(REPLICATION_FACTOR)","")
 FACTOR_ARGUMENT := --replication-factor $(REPLICATION_FACTOR)
@@ -40,14 +41,8 @@ RPT ?= rpt/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 TMP ?= tmp/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 SRC ?= $(TMP)
 
-AWS_AFI_DIR ?= afis
-AWS_AFI_LOG ?= logs
-CXX ?= g++
-CLCXX ?= xocc
 COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quiet || echo '-dirty')
 
-XILINX_SDACCEL ?= /opt/tools/xilinx/SDx/$(SDA_VER)
-WITH_SDACCEL = SDA_VER=$(SDA_VER) with-sdaccel
 SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0 xilinx:adm-pcie-ku3:2ddr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:4.0 xilinx:vcu1525:dynamic:5.0 xilinx:vcu1525:dynamic:5.1 xilinx:aws-vu9p-f1-04261818:dynamic:5.0
 
 HOST_CFLAGS ?= -fopenmp -I$(TMP)
@@ -70,29 +65,39 @@ ifneq (,$(findstring aws-vu9p-f1,$(XDEVICE)))
 CLCXX_OPT += --xp "vivado_param:project.runs.noReportGeneration=false"
 endif
 ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank0+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank1+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M01_AXI ";done)
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank2+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M02_AXI ";done)
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=chan[0-9]+bank3+[io]' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'chan[0-9]+bank[0-9]+[io]'|sort -u);do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M03_AXI ";done)
-CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle=gmem[0-9]+'       $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE 'gmem[0-9]+'                  );do echo -n "--xp misc:map_connect=add.kernel.$(APP)_kernel_1.M_AXI_$${bundle^^}.core.OCL_REGION_0.M00_AXI ";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_0' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank0 ";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_1' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank1 ";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_2' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank2 ";done)
+CLCXX_OPT += $(shell for bundle in $$(grep -E '^\s*\#pragma\s+[Hh][Ll][Ss]\s+[Ii][Nn][Tt][Ee][Rr][Ff][Aa][Cc][Ee]\s+.*bundle\s*=\s*[a-zA-Z]\w*_bank_3' $(addprefix $(TMP)/,$(KERNEL_SRCS))|grep -oE '[a-zA-Z]\w*_bank_[0-9]'|sort -u);do echo -n "--sp $(APP)_kernel_1.m_axi_$${bundle}:bank3 ";done)
 endif # ifneq ("$(XDEVICE)","xilinx:adm-pcie-7v3:1ddr:3.0")
 
+ifeq ($(SYNTHESIS_FLOW),rtl)
+COSIM_XCLBIN = $(APP)-cosim-rtl-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr-$(subst :,_,$(DRAM_IN))-$(subst :,_,$(DRAM_OUT))-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+HW_XCLBIN = $(APP)-hw-rtl-tile$(TILE_SIZE_DIM_0)$(if $(TILE_SIZE_DIM_1),x$(TILE_SIZE_DIM_1))-$(FACTOR_SUFFIX)-ddr-$(subst :,_,$(DRAM_IN))-$(subst :,_,$(DRAM_OUT))-iterate$(ITERATE)-border-$(BORDER)d-$(CLUSTER)-clustered.xclbin
+endif
+
 include sdaccel-examples/makefile
+
+ifeq ($(SYNTHESIS_FLOW),rtl)
+$(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SODA_SRC)/$(APP).soda
+	@mkdir -p $(TMP) $(OBJ)
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-platform $(XILINX_SDX)/platforms/$(PLATFORM) --xocl-hw-xo $@ $(SODA_SRC)/$(APP).soda
+endif
 
 check-git-status:
 	@echo $(COMMIT)
 
 $(TMP)/$(KERNEL_SRCS): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --kernel-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-kernel $@ $^
 
 $(TMP)/$(HOST_BIN).cpp: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --source-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-host $@ $^
 
 $(TMP)/$(APP).h: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --header-file $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-header $@ $^
 
 $(OBJ)/%.o: $(TMP)/%.cpp $(TMP)/$(APP).h
 	@mkdir -p $(OBJ)

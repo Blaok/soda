@@ -1,8 +1,9 @@
-from collections import deque
-from collections import OrderedDict
+from collections import Iterable, OrderedDict, deque
 import copy
 import logging
 import math
+
+from cached_property import cached_property
 
 from soda import grammar
 from soda import util
@@ -101,6 +102,60 @@ class Module(object):
     for fifo in self.exprs:
       obj.exprs[fifo] = self.exprs[fifo].visit(callback, args)
     return obj
+
+  @property
+  def dram_reads(self):
+    return self._interfaces['dram_reads']
+
+  @property
+  def dram_writes(self):
+    return self._interfaces['dram_writes']
+
+  @property
+  def input_fifos(self):
+    return self._interfaces['input_fifos']
+
+  @property
+  def output_fifos(self):
+    return self._interfaces['output_fifos']
+
+  @cached_property
+  def _interfaces(self):
+    def get_load_set(obj, loads):
+      if isinstance(obj, FIFO):
+        loads[obj] = None
+      return obj
+    loads = OrderedDict()
+    self.visit_loads(get_load_set, loads)
+    loads = tuple(loads)
+
+    # find dram reads
+    reads_in_lets = tuple(_.expr for _ in self.lets)
+    reads_in_exprs = tuple(self.exprs.values())
+    dram_reads = OrderedDict()
+    for dram_ref in get_dram_refs(reads_in_lets + reads_in_exprs):
+      for bank in dram_ref.dram:
+        dram_reads[(dram_ref.var, bank)] = (dram_ref, bank)
+    dram_reads = tuple(dram_reads.values())
+
+    # find dram writes
+    writes_in_lets = tuple(_.name for _ in self.lets
+                           if not isinstance(_.name, str))
+    dram_writes = OrderedDict()
+    for dram_ref in get_dram_refs(writes_in_lets):
+      for bank in dram_ref.dram:
+        dram_writes[(dram_ref.var, bank)] = (dram_ref, bank)
+    dram_writes = tuple(dram_writes.values())
+
+    output_fifos = tuple(_.c_expr for _ in self.exprs)
+    input_fifos = tuple(_.c_expr for _ in loads)
+
+    return {
+        'dram_writes' : dram_writes,
+        'output_fifos' : output_fifos,
+        'input_fifos' : input_fifos,
+        'dram_reads' : dram_reads
+    }
 
   def __str__(self):
     return '%s @ 0x%x: %s' % (type(self).__name__, id(self),
@@ -420,3 +475,61 @@ class ModuleTrait(grammar.Node):
         util.idx2str(self.loads),
         util.idx2str(self.lets),
         util.idx2str(self.exprs))
+
+  @property
+  def dram_reads(self):
+    return self._interfaces['dram_reads']
+
+  @property
+  def dram_writes(self):
+    return self._interfaces['dram_writes']
+
+  @property
+  def input_fifos(self):
+    return self._interfaces['input_fifos']
+
+  @property
+  def output_fifos(self):
+    return self._interfaces['output_fifos']
+
+  @cached_property
+  def _interfaces(self):
+    # find dram reads
+    reads_in_lets = tuple(_.expr for _ in self.lets)
+    reads_in_exprs = tuple(self.exprs)
+    dram_reads = OrderedDict()
+    for dram_ref in get_dram_refs(reads_in_lets + reads_in_exprs):
+      for bank in dram_ref.dram:
+        dram_reads[(dram_ref.var, bank)] = (dram_ref, bank)
+    dram_reads = tuple(dram_reads.values())
+
+    # find dram writes
+    writes_in_lets = tuple(_.name for _ in self.lets
+                           if not isinstance(_.name, str))
+    dram_writes = OrderedDict()
+    for dram_ref in get_dram_refs(writes_in_lets):
+      for bank in dram_ref.dram:
+        dram_writes[(dram_ref.var, bank)] = (dram_ref, bank)
+    dram_writes = tuple(dram_writes.values())
+
+    output_fifos = tuple('{}{}'.format(FIFORef.ST_PREFIX, idx)
+                         for idx, expr in enumerate(self.exprs))
+    input_fifos = tuple(_.ld_name for _ in self.loads)
+
+    return {
+        'dram_writes' : dram_writes,
+        'output_fifos' : output_fifos,
+        'input_fifos' : input_fifos,
+        'dram_reads' : dram_reads
+    }
+
+def get_dram_refs(obj):
+  if isinstance(obj, Iterable):
+    return sum(map(get_dram_refs, obj), [])
+  dram_refs = []
+  def get_dram_refs_callback(obj, args):
+    if isinstance(obj, DRAMRef):
+      args.append(obj)
+    return obj
+  obj.visit(get_dram_refs_callback, dram_refs)
+  return dram_refs

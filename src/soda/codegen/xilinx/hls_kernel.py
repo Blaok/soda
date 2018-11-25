@@ -4,100 +4,67 @@ import logging
 import operator
 
 from haoda import ir
-from soda import core
 from soda import grammar
 from soda import util
 
 _logger = logging.getLogger('__main__').getChild(__name__)
 
-def _print_interface(printer, stencil):
+def _print_interface(printer, kernel_name, inputs, outputs, super_source):
+  """Prints the top-level module for the given arguments.
+
+  Prints the top-level interfaces and sub-module instances with proper interface
+  pragmas, hls::stream declarations and references, and module function calls.
+  Currently only streaming applications are supported.
+
+  Args:
+    printer: Printer to which the code is emitted.
+    kernel_name: str, name of the kernel.
+    inputs: Sequence of (name, c_type, bank, depth) tuples, specifies the m_axi
+      input interfaces.
+    outputs: Sequence of (name, c_type, bank, depth) tuples, specifies the m_axi
+      output interfaces.
+    super_source: SuperSourceNode of a DAG of HAODA nodes.
+  """
   println = printer.println
   do_indent = printer.do_indent
   un_indent = printer.un_indent
   do_scope = printer.do_scope
   un_scope = printer.un_scope
-  tile_size = stencil.tile_size
-  unroll_factor = stencil.unroll_factor
-  app_name = stencil.app_name
-  super_source = stencil.dataflow_super_source
-  burst_width = stencil.burst_width
 
-  _logger.info('generate reuse buffers')
-  reuse_buffers = stencil.reuse_buffers
-  all_points = stencil.all_points
-  next_fifo = stencil.next_fifo
-  overall_stencil_window = core.get_overall_stencil_window(
-      stencil.tensors[stencil.input_names[0]],
-      stencil.tensors[stencil.output_names[0]])
-
-  outputs = [(stmt.name, bank) for stmt in stencil.output_stmts
-                               for bank in sorted(stmt.dram)]
-  inputs = [(stmt.name, bank) for stmt in stencil.input_stmts
-                              for bank in sorted(stmt.dram)]
-
+  get_bundle_name = util.get_bundle_name
   get_port_name = util.get_port_name
   get_port_buf_name = util.get_port_buf_name
-  get_fifo_name = util.get_fifo_name
-  get_tensor_name_at = util.get_tensor_name_at
 
   println('extern "C"')
   println('{')
   println()
-  println('void %s_kernel(' % app_name)
+  println('void %s(' % kernel_name)
   do_indent()
-  for name, bank in outputs + inputs:
-    println('ap_uint<BURST_WIDTH>* {},'.format(get_port_name(name, bank)))
-  for param in stencil.param_names:
-    println('%s* var_%s,' % (param.type, param.name))
-  println('uint64_t coalesced_data_num,')
-  println('uint64_t tile_data_num,')
-  for i in range(stencil.dim-1):
-    println('uint32_t input_bound_dim_%d,' % i)
-  for d in range(stencil.dim-1):
-    println('uint32_t input_size_dim_%d,' % d)
-  println('uint32_t input_size_dim_%d)' % (stencil.dim-1))
+  for name, c_type, bank, _ in outputs + inputs:
+    println('{}* {},'.format(c_type, get_port_name(name, bank)))
+  println('uint64_t coalesced_data_num)')
   un_indent()
   do_scope()
 
-  for name, bank in outputs:
-    println('#pragma HLS interface m_axi port={} offset=slave depth=65536 '
-            'bundle={} latency=120'.format(get_port_name(name, bank),
-                                           get_port_name(name, bank)), 0)
-  for name, bank in inputs:
-    println('#pragma HLS interface m_axi port={} offset=slave depth=65536 '
-            'bundle={} latency=120'.format(get_port_name(name, bank),
-                                           get_port_name(name, bank)), 0)
-
-  for idx, param in enumerate(stencil.param_stmts):
-    println('#pragma HLS interface m_axi port=var_{} offset=slave depth={} '
-            'bundle=gmem{} latency=120'.format(
-                param.name, reduce(operator.mul, param.size), idx), 0)
+  for name, c_type, bank, depth in outputs + inputs:
+    println('#pragma HLS interface m_axi port={} offset=slave depth={} bundle={'
+            '}'.format(get_port_name(name, bank), depth,
+                       get_bundle_name(name, bank)), 0)
 
   println()
-  for name, bank in outputs + inputs:
-    println('#pragma HLS interface s_axilite port={} '
-            'bundle=control'.format(get_port_name(name, bank)), 0)
+  for name, _, bank, _ in outputs + inputs:
+    println('#pragma HLS interface s_axilite port={} bundle=control'.format(
+        get_port_name(name, bank)), 0)
 
-  for param in stencil.param_stmts:
-    println('#pragma HLS interface s_axilite port=var_{} '
-            'bundle=control'.format(param.name), 0)
   println('#pragma HLS interface s_axilite port=coalesced_data_num '
           'bundle=control', 0)
-  println('#pragma HLS interface s_axilite port=tile_data_num '
-          'bundle=control', 0)
-  for d in range(stencil.dim-1):
-    println('#pragma HLS interface s_axilite port=input_bound_dim_%d '
-            'bundle=control' % d, 0)
-  for d in range(stencil.dim):
-    println('#pragma HLS interface s_axilite port=input_size_dim_%d '
-            'bundle=control' % d, 0)
   println('#pragma HLS interface s_axilite port=return bundle=control', 0)
   println()
 
   # port buf declarations
-  for name, bank in inputs + outputs:
-    println('hls::stream<Data<ap_uint<BURST_WIDTH>>> {0}("{0}");'.format(
-        get_port_buf_name(name, bank)))
+  for name, c_type, bank, _ in inputs + outputs:
+    println('hls::stream<Data<{c_type}>> {name}("{name}");'.format(
+        name=get_port_buf_name(name, bank), c_type=c_type))
   # port buf depths
     println('#pragma HLS stream variable={} depth=32'.format(
         get_port_buf_name(name, bank)), 0)
@@ -106,7 +73,7 @@ def _print_interface(printer, stencil):
   println()
 
   # internal fifos
-  for node in stencil.dataflow_super_source.tpo_node_gen():
+  for node in super_source.tpo_node_gen():
     for fifo in node.fifos:
       println('hls::stream<Data<{0}>> {1}("{1}");'.format(fifo.c_type,
                                                           fifo.c_expr))
@@ -175,11 +142,6 @@ def _print_interface(printer, stencil):
   extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
   '''
 
-  # TODO: fix this number
-  println('uint64_t epoch_num = coalesced_data_num*{}/{};'.format(
-      stencil.burst_width//sum(util.get_width_in_bits(_)
-                               for _ in stencil.input_types),
-      unroll_factor))
   println()
 
   # TODO: replication not supported
@@ -279,15 +241,15 @@ def _print_interface(printer, stencil):
   '''
 
   println('#pragma HLS dataflow', 0)
-  for name, bank in inputs:
+  for name, _, bank, _ in inputs:
     println('BurstRead(&{}, {}, coalesced_data_num);'.format(
         get_port_buf_name(name, bank), get_port_name(name, bank)))
 
   for node in super_source.tpo_node_gen():
-    module_trait_id = stencil.module_table[node][1]
+    module_trait_id = super_source.module_table[node][1]
     _print_module_func_call(printer, node, module_trait_id)
 
-  for name, bank in outputs:
+  for name, _, bank, _ in outputs:
     println('BurstWrite({}, &{}, coalesced_data_num);'.format(
         get_port_name(name, bank), get_port_buf_name(name, bank)))
 
@@ -406,42 +368,35 @@ def print_code(stencil, output_file):
   printer.println()
   '''
 
-  _print_interface(printer, stencil)
+  outputs = []
+  inputs = []
+  for stmt in stencil.output_stmts:
+    for bank in sorted(stmt.dram):
+      outputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
+                      65536))
+  for stmt in stencil.input_stmts:
+    for bank in sorted(stmt.dram):
+      inputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
+                     65536))
+  for stmt in stencil.param_stmts:
+    inputs.append(('var_%s' % stmt.name, stmt.type, 0,
+                    reduce(operator.mul, stmt.size)))
+  _print_interface(printer, stencil.app_name + '_kernel', inputs, outputs,
+                   stencil.dataflow_super_source)
 
 def _print_module_func_call(printer, node, module_trait_id, **kwargs):
   println = printer.println
   print_func = printer.print_func
   func_name = util.get_func_name(module_trait_id)
-  func_lower_name = util.get_module_name(module_trait_id)
 
-  def get_load_set(obj, loads):
-    if isinstance(obj, ir.FIFO):
-      loads[obj] = None
-    return obj
-  loads = OrderedDict()
-  node.visit_loads(get_load_set, loads)
-  loads = tuple(loads)
-
-  # find dram reads
-  reads_in_lets = tuple(_.expr for _ in node.lets)
-  reads_in_exprs = tuple(node.exprs.values())
-  dram_reads = OrderedDict()
-  for dram_ref in core.get_dram_refs(reads_in_lets + reads_in_exprs):
-    for bank in dram_ref.dram:
-      dram_reads[util.get_port_buf_name(dram_ref.var, bank)] = None
-  dram_reads = tuple('/* input*/ &' + _ for _ in dram_reads)
-
-  # find dram writes
-  writes_in_lets = tuple(_.name for _ in node.lets
-                         if not isinstance(_.name, str))
-  dram_writes = OrderedDict()
-  for dram_ref in core.get_dram_refs(writes_in_lets):
-    for bank in dram_ref.dram:
-      dram_writes[util.get_port_buf_name(dram_ref.var, bank)] = None
-  dram_writes = tuple('/*output*/ &' + _ for _ in dram_writes)
-
-  output_fifos = tuple('/*output*/ &' + _.c_expr for _ in node.exprs)
-  input_fifos = tuple('/* input*/ &' + _.c_expr for _ in loads)
+  dram_reads = tuple(
+      '/* input*/ &' + util.get_port_buf_name(dram_ref.var, bank)
+      for dram_ref, bank in node.dram_reads)
+  dram_writes = tuple(
+      '/*output*/ &' + util.get_port_buf_name(dram_ref.var, bank)
+      for dram_ref, bank in node.dram_writes)
+  output_fifos = tuple('/*output*/ &' + _ for _ in node.output_fifos)
+  input_fifos = tuple('/* input*/ &' + _ for _ in node.input_fifos)
   params = dram_writes + output_fifos + input_fifos + dram_reads
 
   print_func(func_name, params, suffix=';', align=0)
@@ -453,8 +408,6 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   un_scope = printer.un_scope
   do_indent = printer.do_indent
   un_indent = printer.un_indent
-  fifo_st_prefix = 'fifo_st_'
-  fifo_ref_prefix = 'fifo_ref_'
   read_fifo_func = 'ReadFIFO'
   func_name = util.get_func_name(module_trait_id)
   func_lower_name = util.get_module_name(module_trait_id)
@@ -474,7 +427,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   fifo_loads = tuple('/* input*/ hls::stream<Data<{}>>* {}'.format(
       _.c_type, _.ld_name) for _ in module_trait.loads)
   fifo_stores = tuple('/*output*/ hls::stream<Data<{}>>* {}{}'.format(
-      expr.c_type, fifo_st_prefix, idx)
+      expr.c_type, ir.FIFORef.ST_PREFIX, idx)
     for idx, expr in enumerate(module_trait.exprs))
 
   # look for DRAM access
@@ -482,8 +435,8 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   writes_in_lets = tuple(_.name for _ in module_trait.lets
                          if not isinstance(_.name, str))
   reads_in_exprs = module_trait.exprs
-  dram_reads = core.get_dram_refs(reads_in_lets + reads_in_exprs)
-  dram_writes = core.get_dram_refs(writes_in_lets)
+  dram_reads = ir.get_dram_refs(reads_in_lets + reads_in_exprs)
+  dram_writes = ir.get_dram_refs(writes_in_lets)
   drams = ()
   dram_read_map = OrderedDict()
   dram_write_map = OrderedDict()
@@ -578,6 +531,17 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   printer.print_func('void {func_name}'.format(**locals()),
                      fifo_stores+fifo_loads, align=0)
   do_scope(func_name)
+
+  for dram_ref, bank in module_trait.dram_writes:
+    println('#pragma HLS data_pack variable = {}'.format(
+        dram_ref.dram_fifo_name(bank)), 0)
+  for arg in module_trait.output_fifos:
+    println('#pragma HLS data_pack variable = %s' % arg, 0)
+  for arg in module_trait.input_fifos:
+    println('#pragma HLS data_pack variable = %s' % arg, 0)
+  for dram_ref, bank in module_trait.dram_reads:
+    println('#pragma HLS data_pack variable = {}'.format(
+        dram_ref.dram_fifo_name(bank)), 0)
 
   # print inter-iteration declarations
   for delay in delays:
@@ -708,7 +672,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     for coalescing_idx in range(coalescing_factor):
       for idx, expr in enumerate(module_trait.exprs):
         println('WriteData({}{}, {}, {});'.format(
-            fifo_st_prefix, idx,
+            ir.FIFORef.ST_PREFIX, idx,
             expr.visit(mutate_dram_ref_for_reads, {
                 'coalescing_idx': coalescing_idx, 'unroll_factor': len(
                     dram_read_map[expr.var][expr.dram])}).c_expr,
@@ -716,7 +680,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   else:
     for idx, expr in enumerate(module_trait.exprs):
       println('WriteData({}{}, {}({}), enabled);'.format(
-              fifo_st_prefix, idx, expr.c_type, expr.c_expr))
+              ir.FIFORef.ST_PREFIX, idx, expr.c_type, expr.c_expr))
 
   for delay in delays:
     println(delay.c_buf_store)

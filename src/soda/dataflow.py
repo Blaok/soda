@@ -2,6 +2,8 @@ from collections import OrderedDict
 from collections import defaultdict
 import logging
 
+from cached_property import cached_property
+
 from haoda import ir
 from soda import util
 from soda import grammar
@@ -49,6 +51,24 @@ class SuperSourceNode(ir.Module):
   @property
   def name(self):
     return 'super_source'
+
+  @cached_property
+  def module_table(self):
+    """Returns a Node to (module_trait, module_trait_id) map."""
+    self._module_traits = OrderedDict()
+    module_table = OrderedDict()
+    for node in self.tpo_node_gen():
+      self._module_traits.setdefault(ir.ModuleTrait(node), []).append(node)
+    for idx, module_trait in enumerate(self._module_traits):
+      for node in self._module_traits[module_trait]:
+        module_table[node] = module_trait, idx
+    return module_table
+
+  @cached_property
+  def module_traits(self):
+    # pylint: disable=pointless-statement
+    self.module_table
+    return tuple(self._module_traits)
 
 class SuperSinkNode(ir.Module):
   """A node representing the super sink in the dataflow graph.

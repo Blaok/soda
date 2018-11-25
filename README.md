@@ -2,7 +2,7 @@
 
 ## Publication
 
-+ **Yuze Chi**, Jason Cong, Peng Wei, Peipei Zhou. SODA: Stencil with Optimized Dataflow Architecture. To appear in ICCAD, 2018. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/iccad18.pdf)
++ **Yuze Chi**, Jason Cong, Peng Wei, Peipei Zhou. SODA: Stencil with Optimized Dataflow Architecture. In ICCAD, 2018. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/iccad18.pdf) [[Slides]](https://about.blaok.me/pub/iccad18.slides.pdf)
 
 ## SODA DSL Example
 
@@ -40,6 +40,7 @@
 ## TODOs
 
 + [x] support multiple inputs & outputs
++ [x] use RTL flow to accelerate HLS
 
 ## Design Considerations
 
@@ -69,16 +70,16 @@
     make csim
 
 ### Generate HDL code
-    make hls
+    make hls SYNTHESIS_FLOW=rtl
     
 ### Run Co-Sim
-    make cosim
+    make cosim SYNTHESIS_FLOW=rtl
     
 ### Generate FPGA Bitstream
-    make bitstream
+    make bitstream SYNTHESIS_FLOW=rtl
     
 ### Run Bitstream
-    make hw # requires actual FPGA hardware and driver
+    make hw SYNTHESIS_FLOW=rtl # requires actual FPGA hardware and driver
 
 ## Code Snippets
 
