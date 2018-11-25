@@ -3,7 +3,7 @@ import logging
 
 from soda import util
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 SODA_GRAMMAR = r'''
 SodaProgram:

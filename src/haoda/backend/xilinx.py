@@ -10,7 +10,7 @@ import zipfile
 
 from soda import util
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 class Vivado(subprocess.Popen):
   """Call vivado with the given tcl commands and arguments.

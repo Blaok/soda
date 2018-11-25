@@ -8,7 +8,7 @@ from haoda import ir
 from soda import util
 from soda import grammar
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 class SuperSourceNode(ir.Module):
   """A node representing the super source in the dataflow graph.

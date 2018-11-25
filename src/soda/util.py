@@ -15,7 +15,7 @@ TYPE_WIDTH = {
 }
 MAX_DRAM_BANK = 4
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 class InternalError(Exception):
   pass

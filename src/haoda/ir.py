@@ -8,7 +8,7 @@ from cached_property import cached_property
 from soda import grammar
 from soda import util
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 class FIFO(grammar.Node):
   """A reference to another node in a soda.grammar.Expr.
