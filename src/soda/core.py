@@ -10,7 +10,7 @@ from soda import dataflow
 from soda import grammar
 from soda import util
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 class Tensor(object):
   """A tensor that corresponse to an input, local, or output.

@@ -7,7 +7,7 @@ from haoda import ir
 from soda import grammar
 from soda import util
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 def _print_interface(printer, kernel_name, inputs, outputs, super_source):
   """Prints the top-level module for the given arguments.

@@ -8,7 +8,7 @@ from soda import core
 from soda import dataflow
 from soda.model import resource
 
-logger = logging.getLogger('__main__').getChild(__name__)
+logger = logging.getLogger().getChild(__name__)
 
 record = {}
 

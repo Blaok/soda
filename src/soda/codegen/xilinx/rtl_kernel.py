@@ -11,7 +11,7 @@ from haoda.backend import xilinx as backend
 from soda import util
 from soda.codegen.xilinx import hls_kernel
 
-_logger = logging.getLogger('__main__').getChild(__name__)
+_logger = logging.getLogger().getChild(__name__)
 
 def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
   """Generate hardware object file for the given Stencil.
