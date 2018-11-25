@@ -630,6 +630,7 @@ def print_wrapped(printer, stencil):
             '1)*tile_index_dim_{0} : TILE_SIZE_DIM_{0};'.format(
                 dim, stencil.input_names[0]))
 
+  println('#pragma omp parallel for', 0)
   println('for(int32_t {0} = 0; {0} < {1}_size_dim_{2}; ++{0})'.format(
       util.COORDS_IN_TILE[stencil.dim-1], stencil.input_names[0],
       stencil.dim-1))
@@ -847,6 +848,7 @@ def print_wrapped(printer, stencil):
     overall_stencil_offset = core.get_stencil_window_offset(
         overall_stencil_window)
     overall_stencil_dim = core.get_stencil_dim(overall_stencil_window)
+    println('#pragma omp parallel for', 0)
     println('for(int32_t {var} = {}; {var} < {}_size_dim_{}-{}; ++{var})'
             ''.format(overall_stencil_offset[stencil.dim-1],
                       stencil.output_names[0], stencil.dim-1,
