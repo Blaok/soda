@@ -245,8 +245,8 @@ class Stencil():
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.output_stmts)))
 
-    for tensor in self.tensors.values():
-      tensor.expr, tensor.lets = arithmetic.simplify(tensor.expr, tensor.lets)
+    for stmt in itertools.chain(self.local_stmts, self.output_stmts):
+      stmt.expr, stmt.let = arithmetic.simplify(stmt.expr, stmt.let)
 
     # soda frontend successfully parsed
     # triggers cached property
