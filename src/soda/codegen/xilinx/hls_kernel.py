@@ -401,14 +401,11 @@ def _print_module_func_call(printer, node, module_trait_id, **kwargs):
 
   print_func(func_name, params, suffix=';', align=0)
 
-# pylint: disable=too-many-branches
+# pylint: disable=too-many-branches,too-many-statements
 def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope
-  do_indent = printer.do_indent
-  un_indent = printer.un_indent
-  read_fifo_func = 'ReadFIFO'
   func_name = util.get_func_name(module_trait_id)
   func_lower_name = util.get_module_name(module_trait_id)
   ii = 1
@@ -437,7 +434,6 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   reads_in_exprs = module_trait.exprs
   dram_reads = ir.get_dram_refs(reads_in_lets + reads_in_exprs)
   dram_writes = ir.get_dram_refs(writes_in_lets)
-  drams = ()
   dram_read_map = OrderedDict()
   dram_write_map = OrderedDict()
   all_dram_reads = ()
@@ -477,7 +473,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
           assert batch_width * num_banks % burst_width == 0, \
               'cannot process such a burst'
           # multiple bursts consumed in a single cycle
-          reassemble_factor = batch_width // (burst_width * num_banks)
+          # reassemble_factor = batch_width // (burst_width * num_banks)
           raise util.InternalError('cannot process such a burst yet')
       dram_reads = tuple(next(iter(_.values()))
                          for _ in dram_read_map[var].values())
@@ -521,7 +517,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
           assert batch_width * num_banks % burst_width == 0, \
               'cannot process such a burst'
           # multiple bursts consumed in a single cycle
-          reassemble_factor = batch_width // (burst_width * num_banks)
+          # reassemble_factor = batch_width // (burst_width * num_banks)
           raise util.InternalError('cannot process such a burst yet')
       dram_writes = tuple(next(iter(_.values()))
                           for _ in dram_write_map[var].values())
@@ -553,9 +549,9 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     println(delay.c_ptr_decl)
 
   # print loop
-  println('{func_lower_name}_epoch:'.format(**locals()), indent=0)
+  println('{}_epoch:'.format(func_lower_name), indent=0)
   println('for (bool enable = true; enable;)')
-  do_scope('for {func_lower_name}_epoch'.format(**locals()))
+  do_scope('for {}_epoch'.format(func_lower_name))
   println('#pragma HLS pipeline II=%d' % ii, 0)
   for delay in delays:
     println('#pragma HLS dependence variable=%s inter false' %

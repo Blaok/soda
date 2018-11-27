@@ -97,7 +97,7 @@ FixedType: /u?int[1-9]\d*(_[1-9]\d*)?/;
 FloatType: /float[1-9]\d*(_[1-9]\d*)?/ | 'float' | 'double' | 'half';
 '''
 
-class Node(object):
+class Node():
   """A immutable, hashable IR node.
   """
   SCALAR_ATTRS = ()

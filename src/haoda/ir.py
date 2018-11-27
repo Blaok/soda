@@ -56,7 +56,7 @@ class FIFO(grammar.Node):
   def c_expr(self):
     return 'from_{}_to_{}'.format(self.write_module.name, self.read_module.name)
 
-class Module(object):
+class Module():
   """A node in the dataflow graph.
 
   This is the base class for a dataflow module. It defines the parent (input)
