@@ -12,7 +12,7 @@ from soda import util
 
 _logger = logging.getLogger().getChild(__name__)
 
-class Tensor(object):
+class Tensor():
   """A tensor that corresponse to an input, local, or output.
 
   This class is used in the high-level DAG for stencil dependency analysis.
@@ -149,7 +149,7 @@ class Tensor(object):
   def is_consumer(self):
     return not self.is_input()
 
-class Stencil(object):
+class Stencil():
   """
   Attributes:
     iterate: int, number of iteration to implement.
@@ -332,19 +332,18 @@ class Stencil(object):
         if iteration > 0:
           return name+'_iter%d' % iteration
         return name
-      elif name in self.output_names:
+      if name in self.output_names:
         if iteration < self.iterate-1:
           return (self.input_names[self.output_names.index(name)]+
                   '_iter%d' % (iteration+1))
         return name
-      elif name in self.local_names:
+      if name in self.local_names:
         if iteration > 0:
           return name+'_iter%d' % iteration
         return name
-      elif name in self.param_names:
+      if name in self.param_names:
         return name
-      else:
-        raise util.InternalError('unknown name: %s' % name)
+      raise util.InternalError('unknown name: %s' % name)
 
     for iteration in range(self.iterate):
       _logger.debug('iterate %s', iteration)

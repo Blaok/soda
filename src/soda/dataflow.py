@@ -120,7 +120,7 @@ class ComputeNode(ir.Module):
   def name(self):
     return '{}_pe_{}'.format(self.tensor.name, self.pe_id)
 
-# pylint: disable=too-many-branches
+# pylint: disable=too-many-branches,too-many-statements
 def create_dataflow_graph(stencil):
   chronological_tensors = stencil.chronological_tensors
   super_source = SuperSourceNode()
@@ -132,16 +132,14 @@ def create_dataflow_graph(stencil):
   def color_id(node):
     if node.__class__ is (ir.Module):
       return repr(node)
-    elif node.__class__ is SuperSourceNode:
+    if node.__class__ is SuperSourceNode:
       return '\033[33msuper source\033[0m'
-    elif node.__class__ is SuperSinkNode:
+    if node.__class__ is SuperSinkNode:
       return '\033[36msuper sink\033[0m'
-    elif node.__class__ is ForwardNode:
-      return ('\033[32mforward %s @%d\033[0m' %
-          (node.tensor.name, node.offset))
-    elif node.__class__ is ComputeNode:
-      return ('\033[31mcompute %s #%d\033[0m' %
-          (node.tensor.name, node.pe_id))
+    if node.__class__ is ForwardNode:
+      return '\033[32mforward %s @%d\033[0m' % (node.tensor.name, node.offset)
+    if node.__class__ is ComputeNode:
+      return '\033[31mcompute %s #%d\033[0m' % (node.tensor.name, node.pe_id)
     return 'unknown node'
 
   def color_attr(node):

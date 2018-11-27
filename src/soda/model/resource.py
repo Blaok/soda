@@ -3,7 +3,7 @@ from collections import OrderedDict
 import json
 import sys
 
-class XilinxHLSReport(object):
+class XilinxHLSReport():
   def __init__(self, rpt_file):
     def get_resource_dict(resources, usages):
       usage = OrderedDict()
@@ -170,7 +170,7 @@ class XilinxHLSReport(object):
         raise ReportSemanticError(msg)
     return True
 
-class XilinxPostRoutingReport(object):
+class XilinxPostRoutingReport():
   def __init__(self, rpt_file):
     for line in rpt_file:
       line_splited = line.split('|')

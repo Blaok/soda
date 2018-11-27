@@ -26,7 +26,7 @@ class SemanticError(Exception):
 class SemanticWarn(Exception):
   pass
 
-class Printer(object):
+class Printer():
   def __init__(self, out):
     self._out = out
     self._indent = 0
