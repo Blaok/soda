@@ -1107,20 +1107,24 @@ def print_test(printer, stencil):
           output_idx[dim], dim, stencil_dim[dim]-output_idx[dim]-1,
           var=util.COORDS_IN_ORIG[dim]))
       do_scope()
+
     def mutate_load_for_host(obj, args):
       if isinstance(obj, grammar.Ref):
         if obj.name in stencil.param_names:
-          return '%s_img%s' % (obj.name, ''.join('[%d]' % _ for _ in obj.idx))
-        return '%s_img[%s]' % (obj.name, '+'.join('(%c%+d)*%s.stride[%d]' % (
+          return grammar.make_var('%s_img%s' % (
+              obj.name, ''.join('[%d]' % _ for _ in obj.idx)))
+        return grammar.make_var('%s_img[%s]' % (
+            obj.name, '+'.join('(%c%+d)*%s.stride[%d]' % (
                 util.COORDS_IN_ORIG[d], obj.idx[d] - tensor.st_ref.idx[d],
-                obj.name, d) for d in range(stencil.dim)))
+                obj.name, d) for d in range(stencil.dim))))
       return obj
     def mutate_store_for_host(obj, args):
       if isinstance(obj, grammar.Ref):
         if obj.name in stencil.output_names:
-          return'%s result_%s' % (obj.c_type, obj.name)
-        return '%s_img[%s]' % (obj.name, '+'.join('%c*%s.stride[%d]' % (
-            util.COORDS_IN_ORIG[d], obj.name, d) for d in range(stencil.dim)))
+          return grammar.make_var('%s result_%s' % (obj.c_type, obj.name))
+        return grammar.make_var('%s_img[%s]' % (obj.name, '+'.join(
+            '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], obj.name, d)
+            for d in range(stencil.dim))))
       return obj
     for let in tensor.lets:
       println('// let {} {} = {}'.format(let.soda_type, let.name, let.expr))

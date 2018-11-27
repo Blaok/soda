@@ -9,6 +9,7 @@ from cached_property import cached_property
 from soda import dataflow
 from soda import grammar
 from soda import util
+from haoda.ir import arithmetic
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -244,7 +245,12 @@ class Stencil():
         ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
                   for stmt in self.output_stmts)))
 
+    for tensor in self.tensors.values():
+      tensor.expr, tensor.lets = arithmetic.simplify(tensor.expr, tensor.lets)
+
+    # soda frontend successfully parsed
     # triggers cached property
+    # replicate tensors for iterative stencil
     # pylint: disable=pointless-statement
     self.tensors
     _logger.debug('producer tensors: [%s]',
@@ -252,8 +258,6 @@ class Stencil():
     _logger.debug('consumer tensors: [%s]',
                   ', '.join(tensor.name for tensor in self.consumer_tensors))
 
-    # soda frontend successfully parsed
-    # replicate tensors for iterative stencil
     # TODO: build Ref table and Var table
     # generate reuse buffers and get haoda nodes
     # pylint: disable=pointless-statement

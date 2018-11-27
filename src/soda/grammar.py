@@ -118,7 +118,8 @@ class Node():
                  tuple(tuple(getattr(self, _)) for _ in self.LINEAR_ATTRS)))
 
   def __eq__(self, other):
-    return all(getattr(self, attr) == getattr(other, attr)
+    return all(hasattr(other, attr) and
+               getattr(self, attr) == getattr(other, attr)
                for attr in self.ATTRS)
 
   @property
@@ -129,7 +130,7 @@ class Node():
   def width_in_bits(self):
     return util.get_width_in_bits(self.soda_type)
 
-  def visit(self, callback, args=None):
+  def visit(self, callback, args=None, pre_recursion=None, post_recursion=None):
     """A general-purpose, flexible, and powerful visitor.
 
     The args parameter will be passed to the callback callable so that it may
@@ -146,14 +147,26 @@ class Node():
     it will be recursively visited.
     """
 
+    def callback_wrapper(callback, obj, args):
+      if callback is None:
+        return obj
+      result = callback(obj, args)
+      if result is not None:
+        return result
+      return obj
+
     self_copy = copy.copy(self)
-    obj = callback(self_copy, args)
-    self_copy = copy.copy(self)
-    scalar_attrs = {attr: getattr(self_copy, attr).visit(callback, args)
+    obj = callback_wrapper(callback, self_copy, args)
+    if obj is not self_copy:
+      return obj
+    self_copy = callback_wrapper(pre_recursion, copy.copy(self), args)
+    scalar_attrs = {attr: getattr(self_copy, attr).visit(
+        callback, args, pre_recursion, post_recursion)
                     if issubclass(type(getattr(self_copy, attr)), Node)
                     else getattr(self_copy, attr)
                     for attr in self_copy.SCALAR_ATTRS}
-    linear_attrs = {attr: tuple(_.visit(callback, args)
+    linear_attrs = {attr: tuple(_.visit(
+        callback, args, pre_recursion, post_recursion)
                                 if issubclass(type(_), Node) else _
                                 for _ in getattr(self_copy, attr))
                     for attr in self_copy.LINEAR_ATTRS}
@@ -173,7 +186,7 @@ class Node():
           c if a is b and issubclass(type(a), Node) else a
           for a, b, c in zip(getattr(obj, attr), getattr(self, attr),
                              linear_attrs[attr])))
-    return obj
+    return callback_wrapper(post_recursion, obj, args)
 
 class InputStmt(Node):
   """Node for input statement, represents a tiled input tensor.
@@ -278,7 +291,7 @@ class Ref(Node):
       result += ' ~{}'.format(self.lat)
     return result
 
-class _BinaryOp(Node):
+class BinaryOp(Node):
   LINEAR_ATTRS = 'operand', 'operator'
   def __str__(self):
     result = str(self.operand[0])
@@ -298,31 +311,31 @@ class _BinaryOp(Node):
       result += ' {} {}'.format(operator, operand.c_expr)
     return result
 
-class Expr(_BinaryOp):
+class Expr(BinaryOp):
   pass
 
-class LogicAnd(_BinaryOp):
+class LogicAnd(BinaryOp):
   pass
 
-class BinaryOr(_BinaryOp):
+class BinaryOr(BinaryOp):
   pass
 
-class Xor(_BinaryOp):
+class Xor(BinaryOp):
   pass
 
-class BinaryAnd(_BinaryOp):
+class BinaryAnd(BinaryOp):
   pass
 
-class EqCmp(_BinaryOp):
+class EqCmp(BinaryOp):
   pass
 
-class LtCmp(_BinaryOp):
+class LtCmp(BinaryOp):
   pass
 
-class AddSub(_BinaryOp):
+class AddSub(BinaryOp):
   pass
 
-class MulDiv(_BinaryOp):
+class MulDiv(BinaryOp):
   pass
 
 class Unary(Node):
@@ -419,6 +432,11 @@ class Var(Node):
   @property
   def c_expr(self):
     return self.name+''.join(map('[{}]'.format, self.idx))
+
+def make_var(val):
+  """Make literal Var from val.
+  """
+  return Var(name=val, idx=())
 
 class ParamStmt(Node):
   SCALAR_ATTRS = 'soda_type', 'attr', 'name', 'size'
