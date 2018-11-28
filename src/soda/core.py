@@ -313,6 +313,11 @@ class Stencil():
 
   @cached_property
   def tensor_type_map(self):
+    """Constructs a mapping from a tensor's name to its type.
+
+    Returns:
+      tensor_types: dict from name (str) to soda_type (str).
+    """
     tensor_types = {}
     for name, soda_type in zip(self.input_names, self.input_types):
       tensor_types[name] = soda_type
@@ -324,12 +329,16 @@ class Stencil():
 
   @cached_property
   def tensors(self):
-    # start constructing high-level DAG
+    """Constructs high-level DAG and creates the tensors.
+
+    Returns:
+      An OrderedDict mapping a tensor's name to the tensor.
+    """
     # TODO: check for name conflicts
-    self.tensors = OrderedDict()
+    tensor_map = OrderedDict()
     for stmt in self.input_stmts:
       tensor = Tensor(stmt, self.tile_size)
-      self.tensors[stmt.name] = tensor
+      tensor_map[stmt.name] = tensor
 
     def name_in_iter(name, iteration):
       if name in self.input_names:
@@ -393,7 +402,7 @@ class Stencil():
           #                    for _ in tensor.lets)
           #tensor.expr = tensor.expr.visit(normalize_callback, norm_args)
           #tensor.st_ref = tensor.st_ref.visit(normalize_callback, norm_args)
-        self.tensors[tensor.name] = tensor
+        tensor_map[tensor.name] = tensor
         tensors.append(tensor)
 
       for tensor in tensors:
@@ -410,30 +419,33 @@ class Stencil():
         for parent_name, ld_refs in loads.items():
           ld_refs = sorted(
               ld_refs, key=lambda ref: util.serialize(ref.idx, self.tile_size))
-          parent_tensor = self.tensors[parent_name]
+          parent_tensor = tensor_map[parent_name]
           parent_tensor.children[tensor.name] = tensor
           tensor.parents[parent_name] = parent_tensor
           tensor.ld_refs[parent_name] = ld_refs
 
     # high-level DAG construction finished
-    for tensor in self.tensors.values():
+    for tensor in tensor_map.values():
       if tensor.name in self.input_names:
         _logger.debug('<input tensor>: %s', tensor)
       elif tensor.name in self.output_names:
         _logger.debug('<output tensor>: %s', tensor)
       else:
         _logger.debug('<local tensor>: %s', tensor)
-    return self.tensors
+    return tensor_map
 
   @cached_property
   def chronological_tensors(self):
-    # now that we have global knowledge of the tensors we can calculate the
-    # offsets of tensors
+    """Computes the offsets of tensors.
+
+    Returns:
+      A list of Tensor, in chronological order.
+    """
     _logger.info('calculate tensor offsets')
     processing_queue = deque(list(self.input_names))
     processed_tensors = set(self.input_names)
-    self.chronological_tensors = list(map(self.tensors.get, self.input_names))
-    for tensor in self.chronological_tensors:
+    chronological_tensors = list(map(self.tensors.get, self.input_names))
+    for tensor in chronological_tensors:
       _logger.debug('tensor <%s> is at offset %d' %
                     (tensor.name, tensor.st_offset))
     _logger.debug('processing queue: %s', processing_queue)
@@ -508,8 +520,6 @@ class Stencil():
                         child.name, child.st_delay)
           synced_offset = sync(child, child.st_delay)
           _logger.debug('synced offset: %s', synced_offset)
-          #child.st_ref.idx = util.deserialize(synced_offset,
-          #                                    self.tile_size)
           child.st_delay = synced_offset
           _logger.debug('decide to generate tensor <%s> at offset %d',
                         child.name, child.st_delay)
@@ -537,7 +547,7 @@ class Stencil():
 
           processing_queue.append(child.name)
           processed_tensors.add(child.name)
-          self.chronological_tensors.append(child)
+          chronological_tensors.append(child)
         else:
           for parent in tensor.parents.values():
             if parent.name not in processed_tensors:
@@ -552,7 +562,7 @@ class Stencil():
     _logger.debug('tensors in insertion order: [%s]',
                   ', '.join(map(str, self.tensors)))
     _logger.debug('tensors in chronological order: [%s]',
-                  ', '.join(t.name for t in self.chronological_tensors))
+                  ', '.join(t.name for t in chronological_tensors))
 
     for tensor in self.tensors.values():
       for name, indices in tensor.ld_indices.items():
@@ -574,7 +584,7 @@ class Stencil():
         _logger.debug('stage delay: %s <- %s delayed %d' %
                 (tensor.name, name, delay))
 
-    return self.chronological_tensors
+    return chronological_tensors
 
   @cached_property
   def input_partition(self):
@@ -634,14 +644,19 @@ class Stencil():
 
   @cached_property
   def reuse_buffers(self):
+    """Constructs the reuse buffers.
+
+    Returns:
+      A dict mapping a tensor's name to its reuse buffers.
+    """
     unroll_factor = self.unroll_factor
-    self.reuse_buffer_lengths = {}
-    self.reuse_buffers = {}
+    self._reuse_buffer_lengths = {}
+    reuse_buffers = {}
     for tensor in self.producer_tensors:
       reuse_buffer = _get_reuse_buffer(self.tile_size, tensor, unroll_factor)
       reuse_buffer_length = {}
-      self.reuse_buffers[tensor.name] = reuse_buffer
-      self.reuse_buffer_lengths[tensor.name] = reuse_buffer_length
+      reuse_buffers[tensor.name] = reuse_buffer
+      self._reuse_buffer_lengths[tensor.name] = reuse_buffer_length
       first = [True]*unroll_factor
       for start, end in reuse_buffer[1:]:
         if first[start%unroll_factor]:
@@ -650,33 +665,42 @@ class Stencil():
             reuse_buffer_length[end] = end//unroll_factor
             continue
         reuse_buffer_length[end] = (end-start)//unroll_factor
-    return self.reuse_buffers
+    return reuse_buffers
 
   @cached_property
   def all_points(self):
-    self.all_points = {}
+    all_points = {}
     for tensor in self.producer_tensors:
-      self.all_points[tensor.name] = _get_points(self.tile_size,
-                             tensor,
-                             self.unroll_factor)
-    return self.all_points
+      all_points[tensor.name] = _get_points(self.tile_size, tensor,
+                                            self.unroll_factor)
+    return all_points
 
   @cached_property
   def next_fifo(self):
-    self.next_fifo = {}
+    """Constructs the next fifo offset mapping.
+
+    Returns:
+      A dict mapping a tensor's name and offset to the next offset.
+    """
+    next_fifo = {}
     for name, reuse_buffer in self.reuse_buffers.items():
-      self.next_fifo[name] = {}
+      next_fifo[name] = {}
       for start, end in reuse_buffer[1:]:
         if start < end:
-          self.next_fifo[name][start] = end
-    _logger.debug('next_fifo: %s' % self.next_fifo)
-    return self.next_fifo
+          next_fifo[name][start] = end
+    _logger.debug('next_fifo: %s' % next_fifo)
+    return next_fifo
 
   @cached_property
   def reuse_buffer_lengths(self):
+    """Constructs the reuse buffer lengths.
+
+    Returns:
+      A dict mapping a tensor's name to its reuse buffers' lengths.
+    """
     # pylint: disable=pointless-statement
     self.reuse_buffers
-    return self.reuse_buffer_lengths
+    return self._reuse_buffer_lengths
 
   def get_replicated_next_fifo(self):
     if not hasattr(self, 'replicated_next_fifo'):
