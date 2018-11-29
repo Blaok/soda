@@ -45,7 +45,7 @@ class Tensor():
   def __init__(self, stmt, tile_size):
     self.haoda_type = stmt.haoda_type
     self._tile_size = tile_size
-    if issubclass(type(stmt), grammar.LocalStmtOrOutputStmt):
+    if isinstance(stmt, grammar.LocalStmtOrOutputStmt):
       self.st_ref = copy.copy(stmt.ref)
       self.st_ref.parent = self
       self.lets = stmt.let

@@ -21,7 +21,7 @@ def get_load_tuple(obj):
       loads.append(obj)
     return obj
   loads = []
-  if issubclass(type(obj), ir.Node):
+  if isinstance(obj, ir.Node):
     obj.visit(visitor, loads)
   elif isinstance(obj, core.Tensor):
     obj.visit_loads(visitor, loads)
@@ -46,7 +46,7 @@ def get_load_set(obj):
       loads[obj] = None
     return obj
   loads = collections.OrderedDict()
-  if issubclass(type(obj), ir.Node):
+  if isinstance(obj, ir.Node):
     obj.visit(visitor, loads)
   else:
     raise TypeError('argument is not an IR node or a Tensor')

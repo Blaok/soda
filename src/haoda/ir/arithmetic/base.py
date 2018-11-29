@@ -37,14 +37,14 @@ def flatten(node):
   """
 
   def visitor(node, args=None):
-    if issubclass(type(node), ir.BinaryOp):
+    if isinstance(node, ir.BinaryOp):
       if len(node.operand) == 1:
         return flatten(node.operand[0])
     if isinstance(node, ir.Operand):
       for attr in node.ATTRS:
         val = getattr(node, attr)
         if val is not None:
-          if issubclass(type(val), ir.Node):
+          if isinstance(val, ir.Node):
             return flatten(val)
           break
       else:
@@ -57,7 +57,7 @@ def flatten(node):
           return flatten(node.operand)
     return node
 
-  if not issubclass(type(node), ir.Node):
+  if not isinstance(node, ir.Node):
     return node
 
   return node.visit(visitor)
@@ -82,7 +82,7 @@ def print_tree(node, printer=_logger.debug):
   def visitor(node, args):
     printer('%s+-%s: %s' % (' ' * args[0], type(node).__name__, node))
 
-  if not issubclass(type(node), ir.Node):
+  if not isinstance(node, ir.Node):
     return node
 
   printer('root')

@@ -128,12 +128,12 @@ class Node():
     self_copy = callback_wrapper(pre_recursion, copy.copy(self), args)
     scalar_attrs = {attr: getattr(self_copy, attr).visit(
         callback, args, pre_recursion, post_recursion)
-                    if issubclass(type(getattr(self_copy, attr)), Node)
+                    if isinstance(getattr(self_copy, attr), Node)
                     else getattr(self_copy, attr)
                     for attr in self_copy.SCALAR_ATTRS}
     linear_attrs = {attr: tuple(_.visit(
         callback, args, pre_recursion, post_recursion)
-                                if issubclass(type(_), Node) else _
+                                if isinstance(_, Node) else _
                                 for _ in getattr(self_copy, attr))
                     for attr in self_copy.LINEAR_ATTRS}
 
@@ -142,14 +142,14 @@ class Node():
       if not hasattr(obj, attr):
         continue
       if getattr(obj, attr) is getattr(self, attr):
-        if issubclass(type(getattr(obj, attr)), Node):
+        if isinstance(getattr(obj, attr), Node):
           setattr(obj, attr, scalar_attrs[attr])
     for attr in self.LINEAR_ATTRS:
       # old attribute may not exist in mutated object
       if not hasattr(obj, attr):
         continue
       setattr(obj, attr, tuple(
-          c if a is b and issubclass(type(a), Node) else a
+          c if a is b and isinstance(a, Node) else a
           for a, b, c in zip(getattr(obj, attr), getattr(self, attr),
                              linear_attrs[attr])))
     return callback_wrapper(post_recursion, obj, args)
