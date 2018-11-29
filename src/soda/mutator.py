@@ -7,7 +7,7 @@ from soda import grammar
 
 _logger = logging.getLogger().getChild(__name__)
 
-def shift(obj, offset, excluded=(), op=operator.add):
+def shift(obj, offset, excluded=(), op=operator.sub):
   """Shift soda.grammar.Ref with the given offset.
 
   All soda.grammar.Ref, excluding the given names, will be shifted with the
@@ -18,7 +18,7 @@ def shift(obj, offset, excluded=(), op=operator.add):
     obj: A haoda.ir.Node or a soda.core.Tensor object.
     offset: Second operand given to the operator.
     excluded: Sequence of names to be excluded from the mutation. Default to ().
-    op: Shifting operator. Should be either operator.add or operator.sub.
+    op: Shifting operator. Should be either add or sub. Default to sub.
   """
   if op not in (operator.add, operator.sub):
     _logger.warn('shifting with neither + nor -, which most likely is an error')
