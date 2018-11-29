@@ -6,7 +6,7 @@ import math
 import cached_property
 
 from haoda import util
-from haoda.ir import visitors
+from haoda.ir import visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -411,7 +411,7 @@ class Module():
     reads_in_lets = tuple(_.expr for _ in self.lets)
     reads_in_exprs = tuple(self.exprs.values())
     dram_reads = collections.OrderedDict()
-    for dram_ref in visitors.get_dram_refs(reads_in_lets + reads_in_exprs):
+    for dram_ref in visitor.get_dram_refs(reads_in_lets + reads_in_exprs):
       for bank in dram_ref.dram:
         dram_reads[(dram_ref.var, bank)] = (dram_ref, bank)
     dram_reads = tuple(dram_reads.values())
@@ -420,13 +420,13 @@ class Module():
     writes_in_lets = tuple(_.name for _ in self.lets
                            if not isinstance(_.name, str))
     dram_writes = collections.OrderedDict()
-    for dram_ref in visitors.get_dram_refs(writes_in_lets):
+    for dram_ref in visitor.get_dram_refs(writes_in_lets):
       for bank in dram_ref.dram:
         dram_writes[(dram_ref.var, bank)] = (dram_ref, bank)
     dram_writes = tuple(dram_writes.values())
 
     output_fifos = tuple(_.c_expr for _ in self.exprs)
-    input_fifos = tuple(_.c_expr for _ in visitors.get_read_fifo_set(self))
+    input_fifos = tuple(_.c_expr for _ in visitor.get_read_fifo_set(self))
 
 
     return {
@@ -777,7 +777,7 @@ class ModuleTrait(Node):
     reads_in_lets = tuple(_.expr for _ in self.lets)
     reads_in_exprs = tuple(self.exprs)
     dram_reads = collections.OrderedDict()
-    for dram_ref in visitors.get_dram_refs(reads_in_lets + reads_in_exprs):
+    for dram_ref in visitor.get_dram_refs(reads_in_lets + reads_in_exprs):
       for bank in dram_ref.dram:
         dram_reads[(dram_ref.var, bank)] = (dram_ref, bank)
     dram_reads = tuple(dram_reads.values())
@@ -786,7 +786,7 @@ class ModuleTrait(Node):
     writes_in_lets = tuple(_.name for _ in self.lets
                            if not isinstance(_.name, str))
     dram_writes = collections.OrderedDict()
-    for dram_ref in visitors.get_dram_refs(writes_in_lets):
+    for dram_ref in visitor.get_dram_refs(writes_in_lets):
       for bank in dram_ref.dram:
         dram_writes[(dram_ref.var, bank)] = (dram_ref, bank)
     dram_writes = tuple(dram_writes.values())

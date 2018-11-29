@@ -11,7 +11,7 @@ from haoda.ir import arithmetic
 from soda import dataflow
 from soda import grammar
 from soda import util as soda_util
-from soda import visitors
+from soda import visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -385,7 +385,7 @@ class Stencil():
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
         tensor = Tensor(stmt.visit(mutate_name_callback), self.tile_size)
-        loads = visitors.get_load_tuple(tensor)
+        loads = visitor.get_load_tuple(tensor)
         norm_idx = tuple(min(load.idx[d] for load in loads
                              if load.name not in self.param_names)
                          for d in range(self.dim))
@@ -402,7 +402,7 @@ class Stencil():
 
       for tensor in tensors:
         tensor.propagate_type()
-        loads = visitors.get_load_dict(tensor)
+        loads = visitor.get_load_dict(tensor)
         for parent_name, ld_refs in loads.items():
           ld_refs = sorted(ld_refs, key=lambda ref: soda_util.serialize(
               ref.idx, self.tile_size))
@@ -462,7 +462,7 @@ class Stencil():
             stage_offset = soda_util.serialize(tensor.st_idx, self.tile_size)
             _logger.debug('offset of tensor <%s>: %d',
                           tensor.name, stage_offset)
-            loads = visitors.get_load_dict(tensor)
+            loads = visitor.get_load_dict(tensor)
             for name in loads:
               loads[name] = tuple(ref.idx for ref in loads[name])
             _logger.debug('loads: %s', ', '.join(

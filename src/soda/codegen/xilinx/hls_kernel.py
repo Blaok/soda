@@ -5,7 +5,7 @@ import operator
 
 from haoda import ir
 from haoda import util
-from haoda.ir import visitors
+from haoda.ir import visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -432,8 +432,8 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   writes_in_lets = tuple(_.name for _ in module_trait.lets
                          if not isinstance(_.name, str))
   reads_in_exprs = module_trait.exprs
-  dram_reads = visitors.get_dram_refs(reads_in_lets + reads_in_exprs)
-  dram_writes = visitors.get_dram_refs(writes_in_lets)
+  dram_reads = visitor.get_dram_refs(reads_in_lets + reads_in_exprs)
+  dram_writes = visitor.get_dram_refs(writes_in_lets)
   dram_read_map = collections.OrderedDict()
   dram_write_map = collections.OrderedDict()
   all_dram_reads = ()
