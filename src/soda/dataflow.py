@@ -1,11 +1,10 @@
-from collections import OrderedDict
-from collections import defaultdict
+import collections
 import logging
 
-from cached_property import cached_property
+import cached_property
 
 from haoda import ir
-from soda import util
+from haoda import util
 from soda import grammar
 
 _logger = logging.getLogger().getChild(__name__)
@@ -33,8 +32,8 @@ class SuperSourceNode(ir.Module):
   # TODO: make this general and move it to haoda.ir
   def get_extra_depth(self, edge):
     if not hasattr(self, '_extra_depths'):
-      self._extra_depths = OrderedDict()
-      node_heights = OrderedDict()
+      self._extra_depths = collections.OrderedDict()
+      node_heights = collections.OrderedDict()
       for node in self.tpo_node_gen():
         node_heights[node] = max(
             (node_heights[parent] + parent.get_latency(node)
@@ -52,11 +51,11 @@ class SuperSourceNode(ir.Module):
   def name(self):
     return 'super_source'
 
-  @cached_property
+  @cached_property.cached_property
   def module_table(self):
     """Returns a Node to (module_trait, module_trait_id) map."""
-    self._module_traits = OrderedDict()
-    module_table = OrderedDict()
+    self._module_traits = collections.OrderedDict()
+    module_table = collections.OrderedDict()
     for node in self.tpo_node_gen():
       self._module_traits.setdefault(ir.ModuleTrait(node), []).append(node)
     for idx, module_trait in enumerate(self._module_traits):
@@ -64,7 +63,7 @@ class SuperSourceNode(ir.Module):
         module_table[node] = module_trait, idx
     return module_table
 
-  @cached_property
+  @cached_property.cached_property
   def module_traits(self):
     # pylint: disable=pointless-statement
     self.module_table
@@ -111,7 +110,7 @@ class ComputeNode(ir.Module):
     super().__init__()
     self.tensor = kwargs.pop('tensor')
     self.pe_id = kwargs.pop('pe_id')
-    self.fifo_map = defaultdict(dict)
+    self.fifo_map = collections.defaultdict(dict)
 
   def __repr__(self):
     return '\033[31mcompute %s #%d\033[0m' % (self.tensor.name, self.pe_id)
@@ -126,8 +125,11 @@ def create_dataflow_graph(stencil):
   super_source = SuperSourceNode()
   super_sink = SuperSinkNode()
 
-  super_source.fwd_nodes = OrderedDict()  # {(tensor_name, offset): node}
-  super_source.cpt_nodes = OrderedDict()  # {(stage_name, pe_id): node}
+  # {(tensor_name, offset): node}
+  super_source.fwd_nodes = collections.OrderedDict()
+
+  # {(stage_name, pe_id): node}
+  super_source.cpt_nodes = collections.OrderedDict()
 
   def color_id(node):
     if node.__class__ is (ir.Module):
@@ -307,7 +309,7 @@ def create_dataflow_graph(stencil):
         else:
           raise util.InternalError('cannot find tensor %s' %
                                    dst_node.tensor.name)
-        expr = ir.DRAMRef(soda_type=dst_node.tensor.soda_type,
+        expr = ir.DRAMRef(haoda_type=dst_node.tensor.haoda_type,
                           # pylint: disable=undefined-loop-variable
                           dram=stmt.dram,
                           var=dst_node.tensor.name,
@@ -337,17 +339,17 @@ def create_dataflow_graph(stencil):
             # pylint: disable=undefined-loop-variable
             if isinstance(let.expr, ir.DelayedRef) and let.expr.ref == fifo_r:
               var_name = let.name
-              var_type = let.soda_type
+              var_type = let.haoda_type
               break
           else:
             var_name = 'let_%d' % len(src_node.lets)
             # pylint: disable=undefined-loop-variable
-            var_type = fifo_r.soda_type
+            var_type = fifo_r.haoda_type
             lets.append(grammar.Let(
-              soda_type=var_type, name=var_name,
+              haoda_type=var_type, name=var_name,
               expr=ir.DelayedRef(delay=delay, ref=fifo_r)))
-          expr = grammar.Var(name=var_name, idx=[])
-          expr.soda_type = var_type
+          expr = ir.Var(name=var_name, idx=[])
+          expr.haoda_type = var_type
         else:
           expr = fifo_r   # pylint: disable=undefined-loop-variable
       elif isinstance(src_node, ComputeNode):
@@ -373,12 +375,12 @@ def create_dataflow_graph(stencil):
           else:
             raise util.InternalError('cannot find tensor %s' %
                                      src_node.tensor.name)
-          dram_ref = ir.DRAMRef(soda_type=src_node.tensor.soda_type,
+          dram_ref = ir.DRAMRef(haoda_type=src_node.tensor.haoda_type,
                                 # pylint: disable=undefined-loop-variable
                                 dram=stmt.dram, var=src_node.tensor.name,
                                 offset=src_node.pe_id)
           dst_node.lets.append(grammar.Let(
-            soda_type=None, name=dram_ref, expr=fifo))
+            haoda_type=None, name=dram_ref, expr=fifo))
       else:
         raise util.InternalError('unexpected node of type %s' % type(src_node))
 

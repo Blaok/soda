@@ -4,12 +4,11 @@ import logging
 import os
 import sys
 
-from textx import metamodel_from_str
-from textx.exceptions import TextXSyntaxError
+import textx
 
+from haoda import util
 from soda import core
 from soda import grammar
-from soda import util
 from soda.codegen.xilinx import opencl as xocl
 from soda.model import xilinx as model
 
@@ -110,8 +109,7 @@ def main():
   logger.info('set log level to %s', logging.getLevelName(logging_level))
   # TODO: check tile size
 
-  soda_mm = metamodel_from_str(grammar.SODA_GRAMMAR,
-                 classes=grammar.SODA_GRAMMAR_CLASSES)
+  soda_mm = textx.metamodel_from_str(grammar.GRAMMAR, classes=grammar.CLASSES)
   logger.info('build metamodel')
   try:
     if args.soda_src == '-':
@@ -199,7 +197,7 @@ def main():
           print_estimation()
 
 
-  except TextXSyntaxError as e:
+  except textx.exceptions.TextXSyntaxError as e:
     logger.error(e)
     sys.exit(1)
   except util.SemanticError as e:

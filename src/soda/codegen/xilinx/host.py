@@ -1,10 +1,12 @@
-from functools import reduce
+import functools
 import logging
 import operator
 
+from haoda import ir
+from haoda import util
 from soda import core
 from soda import grammar
-from soda import util
+from soda import util as soda_util
 
 logger = logging.getLogger().getChild(__name__)
 
@@ -201,7 +203,7 @@ def print_wrapped(printer, stencil):
     print_unload_buffer(printer, *tensor)
 
   for output_name in stencil.output_names:
-    output_type = stencil.tensors[output_name].soda_type
+    output_type = stencil.tensors[output_name].haoda_type
     println('if(var_%s_host_and_dev_are_null)' % output_name)
     do_scope('var_%s_host_and_dev_are_null' % output_name)
     output_str = [", 0, 0, 0"]*4
@@ -219,7 +221,7 @@ def print_wrapped(printer, stencil):
     un_scope()
 
   for input_name in stencil.input_names:
-    input_type = stencil.tensors[input_name].soda_type
+    input_type = stencil.tensors[input_name].haoda_type
     println('if(var_%s_host_and_dev_are_null)' % input_name)
     do_scope('var_%s_host_and_dev_are_null' % input_name)
     input_size = ['0']*4
@@ -251,7 +253,7 @@ def print_wrapped(printer, stencil):
   do_scope('if(%s)' % last_var())
 
   for name in stencil.output_names + stencil.input_names + stencil.param_names:
-    print_check_elem_size(printer, name, stencil.tensors[name].soda_type)
+    print_check_elem_size(printer, name, stencil.tensors[name].haoda_type)
   println()
 
   println('// allocate buffer for tiled input/output')
@@ -336,7 +338,7 @@ def print_wrapped(printer, stencil):
       stencil.input_names[0], stencil.dim-1))
   println('int64_t tile_burst_num = '
           '(tile_pixel_num-1)/(BURST_WIDTH/%d*num_bank["%s"])+1;' %
-          (util.get_width_in_bits(stencil.input_stmts[0].soda_type),
+          (util.get_width_in_bits(stencil.input_stmts[0].haoda_type),
            stencil.input_names[0]))
   println('int64_t tile_size_linearized_i = tile_burst_num*(BURST_WIDTH/'
           '{stmt.width_in_bits}*num_bank["{stmt.name}"]);'.format(
@@ -895,7 +897,7 @@ def print_wrapped(printer, stencil):
         stencil.tensors[stmt.name])
     overall_stencil_distance = core.get_stencil_distance(
         overall_stencil_window, stencil.tile_size)
-    stencil_offset = overall_stencil_distance - util.serialize(
+    stencil_offset = overall_stencil_distance - soda_util.serialize(
         core.get_stencil_window_offset(overall_stencil_window),
         stencil.tile_size)
     println('int32_t burst_index_{stmt.name} = ({} + {}) / (BURST_WIDTH / {stmt'
@@ -1023,7 +1025,7 @@ def print_test(printer, stencil):
   for param in stencil.param_stmts:
     println('%s %s_img%s;' % (
         param.c_type, param.name,
-        reduce(operator.add, ['[%s]'%x for x in param.size])))
+        functools.reduce(operator.add, ['[%s]'%x for x in param.size])))
   println()
 
   for tensor in stencil.tensors.values():
@@ -1111,9 +1113,9 @@ def print_test(printer, stencil):
     def mutate_load_for_host(obj, args):
       if isinstance(obj, grammar.Ref):
         if obj.name in stencil.param_names:
-          return grammar.make_var('%s_img%s' % (
+          return ir.make_var('%s_img%s' % (
               obj.name, ''.join('[%d]' % _ for _ in obj.idx)))
-        return grammar.make_var('%s_img[%s]' % (
+        return ir.make_var('%s_img[%s]' % (
             obj.name, '+'.join('(%c%+d)*%s.stride[%d]' % (
                 util.COORDS_IN_ORIG[d], obj.idx[d] - tensor.st_ref.idx[d],
                 obj.name, d) for d in range(stencil.dim))))
@@ -1121,13 +1123,13 @@ def print_test(printer, stencil):
     def mutate_store_for_host(obj, args):
       if isinstance(obj, grammar.Ref):
         if obj.name in stencil.output_names:
-          return grammar.make_var('%s result_%s' % (obj.c_type, obj.name))
-        return grammar.make_var('%s_img[%s]' % (obj.name, '+'.join(
+          return ir.make_var('%s result_%s' % (obj.c_type, obj.name))
+        return ir.make_var('%s_img[%s]' % (obj.name, '+'.join(
             '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], obj.name, d)
             for d in range(stencil.dim))))
       return obj
     for let in tensor.lets:
-      println('// let {} {} = {}'.format(let.soda_type, let.name, let.expr))
+      println('// let {} {} = {}'.format(let.haoda_type, let.name, let.expr))
       println('const {} {} = {};'.format(
           let.c_type, let.name, let.expr.visit(mutate_load_for_host).c_expr))
     println('// {} = {}'.format(tensor.st_ref, tensor.expr))
@@ -1139,7 +1141,7 @@ def print_test(printer, stencil):
           for d in range(stencil.dim)))
       println('%s val_fpga = %s;' % (tensor.c_type, run_result))
       println('%s val_cpu = result_%s;' % (tensor.c_type, tensor.name))
-      if util.is_float(tensor.soda_type):
+      if util.is_float(tensor.haoda_type):
         println('double threshold = 0.00001;')
         println('if(nullptr!=getenv("THRESHOLD"))')
         do_scope()
@@ -1275,7 +1277,7 @@ def print_code(stencil, host_file):
 
   for i, dim in enumerate(core.get_stencil_dim(overall_stencil_window)):
     print_define('STENCIL_DIM_%d' % i, dim)
-  stencil_offset = overall_stencil_distance - util.serialize(
+  stencil_offset = overall_stencil_distance - soda_util.serialize(
     core.get_stencil_window_offset(overall_stencil_window), stencil.tile_size)
   if stencil.preserve_border:
     stencil_offset *= stencil.iterate

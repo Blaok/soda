@@ -1,15 +1,17 @@
-from collections import Iterable, OrderedDict, deque
+import collections
 import copy
 import itertools
 import logging
 import operator
 
-from cached_property import cached_property
+import cached_property
 
+from haoda import util
+from haoda.ir import arithmetic
 from soda import dataflow
 from soda import grammar
-from soda import util
-from haoda.ir import arithmetic
+from soda import util as soda_util
+from soda import visitors
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -23,7 +25,7 @@ class Tensor():
   this tensor.
 
   Attributes:
-    soda_type: str, type of the tensor element.
+    haoda_type: str, type of the tensor element.
     parents: Dict from str of name of Tensor to Tensor.
     children: Dict from str of name of Tensor to Tensor.
     st_ref: Ref, name, index, and latency stored.
@@ -41,7 +43,7 @@ class Tensor():
     ld_offsets: Dict from str of name to dict of offsets of the input.
   """
   def __init__(self, stmt, tile_size):
-    self.soda_type = stmt.soda_type
+    self.haoda_type = stmt.haoda_type
     self._tile_size = tile_size
     if issubclass(type(stmt), grammar.LocalStmtOrOutputStmt):
       self.st_ref = copy.copy(stmt.ref)
@@ -62,10 +64,10 @@ class Tensor():
 
     # these fields are to be set externally
     self.st_delay = 0
-    self.parents = OrderedDict()
-    self.children = OrderedDict()
-    self.ld_refs = OrderedDict()
-    self.ld_delays = OrderedDict()
+    self.parents = collections.OrderedDict()
+    self.children = collections.OrderedDict()
+    self.ld_refs = collections.OrderedDict()
+    self.ld_delays = collections.OrderedDict()
 
   @property
   def name(self):
@@ -81,23 +83,24 @@ class Tensor():
 
   @property
   def st_offset(self):
-    return util.serialize(self.st_idx, self._tile_size) + self.st_delay
+    return soda_util.serialize(self.st_idx, self._tile_size) + self.st_delay
 
-  @cached_property
+  @cached_property.cached_property
   def ld_indices(self):
-    return OrderedDict((name, OrderedDict((ref.idx, ref) for ref in refs))
-                       for name, refs in self.ld_refs.items())
+    return collections.OrderedDict(
+        (name, collections.OrderedDict((ref.idx, ref) for ref in refs))
+        for name, refs in self.ld_refs.items())
 
-  @cached_property
+  @cached_property.cached_property
   def ld_offsets(self):
-    return OrderedDict(
-      (name, OrderedDict(
-        (util.serialize(ref.idx, self._tile_size), ref) for ref in refs))
+    return collections.OrderedDict(
+      (name, collections.OrderedDict(
+        (soda_util.serialize(ref.idx, self._tile_size), ref) for ref in refs))
       for name, refs in self.ld_refs.items())
 
   @property
   def c_type(self):
-    return util.get_c_type(self.soda_type)
+    return util.get_c_type(self.haoda_type)
 
   def propagate_type(self):
     if self.expr is None:
@@ -106,17 +109,17 @@ class Tensor():
     var_types = {}
     # pylint: disable=access-member-before-definition
     for let in self.lets:
-      var_types[let.name] = let.soda_type
+      var_types[let.name] = let.haoda_type
 
-    def visit_soda_type(obj, args):
-      if obj.soda_type is None:
+    def visit_haoda_type(obj, args):
+      if obj.haoda_type is None:
         if isinstance(obj, grammar.Var):
-          obj.soda_type = var_types[obj.name]
+          obj.haoda_type = var_types[obj.name]
       return obj
 
-    self.lets = tuple(_.visit(visit_soda_type) for _ in self.lets)
-    self.expr = self.expr.visit(visit_soda_type)
-    self.st_ref = self.st_ref.visit(visit_soda_type)
+    self.lets = tuple(_.visit(visit_haoda_type) for _ in self.lets)
+    self.expr = self.expr.visit(visit_haoda_type)
+    self.st_ref = self.st_ref.visit(visit_haoda_type)
 
   def mutate(self, callback, args=None):
     self.lets = tuple(_.visit(callback, args) for _ in self.lets)
@@ -130,11 +133,11 @@ class Tensor():
 
   def __str__(self):
     return '''Tensor
-  {soda_type}: {name} = {expr}
+  {haoda_type}: {name} = {expr}
   store: {st_ref} with delay {st_delay}
   parents: {parents}
   children: {children}'''.format(
-      name=self.name, soda_type=self.soda_type, expr=self.expr,
+      name=self.name, haoda_type=self.haoda_type, expr=self.expr,
       parents=util.idx2str(self.parents), children=util.idx2str(self.children),
       st_ref=str(self.st_ref), st_delay=self.st_delay)
 
@@ -240,13 +243,14 @@ class Stencil():
           'times, current input has type %s but output has type %s' %
           (util.lst2str(self.input_types), util.lst2str(self.output_types)))
       _logger.debug('pipeline %d iterations of [%s] -> [%s]' % (self.iterate,
-        ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
+        ', '.join('%s: %s' % (stmt.haoda_type, stmt.name)
                   for stmt in self.input_stmts),
-        ', '.join('%s: %s' % (stmt.soda_type, stmt.name)
+        ', '.join('%s: %s' % (stmt.haoda_type, stmt.name)
                   for stmt in self.output_stmts)))
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
-      stmt.expr, stmt.let = arithmetic.simplify(stmt.expr, stmt.let)
+      stmt.expr = arithmetic.simplify(stmt.expr)
+      stmt.let = arithmetic.simplify(stmt.let)
 
     # soda frontend successfully parsed
     # triggers cached property
@@ -267,7 +271,7 @@ class Stencil():
     _logger.debug('module table: %s', dict(self.module_table))
     _logger.debug('module traits: %s', self.module_traits)
 
-  @cached_property
+  @cached_property.cached_property
   def dataflow_super_source(self):
     return dataflow.create_dataflow_graph(self)
 
@@ -279,63 +283,63 @@ class Stencil():
   def module_traits(self):
     return self.dataflow_super_source.module_traits
 
-  @cached_property
+  @cached_property.cached_property
   def input_types(self):
-    return tuple(tensor.soda_type for tensor in self.input_stmts)
+    return tuple(tensor.haoda_type for tensor in self.input_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def param_types(self):
-    return tuple(tensor.soda_type for tensor in self.param_stmts)
+    return tuple(tensor.haoda_type for tensor in self.param_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def local_types(self):
-    return tuple(tensor.soda_type for tensor in self.local_stmts)
+    return tuple(tensor.haoda_type for tensor in self.local_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def output_types(self):
-    return tuple(tensor.soda_type for tensor in self.output_stmts)
+    return tuple(tensor.haoda_type for tensor in self.output_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def input_names(self):
     return tuple(stmt.name for stmt in self.input_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def param_names(self):
     return tuple(stmt.name for stmt in self.param_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def local_names(self):
     return tuple(stmt.name for stmt in self.local_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def output_names(self):
     return tuple(stmt.name for stmt in self.output_stmts)
 
-  @cached_property
+  @cached_property.cached_property
   def tensor_type_map(self):
     """Constructs a mapping from a tensor's name to its type.
 
     Returns:
-      tensor_types: dict from name (str) to soda_type (str).
+      tensor_types: dict from name (str) to haoda_type (str).
     """
     tensor_types = {}
-    for name, soda_type in zip(self.input_names, self.input_types):
-      tensor_types[name] = soda_type
-    for name, soda_type in zip(self.local_names, self.local_types):
-      tensor_types[name] = soda_type
-    for name, soda_type in zip(self.output_names, self.output_types):
-      tensor_types[name] = soda_type
+    for name, haoda_type in zip(self.input_names, self.input_types):
+      tensor_types[name] = haoda_type
+    for name, haoda_type in zip(self.local_names, self.local_types):
+      tensor_types[name] = haoda_type
+    for name, haoda_type in zip(self.output_names, self.output_types):
+      tensor_types[name] = haoda_type
     return tensor_types
 
-  @cached_property
+  @cached_property.cached_property
   def tensors(self):
     """Constructs high-level DAG and creates the tensors.
 
     Returns:
-      An OrderedDict mapping a tensor's name to the tensor.
+      An collections.OrderedDict mapping a tensor's name to the tensor.
     """
     # TODO: check for name conflicts
-    tensor_map = OrderedDict()
+    tensor_map = collections.OrderedDict()
     for stmt in self.input_stmts:
       tensor = Tensor(stmt, self.tile_size)
       tensor_map[stmt.name] = tensor
@@ -363,7 +367,7 @@ class Stencil():
       _logger.debug('map: %s', self.tensor_type_map)
       def mutate_name_callback(obj, mutated):
         if isinstance(obj, grammar.Ref):
-          obj.soda_type = self.tensor_type_map[obj.name]
+          obj.haoda_type = self.tensor_type_map[obj.name]
           # pylint: disable=cell-var-from-loop
           obj.name = name_in_iter(obj.name, iteration)
         return obj
@@ -377,19 +381,11 @@ class Stencil():
                           obj.name, ', '.join(map(str, obj.idx)),
                           obj.name, ', '.join(map(str, new_idx)))
             obj.idx = new_idx
-            #if isinstance(obj.parent, Tensor):
-            #  obj.parent.st_idx = obj.idx
-            #  obj.parent.st_offset = util.serialize(obj.idx, self.tile_size)
         return obj
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
         tensor = Tensor(stmt.visit(mutate_name_callback), self.tile_size)
-        loads = []
-        def get_load_list(obj, loads):
-          if isinstance(obj, grammar.Ref):
-            loads.append(obj)
-          return obj
-        tensor.visit_loads(get_load_list, loads)
+        loads = visitors.get_load_tuple(tensor)
         norm_idx = tuple(min(load.idx[d] for load in loads
                              if load.name not in self.param_names)
                          for d in range(self.dim))
@@ -398,10 +394,6 @@ class Stencil():
                         tensor.name, ', '.join(map(str, norm_idx)))
           norm_args = {'norm_idx': norm_idx, 'param_names': self.param_names}
           tensor.mutate(normalize_callback, norm_args)
-          #tensor.lets = tuple(_.visit(normalize_callback, norm_args)
-          #                    for _ in tensor.lets)
-          #tensor.expr = tensor.expr.visit(normalize_callback, norm_args)
-          #tensor.st_ref = tensor.st_ref.visit(normalize_callback, norm_args)
         tensor_map[tensor.name] = tensor
         tensors.append(tensor)
 
@@ -410,15 +402,10 @@ class Stencil():
 
       for tensor in tensors:
         tensor.propagate_type()
-        loads = OrderedDict()
-        def get_load_dict(obj, loads):
-          if isinstance(obj, grammar.Ref):
-            loads.setdefault(obj.name, []).append(obj)
-          return obj
-        tensor.visit_loads(get_load_dict, loads)
+        loads = visitors.get_load_dict(tensor)
         for parent_name, ld_refs in loads.items():
-          ld_refs = sorted(
-              ld_refs, key=lambda ref: util.serialize(ref.idx, self.tile_size))
+          ld_refs = sorted(ld_refs, key=lambda ref: soda_util.serialize(
+              ref.idx, self.tile_size))
           parent_tensor = tensor_map[parent_name]
           parent_tensor.children[tensor.name] = tensor
           tensor.parents[parent_name] = parent_tensor
@@ -434,7 +421,7 @@ class Stencil():
         _logger.debug('<local tensor>: %s', tensor)
     return tensor_map
 
-  @cached_property
+  @cached_property.cached_property
   def chronological_tensors(self):
     """Computes the offsets of tensors.
 
@@ -442,7 +429,7 @@ class Stencil():
       A list of Tensor, in chronological order.
     """
     _logger.info('calculate tensor offsets')
-    processing_queue = deque(list(self.input_names))
+    processing_queue = collections.deque(list(self.input_names))
     processed_tensors = set(self.input_names)
     chronological_tensors = list(map(self.tensors.get, self.input_names))
     for tensor in chronological_tensors:
@@ -464,7 +451,7 @@ class Stencil():
               child.name,
               ', '.join([x.name for x in child.parents.values()]),
               'is' if len(child.parents) == 1 else 'are')
-          stage_offset = util.serialize(child.st_idx, self.tile_size)
+          stage_offset = soda_util.serialize(child.st_idx, self.tile_size)
 
           # synchronization check
           def sync(tensor, offset):
@@ -472,20 +459,17 @@ class Stencil():
               return offset
             _logger.debug('index of tensor <%s>: %s',
                           tensor.name, tensor.st_idx)
-            stage_offset = util.serialize(tensor.st_idx, self.tile_size)
+            stage_offset = soda_util.serialize(tensor.st_idx, self.tile_size)
             _logger.debug('offset of tensor <%s>: %d',
                           tensor.name, stage_offset)
-            loads = {}
-            def get_load_list(obj, loads):
-              if isinstance(obj, grammar.Ref):
-                loads.setdefault(obj.name, []).append(obj.idx)
-              return obj
-            tensor.visit_loads(get_load_list, loads)
+            loads = visitors.get_load_dict(tensor)
+            for name in loads:
+              loads[name] = tuple(ref.idx for ref in loads[name])
             _logger.debug('loads: %s', ', '.join(
                 '%s@%s' % (name, util.lst2str(map(util.idx2str, indices)))
                 for name, indices in loads.items()))
             for n in loads:
-              loads[n] = util.serialize_iter(loads[n], self.tile_size)
+              loads[n] = soda_util.serialize_iter(loads[n], self.tile_size)
             for l in loads.values():
               l[0], l[-1] = (stage_offset - max(l), stage_offset - min(l))
               del l[1:-1]
@@ -576,7 +560,7 @@ class Stencil():
     for tensor in self.tensors.values():
       for name, offsets in tensor.ld_offsets.items():
         _logger.debug('stage offset: %s@%d <- %s@%s',
-                      tensor.name, util.serialize(tensor.st_idx,
+                      tensor.name, soda_util.serialize(tensor.st_idx,
                                                   self.tile_size),
                       name, util.lst2str(offsets))
     for tensor in self.tensors.values():
@@ -586,33 +570,33 @@ class Stencil():
 
     return chronological_tensors
 
-  @cached_property
+  @cached_property.cached_property
   def input_partition(self):
     pixel_width_i = sum(self.pixel_width_i)
     if self.burst_width/pixel_width_i*self.dram_bank/2 > self.unroll_factor/2:
       return int(self.burst_width/pixel_width_i*self.dram_bank/2)
     return int(self.unroll_factor/2)
 
-  @cached_property
+  @cached_property.cached_property
   def output_partition(self):
     pixel_width_o = sum(self.pixel_width_o)
     if self.burst_width/pixel_width_o*self.dram_bank/2 > self.unroll_factor/2:
       return int(self.burst_width/pixel_width_o*self.dram_bank/2)
     return int(self.unroll_factor/2)
 
-  @cached_property
+  @cached_property.cached_property
   def pixel_width_i(self):
     return list(map(util.get_width_in_bits, self.input_stmts))
 
-  @cached_property
+  @cached_property.cached_property
   def pixel_width_o(self):
     return list(map(util.get_width_in_bits, self.output_stmts))
 
-  @cached_property
+  @cached_property.cached_property
   def producer_tensors(self):
     return tuple(filter(Tensor.is_producer, self.tensors.values()))
 
-  @cached_property
+  @cached_property.cached_property
   def consumer_tensors(self):
     return tuple(filter(Tensor.is_consumer, self.tensors.values()))
 
@@ -628,7 +612,7 @@ class Stencil():
     load_names = {l.name for l in loads
             if l.name not in self.extra_params}
     windows = {name: sorted({l.idx for l in loads if l.name == name},
-                key=lambda x: util.serialize(x, self.tile_size))
+                key=lambda x: soda_util.serialize(x, self.tile_size))
            for name in load_names}
     _logger.debug('window for %s@(%s) is %s' %
       (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
@@ -642,7 +626,7 @@ class Stencil():
       return node.expr
     raise util.SemanticError('cannot get expression for %s' % str(type(node)))
 
-  @cached_property
+  @cached_property.cached_property
   def reuse_buffers(self):
     """Constructs the reuse buffers.
 
@@ -667,7 +651,7 @@ class Stencil():
         reuse_buffer_length[end] = (end-start)//unroll_factor
     return reuse_buffers
 
-  @cached_property
+  @cached_property.cached_property
   def all_points(self):
     all_points = {}
     for tensor in self.producer_tensors:
@@ -675,7 +659,7 @@ class Stencil():
                                             self.unroll_factor)
     return all_points
 
-  @cached_property
+  @cached_property.cached_property
   def next_fifo(self):
     """Constructs the next fifo offset mapping.
 
@@ -691,7 +675,7 @@ class Stencil():
     _logger.debug('next_fifo: %s' % next_fifo)
     return next_fifo
 
-  @cached_property
+  @cached_property.cached_property
   def reuse_buffer_lengths(self):
     """Constructs the reuse buffer lengths.
 
@@ -785,7 +769,7 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
   A_dag = set()
   for child in tensor.children.values():
     A_dag |= unroll_offsets(
-      util.serialize_iter(child.ld_indices[tensor.name], tile_size), child)
+      soda_util.serialize_iter(child.ld_indices[tensor.name], tile_size), child)
   _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
@@ -817,7 +801,6 @@ def _get_points(tile_size, tensor, unroll_factor):
   all_points = {} # {name: {offset: {unroll_idx: point_idx}}}
   for child in tensor.children.values():
     all_points[child.name] = {}
-    #offsets = serialize_iter(child.ld_indices[tensor.name], tile_size)
     offsets = child.ld_offsets[tensor.name]
     for unroll_idx in range(unroll_factor):
       for idx, offset in enumerate(offsets):
@@ -869,7 +852,7 @@ def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
     tensor.name)
   A_dag = set()
   for stage in tensor.children:
-    offsets = util.serialize_iter(stage.window[tensor.name], tile_size)
+    offsets = soda_util.serialize_iter(stage.window[tensor.name], tile_size)
     A_dag |= {max(offsets)-offset+stage.delay[tensor.name]
       for offset in offsets}
   _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
@@ -885,7 +868,7 @@ def _get_replicated_points(tile_size, tensor):
   all_points = {} # {name:{offset:point_index}}
   for stage in tensor.children:
     all_points[stage.name] = {}
-    offsets = util.serialize_iter(stage.window[tensor.name], tile_size)
+    offsets = soda_util.serialize_iter(stage.window[tensor.name], tile_size)
     max_offset = max(offsets)
     for idx, offset in enumerate(offsets):
       all_points[stage.name][
@@ -917,8 +900,9 @@ def get_indices_id(indices):
   return '_'.join(str(idx).replace('-', 'm') for idx in indices)
 
 def get_stencil_distance(stencil_window, tile_size):
-  return (max(util.serialize_iter(stencil_window, tile_size))+
-      util.serialize(get_stencil_window_offset(stencil_window), tile_size))
+  return (max(soda_util.serialize_iter(stencil_window, tile_size)) +
+          soda_util.serialize(get_stencil_window_offset(stencil_window),
+                              tile_size))
 
 def get_stencil_dim(points):
   dimension = len(next(iter(points)))
@@ -928,7 +912,7 @@ def get_stencil_dim(points):
 
 _overall_stencil_window_cache = {}
 def get_overall_stencil_window(input_tensor, output_tensor):
-  if isinstance(input_tensor, Iterable):
+  if isinstance(input_tensor, collections.Iterable):
     all_points = tuple(sorted(set.union(*(
         set(get_overall_stencil_window(_, output_tensor))
         for _ in input_tensor))))

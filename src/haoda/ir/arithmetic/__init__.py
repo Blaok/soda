@@ -1,26 +1,29 @@
+import collections
 import logging
 
 from haoda.ir.arithmetic import base
 
 _logger = logging.getLogger().getChild(__name__)
 
-def simplify(expr, lets=()):
-  """Simplifies expr and corresponding lets.
+def simplify(expr):
+  """Simplifies expressions.
 
   Args:
-    expr: grammar.Expr
-    lets: Sequence of grammar.Let
+    expr: A haoda.ir.Node or a sequence of haoda.ir.Node.
 
   Returns:
-    (expr, lets): simplified expr and lets.
+    Simplified haoda.ir.Node or sequence.
   """
 
   if expr is None:
     _logger.debug('None expr, no simplification.')
-    return expr, lets
+    return expr
 
   passes = base.compose(
       base.flatten,
       base.print_tree)
 
-  return passes(expr), tuple(map(passes, lets))
+  if isinstance(expr, collections.Iterable):
+    return type(expr)(map(passes, expr))
+
+  return passes(expr)

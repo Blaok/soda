@@ -1,12 +1,12 @@
 #!/usr/bin/python3
-from collections import OrderedDict
+import collections
 import json
 import sys
 
 class XilinxHLSReport():
   def __init__(self, rpt_file):
     def get_resource_dict(resources, usages):
-      usage = OrderedDict()
+      usage = collections.OrderedDict()
       for resource, used in zip(resources, usages):
         usage[resource] = int(used)
       return usage
@@ -15,9 +15,9 @@ class XilinxHLSReport():
       if line.startswith('* Project:'):
         self.app = line.split(':')[1].split(' ')[-1][:-8]
       elif line == '== Utilization Estimates\n':
-        self.resources_used = OrderedDict()
-        self.resources_available = OrderedDict()
-        self.resources_instances = OrderedDict()
+        self.resources_used = collections.OrderedDict()
+        self.resources_available = collections.OrderedDict()
+        self.resources_instances = collections.OrderedDict()
       elif (hasattr(self, 'resources_used') and
           not self.resources_used and 'Name' in line):
         for resource in line.split('|')[2:-1]:
@@ -47,7 +47,7 @@ class XilinxHLSReport():
           self.resources_instances[resource] = int(avail)
         del self.resources_instances[None]
       elif line.startswith('  * Instance:'):
-        self.instances = OrderedDict()
+        self.instances = collections.OrderedDict()
         self.instances[None] = None
       elif (hasattr(self, 'instances') and
           None in self.instances and '|compute_' in line):
@@ -57,8 +57,9 @@ class XilinxHLSReport():
         else:
           pe_id = int(pe_id)
         func_name = '_'.join(line.split('|')[2].split('_')[1:-2])
-        compute = self.instances.setdefault('compute', OrderedDict())
-        compute = compute.setdefault(func_name, OrderedDict())
+        compute = self.instances.setdefault('compute',
+                                            collections.OrderedDict())
+        compute = compute.setdefault(func_name, collections.OrderedDict())
         compute[pe_id] = get_resource_dict(self.resources_used,
                            line.split('|')[3:-1])
       elif (hasattr(self, 'instances') and
@@ -70,17 +71,17 @@ class XilinxHLSReport():
         else:
           fifo_depth = int(fifo_depth)
         forward = self.instances.setdefault('forward',
-                          OrderedDict())
+                          collections.OrderedDict())
         forward = forward.setdefault(
-          int(line.split('|')[2].split('_')[1]), OrderedDict())
-        forward = forward.setdefault(data_type, OrderedDict())
+          int(line.split('|')[2].split('_')[1]), collections.OrderedDict())
+        forward = forward.setdefault(data_type, collections.OrderedDict())
         forward = forward.setdefault(fifo_depth, [])
         forward.append(get_resource_dict(self.resources_used,
                          line.split('|')[3:-1]))
       elif (hasattr(self, 'instances') and
           None in self.instances and '|'+self.app+'_kernel' in line):
         if line.split('|')[2].strip().endswith('_m_axi'):
-          m_axi = self.instances.setdefault('m_axi', OrderedDict())
+          m_axi = self.instances.setdefault('m_axi', collections.OrderedDict())
           m_axi[line.split('|')[2].split('_')[2]] = get_resource_dict(
             self.resources_used, line.split('|')[3:-1])
         elif line.split('|')[2].strip().endswith('_control_s_axi'):
@@ -105,15 +106,15 @@ class XilinxHLSReport():
                       line.split('|')[3:-1]))
       elif (hasattr(self, 'instances') and
           None in self.instances and '|pack_' in line):
-        pack = self.instances.setdefault('pack', OrderedDict())
-        pack = pack.setdefault(0, OrderedDict())
+        pack = self.instances.setdefault('pack', collections.OrderedDict())
+        pack = pack.setdefault(0, collections.OrderedDict())
         pack = pack.setdefault('float', [])
         pack.append(get_resource_dict(self.resources_used,
                         line.split('|')[3:-1]))
       elif (hasattr(self, 'instances') and
           None in self.instances and '|unpack_' in line):
-        unpack = self.instances.setdefault('unpack', OrderedDict())
-        unpack = unpack.setdefault(0, OrderedDict())
+        unpack = self.instances.setdefault('unpack', collections.OrderedDict())
+        unpack = unpack.setdefault(0, collections.OrderedDict())
         unpack = unpack.setdefault('float', [])
         unpack.append(get_resource_dict(self.resources_used,
                         line.split('|')[3:-1]))
@@ -135,7 +136,7 @@ class XilinxHLSReport():
 
   def check(self):
     resources = list(self.resources_instances)
-    resources_used = OrderedDict()
+    resources_used = collections.OrderedDict()
     for resource in resources:
       resources_used[resource] = 0
     for module in ('Block_proc', 'entry', 'control_s_axi'):
@@ -175,7 +176,7 @@ class XilinxPostRoutingReport():
     for line in rpt_file:
       line_splited = line.split('|')
       if len(line_splited) > 1 and 'Name' in line_splited[1]:
-        self.resources_used = OrderedDict(
+        self.resources_used = collections.OrderedDict(
           (resource.strip(), None)
           for resource in line_splited[2:-1])
       elif (hasattr(self, 'resources_used') and

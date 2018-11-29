@@ -1,11 +1,11 @@
-from collections import OrderedDict
-from functools import reduce
+import collections
+import functools
 import logging
 import operator
 
 from haoda import ir
-from soda import grammar
-from soda import util
+from haoda import util
+from haoda.ir import visitors
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -113,7 +113,7 @@ def _print_interface(printer, kernel_name, inputs, outputs, super_source):
         for dim, size in enumerate(param.size):
           println('uint32_t %s_index_dim_%d = 0;' % (param.name, dim))
       println('%s_init:' % param.name, 0)
-      println('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, reduce(operator.mul, param.size), param.name))
+      println('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, functools.reduce(operator.mul, param.size), param.name))
       p.do_scope()
       println('#pragma HLS pipeline II=1', 0)
       println('%s& %s_tmp = var_%s[%s_index];' % (param.type, param.name, param.name, param.name))
@@ -380,7 +380,7 @@ def print_code(stencil, output_file):
                      65536))
   for stmt in stencil.param_stmts:
     inputs.append(('var_%s' % stmt.name, stmt.type, 0,
-                    reduce(operator.mul, stmt.size)))
+                    functools.reduce(operator.mul, stmt.size)))
   _print_interface(printer, stencil.app_name + '_kernel', inputs, outputs,
                    stencil.dataflow_super_source)
 
@@ -432,24 +432,25 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   writes_in_lets = tuple(_.name for _ in module_trait.lets
                          if not isinstance(_.name, str))
   reads_in_exprs = module_trait.exprs
-  dram_reads = ir.get_dram_refs(reads_in_lets + reads_in_exprs)
-  dram_writes = ir.get_dram_refs(writes_in_lets)
-  dram_read_map = OrderedDict()
-  dram_write_map = OrderedDict()
+  dram_reads = visitors.get_dram_refs(reads_in_lets + reads_in_exprs)
+  dram_writes = visitors.get_dram_refs(writes_in_lets)
+  dram_read_map = collections.OrderedDict()
+  dram_write_map = collections.OrderedDict()
   all_dram_reads = ()
   num_bank_map = {}
   if dram_reads:  # this is an unpacking module
     assert not dram_writes, 'cannot read and write DRAM in the same module'
     for dram_read in dram_reads:
-      dram_read_map.setdefault(dram_read.var, OrderedDict()).setdefault(
-          dram_read.dram, []).append(dram_read)
+      dram_read_map.setdefault(dram_read.var,
+                               collections.OrderedDict()).setdefault(
+                                   dram_read.dram, []).append(dram_read)
     _logger.debug('dram read map: %s', dram_read_map)
     burst_width = kwargs.pop('burst_width')
     for var in dram_read_map:
       for dram in dram_read_map[var]:
         # number of elements per cycle
         batch_size = len(dram_read_map[var][dram])
-        dram_read_map[var][dram] = OrderedDict(
+        dram_read_map[var][dram] = collections.OrderedDict(
             (_.offset, _) for _ in dram_read_map[var][dram])
         dram_reads = dram_read_map[var][dram]
         num_banks = len(next(iter(dram_reads.values())).dram)
@@ -460,7 +461,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         _logger.debug('dram reads: %s', dram_reads)
         assert tuple(sorted(dram_reads.keys())) == tuple(range(batch_size)), \
                'unexpected DRAM accesses pattern %s' % dram_reads
-        batch_width = sum(util.get_width_in_bits(_.soda_type)
+        batch_width = sum(util.get_width_in_bits(_.haoda_type)
                           for _ in dram_reads.values())
         del dram_reads
         if burst_width * num_banks >= batch_width:
@@ -485,15 +486,16 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
           for _ in dram_reads for bank in _.dram)
   elif dram_writes:   # this is a packing module
     for dram_write in dram_writes:
-      dram_write_map.setdefault(dram_write.var, OrderedDict()).setdefault(
-          dram_write.dram, []).append(dram_write)
+      dram_write_map.setdefault(dram_write.var,
+                                collections.OrderedDict()).setdefault(
+                                    dram_write.dram, []).append(dram_write)
     _logger.debug('dram write map: %s', dram_write_map)
     burst_width = kwargs.pop('burst_width')
     for var in dram_write_map:
       for dram in dram_write_map[var]:
         # number of elements per cycle
         batch_size = len(dram_write_map[var][dram])
-        dram_write_map[var][dram] = OrderedDict(
+        dram_write_map[var][dram] = collections.OrderedDict(
             (_.offset, _) for _ in dram_write_map[var][dram])
         dram_writes = dram_write_map[var][dram]
         num_banks = len(next(iter(dram_writes.values())).dram)
@@ -504,7 +506,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         _logger.debug('dram writes: %s', dram_writes)
         assert tuple(sorted(dram_writes.keys())) == tuple(range(batch_size)), \
                'unexpected DRAM accesses pattern %s' % dram_writes
-        batch_width = sum(util.get_width_in_bits(_.soda_type)
+        batch_width = sum(util.get_width_in_bits(_.haoda_type)
                           for _ in dram_writes.values())
         del dram_writes
         if burst_width * num_banks >= batch_width:
@@ -605,13 +607,13 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     if isinstance(obj, ir.DRAMRef):
       coalescing_idx = kwargs.pop('coalescing_idx')
       unroll_factor = kwargs.pop('unroll_factor')
-      type_width = util.get_width_in_bits(obj.soda_type)
+      type_width = util.get_width_in_bits(obj.haoda_type)
       elem_idx = coalescing_idx * unroll_factor + obj.offset
       num_banks = num_bank_map[obj.var]
       bank = obj.dram[elem_idx % num_banks]
       lsb = (elem_idx // num_banks) * type_width
       msb = lsb + type_width - 1
-      return grammar.Var(name='{}({msb}, {lsb})'.format(
+      return ir.Var(name='{}({msb}, {lsb})'.format(
           obj.dram_buf_name(bank), msb=msb, lsb=lsb), idx=())
     return obj
 
@@ -639,7 +641,7 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
                 dram_write_map[let.name.var][let.name.dram])})
         println('{} = Reinterpret<ap_uint<{width}>>({});'.format(
             let.name, let.expr.c_expr,
-            width=util.get_width_in_bits(let.expr.soda_type)))
+            width=util.get_width_in_bits(let.expr.haoda_type)))
     for var in dram_write_map:
       for dram in (next(iter(_.values()))
                    for _ in dram_write_map[var].values()):
@@ -654,13 +656,13 @@ def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     if isinstance(obj, ir.DRAMRef):
       coalescing_idx = kwargs.pop('coalescing_idx')
       unroll_factor = kwargs.pop('unroll_factor')
-      type_width = util.get_width_in_bits(obj.soda_type)
+      type_width = util.get_width_in_bits(obj.haoda_type)
       elem_idx = coalescing_idx * unroll_factor + obj.offset
       num_banks = num_bank_map[obj.var]
       bank = expr.dram[elem_idx % num_banks]
       lsb = (elem_idx // num_banks) * type_width
       msb = lsb + type_width - 1
-      return grammar.Var(
+      return ir.Var(
           name='Reinterpret<{c_type}>(static_cast<ap_uint<{width}>>('
                '{dram_buf_name}({msb}, {lsb})))'.format(
                    c_type=obj.c_type, dram_buf_name=obj.dram_buf_name(bank),
