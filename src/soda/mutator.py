@@ -19,6 +19,11 @@ def shift(obj, offset, excluded=(), op=operator.sub):
     offset: Second operand given to the operator.
     excluded: Sequence of names to be excluded from the mutation. Default to ().
     op: Shifting operator. Should be either add or sub. Default to sub.
+
+  Returns:
+    Mutated obj. If obj is an IR node, it will be a different object than the
+    input. If obj is a tensor, it will be the same object but with fields
+    mutated.
   """
   if op not in (operator.add, operator.sub):
     _logger.warn('shifting with neither + nor -, which most likely is an error')
@@ -31,9 +36,9 @@ def shift(obj, offset, excluded=(), op=operator.sub):
                       obj.name, ', '.join(map(str, new_idx)))
         obj.idx = new_idx
   if isinstance(obj, ir.Node):
-    obj.visit(visitor)
-  elif isinstance(obj, core.Tensor):
+    return obj.visit(visitor)
+  if isinstance(obj, core.Tensor):
     obj.mutate(visitor)
   else:
-    raise TypeError('argument is not an IR node or a Tensor')
+    raise TypeError('argument is not an IR node or a tensor')
   return obj
