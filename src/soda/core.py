@@ -392,8 +392,8 @@ class Stencil():
         if any(norm_idx):
           _logger.debug('normalize index of %s: (%s)',
                         tensor.name, ', '.join(map(str, norm_idx)))
-          norm_args = {'norm_idx': norm_idx, 'param_names': self.param_names}
-          tensor.mutate(normalize_callback, norm_args)
+          mutator.shift(tensor, norm_idx, excluded=self.param_names,
+                        op=operator.sub)
         tensor_map[tensor.name] = tensor
         tensors.append(tensor)
 
