@@ -42,7 +42,7 @@ def get_load_set(obj):
     TypeError: If obj is not an IR node.
   """
   def visitor(obj, loads):
-    if isinstance(obj, ir.FIFO):
+    if isinstance(obj, grammar.Ref):
       loads[obj] = None
     return obj
   loads = collections.OrderedDict()
@@ -50,7 +50,7 @@ def get_load_set(obj):
     obj.visit(visitor, loads)
   else:
     raise TypeError('argument is not an IR node or a Tensor')
-  loads = tuple(loads)
+  return tuple(loads)
 
 def get_load_dict(obj):
   """Get all load references as a dict mapping names to lists of loads.
