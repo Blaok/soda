@@ -51,13 +51,15 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
 
   top_name = stencil.app_name + '_kernel'
 
-  if platform is None:
-    if 'XILINX_SDX' in os.environ and 'XDEVICE' in os.environ:
-      platform = os.path.join(
-          os.environ['XILINX_SDX'], 'platforms',
-          os.environ['XDEVICE'].replace(':', '_').replace('.', '_'))
-    else:
-      raise ValueError('Cannot determine platform from environment.')
+  if 'XDEVICE' in os.environ:
+    xdevice = os.environ['XDEVICE'].replace(':', '_').replace('.', '_')
+    if platform is None or not os.path.exists(platform):
+      platform = os.path.join('/opt/xilinx/platforms', xdevice)
+    if platform is None or not os.path.exists(platform):
+      if 'XILINX_SDX' in os.environ:
+        platform = os.path.join(os.environ['XILINX_SDX'], 'platforms', xdevice)
+  if platform is None or not os.path.exists(platform):
+    raise ValueError('Cannot determine platform from environment.')
   device_info = backend.get_device_info(platform)
 
   with tempfile.TemporaryDirectory(prefix='sodac-xrtl-') as tmpdir:
