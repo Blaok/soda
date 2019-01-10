@@ -6,12 +6,14 @@ import operator
 
 import cached_property
 
+from haoda import ir
 from haoda import util
 from haoda.ir import arithmetic
 from soda import dataflow
 from soda import grammar
 from soda import util as soda_util
 from soda import visitor
+from soda import mutator
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -113,7 +115,7 @@ class Tensor():
 
     def visit_haoda_type(obj, args):
       if obj.haoda_type is None:
-        if isinstance(obj, grammar.Var):
+        if isinstance(obj, ir.Var):
           obj.haoda_type = var_types[obj.name]
       return obj
 
@@ -366,7 +368,7 @@ class Stencil():
       _logger.debug('iterate %s', iteration)
       _logger.debug('map: %s', self.tensor_type_map)
       def mutate_name_callback(obj, mutated):
-        if isinstance(obj, grammar.Ref):
+        if isinstance(obj, ir.Ref):
           obj.haoda_type = self.tensor_type_map[obj.name]
           # pylint: disable=cell-var-from-loop
           obj.name = name_in_iter(obj.name, iteration)

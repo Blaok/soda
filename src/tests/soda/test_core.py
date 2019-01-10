@@ -14,17 +14,17 @@ class TestStencil(unittest.TestCase):
     self.tile_size = [233, 0]
     self.haoda_type = 'uint16'
     self.unroll_factor = 1
-    self.expr_ref = grammar.Ref(name='foo', idx=(233, 42), lat=None)
+    self.expr_ref = ir.Ref(name='foo', idx=(233, 42), lat=None)
     self.expr = ir.Expr(operand=(self.expr_ref,), operator=())
     self.input_stmt = grammar.InputStmt(
         haoda_type=self.haoda_type, name='foo_i', tile_size=self.tile_size,
         dram=())
     self.param_stmt = grammar.ParamStmt(
         haoda_type=self.haoda_type, name='foo_p', attr=(), size=(), dram=())
-    self.local_ref = grammar.Ref(name='foo_l', idx=(0, 0), lat=None)
+    self.local_ref = ir.Ref(name='foo_l', idx=(0, 0), lat=None)
     self.local_stmt = grammar.LocalStmt(
       haoda_type=self.haoda_type, let=(), ref=self.local_ref, expr=self.expr)
-    self.output_ref = grammar.Ref(name='foo_o', idx=(0, 0), lat=None)
+    self.output_ref = ir.Ref(name='foo_o', idx=(0, 0), lat=None)
     self.output_stmt = grammar.OutputStmt(
       haoda_type=self.haoda_type, let=(), ref=self.output_ref, expr=self.expr,
       dram=())

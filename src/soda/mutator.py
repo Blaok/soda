@@ -3,14 +3,13 @@ import operator
 
 from haoda import ir
 from soda import core
-from soda import grammar
 
 _logger = logging.getLogger().getChild(__name__)
 
 def shift(obj, offset, excluded=(), op=operator.sub):
-  """Shift soda.grammar.Ref with the given offset.
+  """Shift soda.ir.Ref with the given offset.
 
-  All soda.grammar.Ref, excluding the given names, will be shifted with the
+  All soda.ir.Ref, excluding the given names, will be shifted with the
   given offset using the given operator. The operator will be applied pointwise
   on the original index and the given offset.
 
@@ -28,7 +27,7 @@ def shift(obj, offset, excluded=(), op=operator.sub):
   if op not in (operator.add, operator.sub):
     _logger.warn('shifting with neither + nor -, which most likely is an error')
   def visitor(obj, args):
-    if isinstance(obj, grammar.Ref):
+    if isinstance(obj, ir.Ref):
       if obj.name not in excluded:
         new_idx = tuple(op(a, b) for a, b in zip(obj.idx, offset))
         _logger.debug('reference %s(%s) shifted to %s(%s)',

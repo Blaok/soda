@@ -5,7 +5,6 @@ import cached_property
 
 from haoda import ir
 from haoda import util
-from soda import grammar
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -345,7 +344,7 @@ def create_dataflow_graph(stencil):
             var_name = 'let_%d' % len(src_node.lets)
             # pylint: disable=undefined-loop-variable
             var_type = fifo_r.haoda_type
-            lets.append(grammar.Let(
+            lets.append(ir.Let(
               haoda_type=var_type, name=var_name,
               expr=ir.DelayedRef(delay=delay, ref=fifo_r)))
           expr = ir.Var(name=var_name, idx=[])
@@ -354,7 +353,7 @@ def create_dataflow_graph(stencil):
           expr = fifo_r   # pylint: disable=undefined-loop-variable
       elif isinstance(src_node, ComputeNode):
         def replace_refs_callback(obj, args):
-          if isinstance(obj, grammar.Ref):
+          if isinstance(obj, ir.Ref):
             _logger.debug('replace %s with %s', obj,
                           # pylint: disable=cell-var-from-loop
                           src_node.fifo_map[obj.name][obj.idx])
@@ -379,7 +378,7 @@ def create_dataflow_graph(stencil):
                                 # pylint: disable=undefined-loop-variable
                                 dram=stmt.dram, var=src_node.tensor.name,
                                 offset=src_node.pe_id)
-          dst_node.lets.append(grammar.Let(
+          dst_node.lets.append(ir.Let(
             haoda_type=None, name=dram_ref, expr=fifo))
       else:
         raise util.InternalError('unexpected node of type %s' % type(src_node))

@@ -2,7 +2,6 @@ import collections
 
 from haoda import ir
 from soda import core
-from soda import grammar
 
 def get_load_tuple(obj):
   """Get all load references as a tuple.
@@ -17,7 +16,7 @@ def get_load_tuple(obj):
     TypeError: If obj is not an IR node or a Tensor.
   """
   def visitor(obj, loads):
-    if isinstance(obj, grammar.Ref):
+    if isinstance(obj, ir.Ref):
       loads.append(obj)
     return obj
   loads = []
@@ -42,7 +41,7 @@ def get_load_set(obj):
     TypeError: If obj is not an IR node.
   """
   def visitor(obj, loads):
-    if isinstance(obj, grammar.Ref):
+    if isinstance(obj, ir.Ref):
       loads[obj] = None
     return obj
   loads = collections.OrderedDict()
@@ -65,7 +64,7 @@ def get_load_dict(obj):
     TypeError: If obj is not a Tensor.
   """
   def visitor(obj, loads):
-    if isinstance(obj, grammar.Ref):
+    if isinstance(obj, ir.Ref):
       loads.setdefault(obj.name, []).append(obj)
     return obj
   loads = collections.OrderedDict()

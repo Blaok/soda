@@ -110,46 +110,6 @@ class OutputStmt(LocalStmtOrOutputStmt):
     if not self.dram:
       self.dram = (0,)
 
-class Let(ir.Node):
-  SCALAR_ATTRS = 'haoda_type', 'name', 'expr'
-
-  def __str__(self):
-    result = '{} = {}'.format(self.name, self.expr)
-    if self.haoda_type is not None:
-      result = '{} {}'.format(self.haoda_type, result)
-    return result
-
-  @property
-  def haoda_type(self):
-    if self._haoda_type is None:
-      return self.expr.haoda_type
-    return self._haoda_type
-
-  @haoda_type.setter
-  def haoda_type(self, val):
-    self._haoda_type = val
-
-  @property
-  def c_expr(self):
-    return 'const {} {} = {};'.format(self.c_type, self.name, self.expr.c_expr)
-
-class Ref(ir.Node):
-  SCALAR_ATTRS = 'name', 'lat'
-  LINEAR_ATTRS = ('idx',)
-  def __init__(self, **kwargs):
-    super().__init__(**kwargs)
-    self.idx = tuple(self.idx)
-    # self.lat will be defined in super().__init__(**kwargs)
-    # pylint: disable=access-member-before-definition
-    if isinstance(self.lat, str):
-      self.lat = ir.str2int(self.lat)
-
-  def __str__(self):
-    result = '{}({})'.format(self.name, ', '.join(map(str, self.idx)))
-    if self.lat is not None:
-      result += ' ~{}'.format(self.lat)
-    return result
-
 class ParamStmt(ir.Node):
   SCALAR_ATTRS = 'haoda_type', 'attr', 'name', 'size'
   LINEAR_ATTRS = ('dram',)
@@ -210,8 +170,8 @@ CLASSES = (
   InputStmt,
   LocalStmt,
   OutputStmt,
-  Let,
-  Ref,
+  ir.Let,
+  ir.Ref,
   ir.Expr,
   ir.LogicAnd,
   ir.BinaryOr,

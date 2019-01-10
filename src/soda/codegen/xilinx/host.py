@@ -5,7 +5,6 @@ import operator
 from haoda import ir
 from haoda import util
 from soda import core
-from soda import grammar
 from soda import util as soda_util
 
 logger = logging.getLogger().getChild(__name__)
@@ -1111,7 +1110,7 @@ def print_test(printer, stencil):
       do_scope()
 
     def mutate_load_for_host(obj, args):
-      if isinstance(obj, grammar.Ref):
+      if isinstance(obj, ir.Ref):
         if obj.name in stencil.param_names:
           return ir.make_var('%s_img%s' % (
               obj.name, ''.join('[%d]' % _ for _ in obj.idx)))
@@ -1121,7 +1120,7 @@ def print_test(printer, stencil):
                 obj.name, d) for d in range(stencil.dim))))
       return obj
     def mutate_store_for_host(obj, args):
-      if isinstance(obj, grammar.Ref):
+      if isinstance(obj, ir.Ref):
         if obj.name in stencil.output_names:
           return ir.make_var('%s result_%s' % (obj.c_type, obj.name))
         return ir.make_var('%s_img[%s]' % (obj.name, '+'.join(

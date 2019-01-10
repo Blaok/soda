@@ -8,16 +8,16 @@ from soda import grammar
 class TestGrammar(unittest.TestCase):
 
   def setUp(self):
-    self.ref = grammar.Ref(name='foo', idx=(0, 23), lat=None)
-    self.expr_ref = grammar.Ref(name='bar', idx=(233, 42), lat=None)
+    self.ref = ir.Ref(name='foo', idx=(0, 23), lat=None)
+    self.expr_ref = ir.Ref(name='bar', idx=(233, 42), lat=None)
     self.expr_ref.haoda_type = 'int8'
     self.expr = ir.Expr(operand=(self.expr_ref,), operator=())
-    self.let_ref = grammar.Ref(name='bar_l', idx=(42, 2333), lat=None)
+    self.let_ref = ir.Ref(name='bar_l', idx=(42, 2333), lat=None)
     self.let_expr = ir.Expr(operand=(self.let_ref,), operator=())
-    self.let = grammar.Let(haoda_type='int8', name='foo_l', expr=self.let_expr)
-    self.let_ref2 = grammar.Ref(name='bar_l2', idx=(0, 42), lat=None)
+    self.let = ir.Let(haoda_type='int8', name='foo_l', expr=self.let_expr)
+    self.let_ref2 = ir.Ref(name='bar_l2', idx=(0, 42), lat=None)
     self.let_expr2 = ir.Expr(operand=(self.let_ref2,), operator=())
-    self.let2 = grammar.Let(haoda_type='int8', name='foo_l2',
+    self.let2 = ir.Let(haoda_type='int8', name='foo_l2',
                             expr=self.let_expr2)
 
   def test_syntax(self):
@@ -106,19 +106,19 @@ output double:
       '  int8 foo_l2 = bar_l2(0, 42)\n  foo(0, 23) = bar(233, 42)')
 
   def test_let(self):
-    self.assertEqual(str(grammar.Let(haoda_type='int8', name='foo',
+    self.assertEqual(str(ir.Let(haoda_type='int8', name='foo',
                                      expr=self.expr)),
                      'int8 foo = bar(233, 42)')
-    self.assertEqual(str(grammar.Let(haoda_type=None, name='foo',
+    self.assertEqual(str(ir.Let(haoda_type=None, name='foo',
                                      expr=self.expr)),
                      'int8 foo = bar(233, 42)')
 
   def test_ref(self):
-    self.assertEqual(str(grammar.Ref(name='foo', idx=[0], lat=None)),
+    self.assertEqual(str(ir.Ref(name='foo', idx=[0], lat=None)),
              'foo(0)')
-    self.assertEqual(str(grammar.Ref(name='foo', idx=[0], lat=233)),
+    self.assertEqual(str(ir.Ref(name='foo', idx=[0], lat=233)),
              'foo(0) ~233')
-    self.assertEqual(str(grammar.Ref(name='foo', idx=[0, 23], lat=233)),
+    self.assertEqual(str(ir.Ref(name='foo', idx=[0, 23], lat=233)),
              'foo(0, 23) ~233')
 
   def test_binary_operations(self):
