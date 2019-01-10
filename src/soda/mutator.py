@@ -1,8 +1,11 @@
+import collections
 import logging
 import operator
+import types
 
 from haoda import ir
 from soda import core
+from soda import visitor as soda_visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -42,3 +45,26 @@ def shift(obj, offset, excluded=(), op=operator.sub, verbose=False):
   else:
     raise TypeError('argument is not an IR node or a tensor')
   return obj
+
+def normalize(obj):
+  """Make the least access index 0.
+
+  Works on an ir.Node or an iterable of ir.Nodes. If it is shifted, a different
+  object is constructed and returned. Otherwise, obj will be returned as-is.
+
+  Args:
+    obj: A node or an iterable of nodes.
+  Returns:
+    Normalized node or iterable.
+  Raises:
+    TypeError: If argument is not an ir.Node or an iterable of ir.Nodes.
+  """
+  if isinstance(obj, types.GeneratorType):
+    return normalize(tuple(obj))
+  norm_idx = soda_visitor.get_normalize_index(obj)
+  shifter = lambda x: shift(x, norm_idx) if any(norm_idx) else x
+  if isinstance(obj, collections.Iterable):
+    return type(obj)(map(shifter, obj))
+  if isinstance(obj, ir.Node):
+    return shifter(obj)
+  raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')

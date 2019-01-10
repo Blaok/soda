@@ -73,3 +73,25 @@ def get_load_dict(obj):
   else:
     raise TypeError('argument is not a Tensor')
   return loads
+
+def get_normalize_index(obj) -> tuple:
+  """Get the normalize index that will make the least access index 0.
+
+  Args:
+    obj: A node or an iterable of nodes.
+  Returns:
+    Normalize index as a tuple.
+  Raises:
+    TypeError: If argument is not an ir.Node or an iterable of ir.Nodes.
+  """
+  if not isinstance(obj, (collections.Iterable, ir.Node)):
+    raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')
+  if isinstance(obj, ir.Node):
+    obj = (obj,)
+  try:
+    return min(sum(map(get_load_tuple, obj), ()),
+               key=lambda load: tuple(reversed(load.idx))).idx
+  except ValueError as e:
+    if str(e) == 'min() arg is an empty sequence':
+      return ()
+    raise e

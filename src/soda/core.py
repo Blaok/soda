@@ -373,17 +373,6 @@ class Stencil():
           # pylint: disable=cell-var-from-loop
           obj.name = name_in_iter(obj.name, iteration)
         return obj
-      def normalize_callback(obj, args):
-        if isinstance(obj, grammar.Ref):
-          norm_idx = args['norm_idx']
-          param_names = args['param_names']
-          if obj.name not in param_names:
-            new_idx = tuple(a-b for a, b in zip(obj.idx, norm_idx))
-            _logger.debug('reference %s(%s) normalized to %s(%s)',
-                          obj.name, ', '.join(map(str, obj.idx)),
-                          obj.name, ', '.join(map(str, new_idx)))
-            obj.idx = new_idx
-        return obj
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
         tensor = Tensor(stmt.visit(mutate_name_callback), self.tile_size)
