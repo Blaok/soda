@@ -88,3 +88,11 @@ def print_tree(node, printer=_logger.debug):
   printer('root')
   return node.visit(visitor, args=[1], pre_recursion=pre_recursion,
                     post_recursion=post_recursion)
+
+def propagate_type(node, symbol_table):
+  def visitor(node, symbol_table):
+    if node.haoda_type is None:
+      if isinstance(node, (ir.Ref, ir.Var)):
+        node.haoda_type = symbol_table[node.name]
+    return node
+  return node.visit(visitor, symbol_table)

@@ -73,7 +73,7 @@ include sdaccel-examples/makefile
 ifeq ($(SYNTHESIS_FLOW),rtl)
 $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP) $(OBJ)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-platform $(XILINX_SDX)/platforms/$(PLATFORM) --xocl-hw-xo $@ $(SODA_SRC)/$(APP).soda
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-hw-xo $@ $(SODA_SRC)/$(APP).soda
 endif
 
 check-git-status:
@@ -81,15 +81,15 @@ check-git-status:
 
 $(TMP)/$(KERNEL_SRCS): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-kernel $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-kernel $@ $^
 
 $(TMP)/$(HOST_BIN).cpp: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-host $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-host $@ $^
 
 $(TMP)/$(APP).h: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-header $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-header $@ $^
 
 $(OBJ)/%.o: $(TMP)/%.cpp $(TMP)/$(APP).h
 	@mkdir -p $(OBJ)

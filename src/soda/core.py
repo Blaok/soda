@@ -14,6 +14,7 @@ from soda import grammar
 from soda import util as soda_util
 from soda import visitor
 from soda import mutator
+from soda.optimization import temporal_cse
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -167,14 +168,15 @@ class Stencil():
     tile_size: List of int.
     unroll_factor: int.
     replication_factor: int.
+    optimizations: Set of enabled optimizations.
     dim: int.
     param_stmts: List of ParamStmt.
     input_stmts: List of InputStmt.
     local_stmts: List of LocalStmt.
     output_stmts: List of OutputStmt.
-    tensors: Dict from str of name to Tensor.
 
   Cached properties:
+    tensors: Dict from str of name to Tensor.
     input_names: Tuple of str, names of input tensors.
     param_names: Tuple of str, names of param tensors.
     local_names: Tuple of str, names of local tensors.
@@ -202,6 +204,9 @@ class Stencil():
     self.input_stmts = kwargs.pop('input_stmts')
     self.local_stmts = kwargs.pop('local_stmts')
     self.output_stmts = kwargs.pop('output_stmts')
+    self.optimizations = set()
+    if 'optimizations' in kwargs:
+      self.optimizations = kwargs.pop('optimizations')
 
     if 'dram_in' in kwargs:
       dram_in = kwargs.pop('dram_in')
@@ -253,6 +258,9 @@ class Stencil():
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
       stmt.expr = arithmetic.simplify(stmt.expr)
       stmt.let = arithmetic.simplify(stmt.let)
+
+    if 'temporal_cse' in self.optimizations:
+      temporal_cse.temporal_cse(self)
 
     # soda frontend successfully parsed
     # triggers cached property

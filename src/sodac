@@ -64,6 +64,12 @@ def main():
             dest='iterate',
             help='override iterate directive; '
             'repeat execution multiple times iteratively')
+  parser.add_argument('--temporal-cse',
+            type=str,
+            metavar='(yes|no)',
+            dest='temporal_cse',
+            nargs='?', const='yes', default='yes',
+            help='enable temporal common subexpression elimination or not')
   parser.add_argument('--border',
             type=str,
             metavar='(ignore|preserve)',
@@ -143,6 +149,10 @@ def main():
       unroll_factor = args.replication_factor
       replication_factor = args.replication_factor
 
+    optimizations = set()
+    if args.temporal_cse == 'yes':
+      optimizations.add('temporal_cse')
+
     stencil = core.Stencil(
       burst_width=args.burst_width if args.burst_width is not None
                      else soda_model.burst_width,
@@ -162,7 +172,8 @@ def main():
       dim=soda_model.dim,
       tile_size=tile_size,
       unroll_factor=unroll_factor,
-      replication_factor=replication_factor)
+      replication_factor=replication_factor,
+      optimizations=optimizations)
 
     logger.debug('stencil obtained: %s', stencil)
 
