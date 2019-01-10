@@ -318,7 +318,7 @@ class Stencil():
     return tuple(stmt.name for stmt in self.output_stmts)
 
   @cached_property.cached_property
-  def tensor_type_map(self):
+  def symbol_table(self):
     """Constructs a mapping from a tensor's name to its type.
 
     Returns:
@@ -366,10 +366,10 @@ class Stencil():
 
     for iteration in range(self.iterate):
       _logger.debug('iterate %s', iteration)
-      _logger.debug('map: %s', self.tensor_type_map)
+      _logger.debug('map: %s', self.symbol_table)
       def mutate_name_callback(obj, mutated):
         if isinstance(obj, ir.Ref):
-          obj.haoda_type = self.tensor_type_map[obj.name]
+          obj.haoda_type = self.symbol_table[obj.name]
           # pylint: disable=cell-var-from-loop
           obj.name = name_in_iter(obj.name, iteration)
         return obj
