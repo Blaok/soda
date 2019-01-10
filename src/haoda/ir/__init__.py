@@ -158,7 +158,7 @@ class Let(Node):
   SCALAR_ATTRS = 'haoda_type', 'name', 'expr'
 
   def __str__(self):
-    result = '{} = {}'.format(self.name, self.expr)
+    result = '{} = {}'.format(self.name, unparenthesize(self.expr))
     if self.haoda_type is not None:
       result = '{} {}'.format(self.haoda_type, result)
     return result
@@ -175,7 +175,8 @@ class Let(Node):
 
   @property
   def c_expr(self):
-    return 'const {} {} = {};'.format(self.c_type, self.name, self.expr.c_expr)
+    return 'const {} {} = {};'.format(self.c_type, self.name,
+                                      unparenthesize(self.expr.c_expr))
 
 class Ref(Node):
   SCALAR_ATTRS = 'name', 'lat'
@@ -202,7 +203,9 @@ class BinaryOp(Node):
     result = str(self.operand[0])
     for operator, operand in zip(self.operator, self.operand[1:]):
       result += ' {} {}'.format(operator, operand)
-    return result
+    if self.singleton:
+      return result
+    return parenthesize(result)
 
   @property
   def haoda_type(self):
@@ -214,7 +217,13 @@ class BinaryOp(Node):
     result = self.operand[0].c_expr
     for operator, operand in zip(self.operator, self.operand[1:]):
       result += ' {} {}'.format(operator, operand.c_expr)
-    return result
+    if self.singleton:
+      return result
+    return parenthesize(result)
+
+  @property
+  def singleton(self) -> bool:
+    return len(self.operand) == 1
 
 class Expr(BinaryOp):
   pass
@@ -265,7 +274,7 @@ class Operand(Node):
         return str(getattr(self, attr))
     # pylint: disable=useless-else-on-loop
     else:
-      return '(%s)' % str(self.expr)
+      return parenthesize(self.expr)
 
   @property
   def c_expr(self):
@@ -277,7 +286,7 @@ class Operand(Node):
         return str(attr)
     # pylint: disable=useless-else-on-loop
     else:
-      return '(%s)' % self.expr.c_expr
+      return parenthesize(self.expr.c_expr)
 
   @property
   def haoda_type(self):
@@ -306,11 +315,12 @@ class Operand(Node):
 class Cast(Node):
   SCALAR_ATTRS = 'haoda_type', 'expr'
   def __str__(self):
-    return '{}({})'.format(self.haoda_type, self.expr)
+    return '{}{}'.format(self.haoda_type, parenthesize(self.expr))
 
   @property
   def c_expr(self):
-    return 'static_cast<{} >({})'.format(self.c_type, self.expr.c_expr)
+    return 'static_cast<{} >{}'.format(self.c_type,
+                                       parenthesize(self.expr.c_expr))
 
 class Call(Node):
   SCALAR_ATTRS = ('name',)
@@ -860,6 +870,15 @@ def str2int(s, none_val=None):
   if s[0] == '0':
     return int(s, 8)
   return int(s)
+
+def parenthesize(expr) -> str:
+  return '({})'.format(unparenthesize(expr))
+
+def unparenthesize(expr) -> str:
+  expr_str = str(expr)
+  while expr_str.startswith('(') and expr_str.endswith(')'):
+    expr_str = expr_str[1:-1]
+  return expr_str
 
 def get_result_type(operand1, operand2, operator):
   for t in ('double', 'float') + sum((('int%d_t'%w, 'uint%d_t'%w)

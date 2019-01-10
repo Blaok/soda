@@ -97,7 +97,8 @@ class LocalStmtOrOutputStmt(ir.Node):
     else:
       let = ''
     return '{} {}:{} {} = {}'.format(type(self).__name__[:-4].lower(),
-                                     self.haoda_type, let, self.ref, self.expr)
+                                     self.haoda_type, let, self.ref,
+                                     ir.unparenthesize(self.expr))
 
 class LocalStmt(LocalStmtOrOutputStmt):
   pass
