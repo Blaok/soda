@@ -41,7 +41,7 @@ RPT ?= rpt/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 TMP ?= tmp/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 SRC ?= $(TMP)
 
-COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quiet || echo '-dirty')
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)$(shell git diff --exit-code --quiet 2>/dev/null || echo '-dirty')
 
 HOST_CFLAGS ?= -O2 -fopenmp -I$(TMP)
 HOST_LFLAGS ?= -fopenmp
