@@ -256,6 +256,7 @@ class Stencil():
                   for stmt in self.output_stmts)))
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
+      _logger.debug('simplify %s', stmt.name)
       stmt.expr = arithmetic.simplify(stmt.expr)
       stmt.let = arithmetic.simplify(stmt.let)
 

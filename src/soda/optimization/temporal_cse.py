@@ -1,4 +1,6 @@
-from typing import Dict, Iterable, Iterator, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, \
+    Sequence, Set, Tuple, Type, Union
+import enum
 import collections
 import itertools
 import logging
@@ -13,54 +15,78 @@ from soda import grammar
 from soda import mutator
 from soda import visitor as soda_visitor
 
-_OrderedDict = collections.OrderedDict
+RelativeAttr = Union[int, Tuple[int, ...]]
+Operation = Tuple[Union[RelativeAttr, Tuple[RelativeAttr, Any]], ...]
+
+OrderedDict = collections.OrderedDict
+class OrderedCounter(collections.Counter, collections.OrderedDict):
+  pass
+
 _logger = logging.getLogger().getChild(__name__)
 
+
+REDUCTION_OPS = {
+  '+': ir.AddSub,
+  '*': ir.MulDiv
+}
+
 _temporal_cse_counter = 0
-def temporal_cse(stencil):
+def temporal_cse(stencil: 'soda.core.Stencil') -> 'soda.core.Stencil':
   """Eliminate temporal common subexpressions.
 
   Eliminate temporal common subexpressions. The stencil object will be modified.
 
   Args:
     stencil: soda.core.Stencil object to work on.
+
+  Returns:
+    Modified stencil object.
   """
   _logger.debug('invoke stencil temporal common subexpression elimination')
 
-  def visitor(node: ir.Node, args: Tuple[dict, set]) -> ir.Node:
+  # pylint: disable=unsubscriptable-object
+  def visitor(node: ir.Node, args: Tuple[Mapping[ir.BinaryOp, str],
+                                         Set[ir.BinaryOp]]) -> ir.Node:
     """Visitor for temporal common subexpression elimination.
 
     Args:
-      args: Tuple of (cses, used). cses is a dict mapping expressions to names
-          of the new variables. used is a set that will hold the expressions of
-          all used variables.
+      args: Tuple of (cses, used); cses is a dict mapping expressions to names
+          of the new variables; used is a dict mapping used common
+          subexpressions to those that have common subexpressions recursively
+          eliminated.
     Returns:
       Optimized ir.Node with temporal common subexpressions eliminated.
     """
     try:
       cses, used = args
-      schedules = Schedules(node)
-      if not schedules.best.common_subexpressions:
-        _logger.debug('no temporal_cse found')
-        return node
-      _logger.debug('best schedule: %s', schedules.best)
-      for expr in schedules.best.common_subexpressions:
-        # pylint: disable=global-statement
-        global _temporal_cse_counter
-        cses[expr] = 'temporal_cse%d' % _temporal_cse_counter
-        _temporal_cse_counter += 1
-      return schedules.best.expr_with_cse(cses, used)
-    except Schedules.CannotHandle:
-      return node
+      expression = Expression(node)
+      if expression.best_schedule is not None:
+        if not expression.best_schedule.common_subexpressions:
+          _logger.debug('no temporal_cse found')
+          return node
+        _logger.debug('best schedule: (cost: %d)',
+                      expression.best_schedule.cost)
+        expression.best_schedule.print_tree()
+        for expr in expression.best_schedule.common_subexpressions:
+          # pylint: disable=global-statement
+          global _temporal_cse_counter
+          cses[expr] = 'tcse_var_%d' % _temporal_cse_counter
+          _logger.debug('common subexpression: %s <= %s',
+                        cses[expr], ir.unparenthesize(expr))
+          _temporal_cse_counter += 1
+        return expression.best_schedule.get_ast_with_cse(cses, used)
+    except Expression.CannotHandle:
+      pass
+    return node
 
   new_local_stmts = []
   transform = lambda node: base.propagate_type(
       node, stencil.symbol_table).visit(visitor, (cses, used))
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
-    cses, used = {}, set()
+    cses, used = {}, {}
     stmt.expr = transform(stmt.expr)
     stmt.let = tuple(map(transform, stmt.let))
-    cses = {k: v for k, v in cses.items() if k in used}
+    cses = {used[k]: v for k, v in cses.items() if k in used}
     for expr, var in cses.items():
       new_local_stmts.append(grammar.LocalStmt(
           ref=ir.Ref(name=var, lat=None, idx=(0,) * stencil.dim),
@@ -74,496 +100,469 @@ def temporal_cse(stencil):
   del stencil.__dict__['local_types']
 
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
+    _logger.debug('simplify %s', stmt.name)
     stmt.expr = arithmetic.simplify(stmt.expr)
     stmt.let = arithmetic.simplify(stmt.let)
+  return stencil
 
-class Schedule(str):
-  """Class representing a schedule of an expression.
+class ScheduleBase:
+  """Base class of Schedule and Schedules.
 
-  A schedule can represent a general schedule of n operands, or a specific
-  schedule of a concrete expression, described by the operator and operands.
+  This base class provides the functionality of making an Operation from the
+  relative attributes and absolute attributes.
 
   Attributes:
-    operator: String of the operator or None.
-    operands: Iterable of all operands or None.
-  Properties:
-    bound: Whether this schedule is bound to a specific expression.
-    sub_schedule_generator: A generator that yields all sub-schedules.
-    sub_schedules: A tuple of all sub-schedules.
-    cost: Number of "add" operations required of this schedule.
-    expr: AST of the expression represented, available only if bound is True.
+    rattr: Tuple of relative attributes.
+    aattr: Tuple of absolute attributes or None.
   """
-  def __init__(self, obj):
-    super().__init__()
-    self.operator, self.operands = None, None
+  def __init__(self, rattr: Tuple[RelativeAttr, ...],
+               aattr: Optional[tuple]) -> None:
+    self.rattr = rattr
+    self.aattr = aattr
 
-  def __getitem__(self, key: Union[slice, int]) -> 'Schedule':
-    """Get a slice from current schedule.
-
-    If self.bound is True, the result will be bound with proper operator and
-    operands. Otherwise, it is the same as str.__getitem__.
+  def make_operation(self, idx: slice) -> Operation:
+    """Make operation from the relative and absolute attributes.
 
     Args:
-      key: A slice or int representing the items to get.
+      idx: A slice representing which attributes to include in the operation.
     Returns:
-      The resulting Schedule.
+      A tuple of (rattr, aattr).
     """
-    schedule = Schedule(super().__getitem__(key))
-    if self.bound:
-      if isinstance(key, slice):
-        if key.step is not None:
-          raise ValueError('cannot get item with step != 1')
-        start = key.start and self.count('1', 0, key.start)
-        stop = key.stop and ((start or 0) + schedule.count('1'))
-        _logger.debug('[start:stop]: [%s:%s]', start, stop)
-        schedule = schedule.bind(self.operator, self.operands[start:stop])
+    offset = self.rattr[idx][0]
+    if self.aattr is None:
+      if isinstance(offset, int):
+        normalize = lambda val: val - offset
       else:
-        schedule = schedule.bind(self.operator, self.operands[key])
-    return schedule
+        normalize = lambda val: tuple(x - y for x, y in zip(val, offset))
+      return tuple(map(normalize, self.rattr[idx]))
+
+    def normalize_int(val: Tuple[int, int]) -> Tuple[int, int]:
+      rval, aval = val
+      return rval - offset, aval
+    def normalize_tuple(val: Tuple[Tuple[int, ...], Tuple[int, ...]]) \
+        -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+      rval, aval = val
+      return tuple(x - y for x, y in zip(rval, offset)), aval
+    normalize = normalize_int if isinstance(offset, int) else normalize_tuple
+    return tuple(map(normalize, zip(self.rattr[idx], self.aattr[idx])))
+
+class Schedule(ScheduleBase):
+  """A schedule of an expression.
+
+  A schedule represents a general schedule of n operands, described by the
+  relative attributes and absolute attrbiutes.
+
+  Attributes:
+    brepr: B-repr of the schedule.
+    operations: List of slices representing the operations.
+    operation_set: Set of (Operation, brepr) tuple.
+    operator: String of the operator or None.
+  Properties:
+    cost: Number of operations required of this schedule.
+    common_subexpressions: Tuple of ir.BinaryOp, normalized.
+    op_type: Class of self.operator, only works if self.operator is not None.
+  """
+  def __init__(self, brepr: str, operations: List[slice],
+               operation_set: Set[Tuple[Operation, str]],
+               rattr: Tuple[RelativeAttr, ...],
+               aattr: Optional[tuple] = None) -> None:
+    self.brepr = brepr
+    self.operations = operations
+    self.operation_set = operation_set
+    super().__init__(rattr, aattr)
+
+  def __len__(self) -> int:
+    """Number of operations."""
+    return len(self.brepr) // 2
 
   def __lt__(self, rhs) -> bool:
     return self.cost < rhs.cost
 
-  def __eq__(self, other) -> bool:
-    if self.bound:
-      if isinstance(other, Schedule) and other.bound:
-        return str(self), self.operator, self.normalized_operands == \
-            str(other), other.operator, other.normalized_operands
-      return False
-    if isinstance(other, Schedule) and other.bound:
-      return False
-    return str(self) == str(other)
-
-  def __hash__(self):
-    return hash((str(self), self.operator, self.normalized_operands))
-
-  def bind(self, operator: str, operands: Iterable[ir.Node],
-           verbose: bool = False) -> 'Schedule':
-    """Bind the schedule to an expression.
-
-    If (operator, operands) doesn't equal (self.operator, self.operands), a new
-    Schedule object will be constructed and returned with the given arguments.
-    Otherwise, self is returned. In either case, self is not modified. Two None
-    values will unbind the schedule.
-
-    Args:
-      operator: String of the operator or None.
-      operands: Iterable of all operands or None.
-      verbose: Whether to log bindings. Default to False.
-    Raises:
-      ValueError: If one and only one of operator and operands is None.
-      RuntimeError: If the number of operands doesn't match the schedule.
-    Returns:
-      A schedule bound with the given operator and operands.
-    """
-    if operator is None and operands is not None or \
-        operator is not None and operands is None:
-      raise ValueError('operator and operands must both or neither be None')
-    if (operator, operands) != (self.operator, self.operands):
-      schedule = Schedule(self)
-      schedule.operator, schedule.operands = operator, operands
-      if operands is not None:
-        if verbose:
-          _logger.debug('bind %s to %s', util.idx2str(operands), self)
-        if len(operands) != (len(self) + 1) // 2:
-          raise RuntimeError('operands must have the same length as schedule')
-      return schedule
-    return self
-
-  def unbind(self) -> 'Schedule':
-    return self.bind(None, None)
-
-  @property
-  def bound(self) -> bool:
-    return self.operator is not None and self.operands is not None
-
-  @property
-  def sub_schedule_generator(self) -> Iterator['Schedule']:
-    num_1 = 0
-    for i, c in enumerate(self):
-      if c == '0':
-        schedule = DisjointSubScheduleIterator(self, i).next()
-        operands = self.operands[num_1:num_1 + (len(schedule) + 1) // 2]
-        yield schedule.bind(self.operator, operands)
-      else:
-        num_1 += 1
-
-  @property
-  def sub_schedules(self) -> Tuple['Schedule']:
-    return tuple(self.sub_schedule_generator)
-
-  @property
-  def normalized_operands(self) -> Optional[Tuple[ir.Node]]:
-    if self.operands is None:
-      return None
-    return mutator.normalize(self.operands)
-
   @cached_property.cached_property
   def cost(self) -> int:
-    return len(set(self.sub_schedules))
+    return len(self.operation_set) + 1  # because itself is also an operation
 
-  @property
+  @cached_property.cached_property
   def common_subexpressions(self) -> Tuple[ir.BinaryOp]:
-    if self.bound:
-      return tuple(mutator.normalize(
-          schedule.expr for schedule, count in
-          collections.Counter(self.sub_schedules).items() if count > 1))
-    raise ValueError("unbound schedule doesn't have common expressions")
+    operations = tuple(mutator.normalize(self.get_ast(operation))
+                       for operation in self.operations)
+    return tuple(mutator.normalize(
+        schedule for schedule, count in OrderedCounter(operations).items()
+        if count > 1))
 
   @property
-  def expr(self) -> ir.BinaryOp:
-    return self.expr_with_cse({})
+  def op_type(self) -> Type[ir.BinaryOp]:
+    return REDUCTION_OPS[self.operator]
 
-  def expr_with_cse(self, cses: Dict[ir.Node, str],
-                    used: Set[ir.Node] = None) -> ir.BinaryOp:
-    """Generate AST.
+  @cached_property.cached_property
+  # pylint: disable=unsubscriptable-object
+  def brepr_index_table(self) -> Mapping[int, int]:
+    mapping = {}
+    node_count = 0
+    for idx, bit in enumerate(self.brepr):
+      if bit != '0':
+        node_count += 1
+        mapping[node_count] = idx + 1
+    return mapping
 
-    Recursively construct the AST of the schedule represented by self. Self must
-    be bound.
+  def bind_operator(self, operator: Optional[str]) -> 'Schedule':
+    if operator is None:
+      del self.operator
+    else:
+      self.operator = operator
+    return self
+
+  def print_tree(self, printer=_logger.debug) -> None:
+    printer('B-repr: %s', self.brepr)
+    base.print_tree(self.get_ast(), printer)
+
+  def get_brepr_slice(self, operation: slice) -> slice:
+    stop = self.brepr_index_table[operation.stop]
+    return slice(stop - (operation.stop - operation.start) * 2 + 1, stop)
+
+  def get_brepr(self, operation: slice) -> str:
+    return self.brepr[self.get_brepr_slice(operation)]
+
+  def get_ast(self, operation: Optional[slice] = None) -> ir.BinaryOp:
+    """Get the AST of an operation.
 
     Args:
-      cses: Dict mapping common subexpressions to the new names.
-      used: Set of used common subexpressions.
+      operation: A slice representing the operation, or None.
     Returns:
-      The ir.BinaryOp as the AST.
-    Raises:
-      ValueError: If self is not bound.
+      An ir.BinaryOp as the root of the AST.
     """
-    if not self.bound:
-      raise ValueError("unbound schedule doesn't have an expression")
-    iterator = DisjointSubScheduleIterator(self, 1)
-    if iterator.curr == '0':
-      left_child = Schedule(next(iterator)).bind(
-          self.operator,
-          self.operands[:(iterator.pos + 1) // 2]).expr_with_cse(cses, used)
-    else:
-      iterator.skip()
-      left_child = self.operands[(iterator.pos - 1) // 2]
-    if iterator.curr == '0':
-      prev_pos = iterator.pos
-      right_child = Schedule(next(iterator)).bind(
-          self.operator,
-          self.operands[prev_pos // 2:]).expr_with_cse(cses, used)
-    else:
-      right_child = self.operands[iterator.pos // 2]
-    children = [left_child, right_child]
-    for i, child in enumerate(children):
-      normalized_child = mutator.normalize(child)
-      if normalized_child in cses:
-        if used is not None:
-          used.add(normalized_child)
-        norm_idx = soda_visitor.get_normalize_index(child)
-        new_var = cses[normalized_child]
-        _logger.debug('replace %s with %s%s', child, new_var, norm_idx)
-        children[i] = ir.Ref(name=new_var, idx=norm_idx, lat=None)
-    return {'+': ir.AddSub, '*': ir.MulDiv}[self.operator](
-        operator=self.operator, operand=children)
+    class Child(enum.Enum):
+      LEFT = 0
+      RIGHT = 1
+    if operation is None:
+      operation = slice(0, len(self.rattr))
+    # pylint: disable=not-callable
+    root = self.op_type(operator=(self.operator,), operand=(None, None))
+    stack = [(root, Child.RIGHT), (root, Child.LEFT)]
+    operands = (ir.Ref(name=aval, idx=rval, lat=None)
+                for rval, aval in zip(self.rattr[operation],
+                                      self.aattr[operation]))
+    def add_child(stack: List[Tuple[ir.BinaryOp, Child]],
+                  child: ir.BinaryOp) -> None:
+      """Pop the task stack and add child to the task.
 
-class DisjointSubScheduleIterator:
-  """Iterator that yields disjoint sub-schedules.
+      Args:
+        stack: List of (ir.BinaryOp, Child), meaning which child to add to which
+            IR node.
+        child: Child IR node that going to be added to the stack top node.
+      Returns:
+        None
+      """
+      op, side = stack.pop(-1)
+      if side == Child.LEFT:
+        op.operand = (child, None)
+      else:
+        op.operand = (op.operand[0], child)
 
-  An iterator that yields disjoint sub-schedules of a schedule with an optional
-  starting offset.
+    for bit in self.get_brepr(operation)[1:]:
+      if bit == '0':
+        # pylint: disable=not-callable
+        child = self.op_type(operator=(self.operator,), operand=(None, None))
+        add_child(stack, child)
+        stack.extend(((child, Child.RIGHT), (child, Child.LEFT)))
+      else:
+        child = next(operands)
+        add_child(stack, child)
+    assert not stack, "task leftover: {}".format(
+        util.lst2str(node for node, _ in stack))
+    return root
+
+  def get_ast_with_cse(self, cses: Dict[ir.Node, str],
+                       used: Optional[Set[ir.Node]] = None) -> ir.BinaryOp:
+    return mutator.replace_expressions(self.get_ast(), cses, used)
+
+def range_from_middle(n: int) -> Iterator[int]:
+  """A range function that yields number from the middle to the sides.
+
+  Args:
+    n: Integer, the upper bound of the range.
+  Yields:
+    Integers, starting from the n / 2 towards 0 and n - 1.
+  """
+  middle = n // 2
+  if n % 2 == 0:
+    for shift in range(0, middle):
+      yield middle - shift - 1
+      yield middle + shift
+  else:
+    yield middle
+    for shift in range(1, middle + 1):
+      yield middle - shift
+      yield middle + shift
+
+class Schedules(ScheduleBase):
+  """Schedules of an Expression.
+
+  Class Attributes:
+    range_func: The range function to use for range(n).
+    skip: Whether to skip iterations if cost has exceeded the current minimum.
+    lazy: Whether to evaluate the Cartesian product lazily.
 
   Attributes:
-    _schedule: Schedule to iterate over.
-    pos: Current iterator offset.
+    num_ops: Number of operations to consider, may not equal len(rattr) - 1.
+    offset: Number of operations to skip.
+    cache: A mapping from num_ops to a mapping from offset to Schedules, or
+        None.
+    stat: A list of [cache_hit, cache_miss, loop 1 trip count, loop 2 trip
+        count, loop 3 trip count], or None.
+    max_cost: The cut-off cost, or None. Any schedule with max_cost or
   """
-  def __init__(self, schedule: Schedule, start: int = 0):
-    self._schedule, self.pos = schedule.unbind(), start
+  range_func = range_from_middle
+  skip = True
+  lazy = True
+  def __init__(self, rattr: Tuple[Union[int, Tuple[int, ...]]],
+               aattr: Optional[tuple] = None,
+               num_ops: int = None, offset: int = 0,
+               # pylint: disable=unsubscriptable-object
+               cache: Optional[Mapping[int, Mapping[int, 'Schedules']]] = None,
+               stat: Optional[List[int]] = None,
+               max_cost: int = None) -> None:
+    super().__init__(rattr, aattr)
+    self.num_ops = len(self.rattr) - 1 if num_ops is None else num_ops
+    self.offset = offset
+    self.cache = cache
+    if cache is not None:
+      cache.setdefault(num_ops, {})[offset] = self
+    self.stat = stat
+    if stat is None:
+      self.stat = [0, 0, 0, 0, 0]
+    self.max_cost = self.num_ops if max_cost is None else max_cost
 
-  def __next__(self) -> Schedule:
-    """Find the next valid sub-schedule from the current offset.
+  @staticmethod
+  def set_optimizations(optimizations: Sequence[str] = (
+      'reorder-exploration', 'skip-with-partial-cost',
+      'lazy-cartesian-product')) -> None:
+    if 'reorder-exploration' in optimizations:
+      Schedules.range_func = range_from_middle
+    else:
+      Schedules.range_func = range
+    Schedules.skip = 'skip-with-partial-cost' in optimizations
+    Schedules.lazy = 'lazy-cartesian-product' in optimizations
 
-    Returns:
-      Next valid schedule.
-    """
-    start = self.pos
-    if start >= len(self._schedule):
-      raise StopIteration
-    num_0, num_1 = 0, 0
-    for i, c in enumerate(self._schedule[start:]):
-      if c == '0':
-        num_0 += 1
-      else:
-        num_1 += 1
-      if num_1 - num_0 == 1:
-        stop = start + i + 1
-        break
-    self.pos += stop - start
-    return self._schedule[start:stop]
+  def __iter__(self) -> Iterator[Schedule]:
+    return iter(self.schedules)
 
-  def next(self) -> Schedule:
-    return next(self)
-
-  def skip(self, step: int = 1) -> None:
-    self.pos += step
+  @cached_property.cached_property
+  def schedules(self) -> Tuple[Schedule, ...]:
+    return tuple(self.generator)
 
   @property
-  def curr(self) -> Schedule:
-    return self._schedule[self.pos]
+  def generator(self) -> Iterator[Schedule]:
+    if Schedules.lazy:
+      return self.lazy_generator
+    return self.materializing_generator
 
-class Schedules:
-  """Generator for all schedules of an expression.
+  @property
+  def materializing_generator(self) -> Iterator[Schedule]:
+    """Generates possible schedules via dynamic programming.
 
-  Use dynamic programming to generate all schedules of an expression.
+    This generator will materialize both sub-problems for the Cartesian product.
+
+    Yields:
+      One Schedule at a time. If self.skip is on, the cost of generated Schedule
+      with be monotonically decreasing.
+    """
+    n, k = self.num_ops, self.offset
+    if n == 0:
+      yield Schedule('1', [], set(), self.aattr, self.rattr)
+      return
+    for m in Schedules.range_func(n):
+      self.stat[2] += 1
+      for prefix, suffix in itertools.product(
+          self.get_schedules(m, k),
+          self.get_schedules(n - m - 1, k + m + 1)):
+        self.stat[3] += 1
+        self.stat[4] += 1
+        operations = []
+        operation_set = set()
+        # Only slices with len > 1 are operations.
+        if m > 0:
+          operations.append(slice(k, k + m + 1))
+          operation_set.add((self.make_operation(operations[-1]),
+                             prefix.brepr))
+          if Schedules.skip and len(operation_set) >= self.max_cost:
+            continue
+        if n > m + 1:
+          operations.append(slice(k + m + 1, k + n + 1))
+          operation_set.add((self.make_operation(operations[-1]),
+                             suffix.brepr))
+          if Schedules.skip and len(operation_set) >= self.max_cost:
+            continue
+        operations.extend(prefix.operations)
+        operation_set |= prefix.operation_set
+        if Schedules.skip and len(operation_set) >= self.max_cost:
+          continue
+        operations.extend(suffix.operations)
+        operation_set |= suffix.operation_set
+        if Schedules.skip and len(operation_set) >= self.max_cost:
+          continue
+        self.max_cost = len(operation_set)
+        yield Schedule('0{}{}'.format(prefix.brepr, suffix.brepr),
+                        operations, operation_set,
+                        self.rattr, self.aattr)
+
+  @property
+  def lazy_generator(self) -> Iterator[Schedule]:
+    """Generates possible schedules via dynamic programming.
+
+    This generator will lazily materialize sub-problems for the Cartesian
+    product.
+
+    Yields:
+      One Schedule at a time. If self.skip is on, the cost of generated Schedule
+      with be monotonically decreasing.
+    """
+    n, k = self.num_ops, self.offset
+    if n == 0:
+      yield Schedule('1', [], set(), self.aattr, self.rattr)
+      return
+    for m in Schedules.range_func(n):
+      self.stat[2] += 1
+      for prefix in self.get_schedules(m, k):
+        self.stat[3] += 1
+        prefix_operations = []
+        prefix_operation_set = set()
+        # Only slices with len > 1 are operations.
+        if m > 0:
+          prefix_operations.append(slice(k, k + m + 1))
+          prefix_operation_set.add((
+              self.make_operation(prefix_operations[-1]),
+              prefix.brepr))
+          if Schedules.skip and len(prefix_operation_set) >= self.max_cost:
+            continue
+        prefix_operations.extend(prefix.operations)
+        prefix_operation_set |= prefix.operation_set
+        if Schedules.skip and len(prefix_operation_set) >= self.max_cost:
+          continue
+        for suffix in self.get_schedules(n - m - 1, k + m + 1):
+          self.stat[4] += 1
+          operations = list(prefix_operations)
+          operation_set = set(prefix_operation_set)
+          # Only slices with len > 1 are operations.
+          if n > m + 1:
+            operations.append(slice(k + m + 1, k + n + 1))
+            operation_set.add((
+                self.make_operation(operations[-1]),
+                suffix.brepr))
+            if Schedules.skip and len(operation_set) >= self.max_cost:
+              continue
+          operations.extend(suffix.operations)
+          operation_set |= suffix.operation_set
+          if Schedules.skip and len(operation_set) >= self.max_cost:
+            continue
+          self.max_cost = len(operation_set)
+          yield Schedule('0{}{}'.format(prefix.brepr, suffix.brepr),
+                          operations, operation_set,
+                          self.rattr, self.aattr)
+
+  @cached_property.cached_property
+  def best(self) -> Schedule:
+    best = None
+    if self.skip:
+      for best in self:
+        pass
+      self.print_stats()
+      return best
+    for schedule in self:
+      if best is None or schedule.cost < best.cost:
+        best = schedule
+        _logger.debug('current cost: %d', best.cost)
+    self.print_stats()
+    return best
+
+  @property
+  def cache_hit_rate(self) -> float:
+    return self.stat[0] / sum(self.stat)
+
+  def get_schedules(self, num_ops, offset) -> 'Schedules':
+    """Get schedules with the given operation number and offset.
+
+    If self.cache is not None and the same arguments were given in previous runs
+    of this object, the result will be fetched from the cache.
+
+    Args:
+      num_ops: Number of operations to consider, may not equal len(rattr) - 1.
+      offset: Number of operations to skip.
+    Returns:
+      Schedules with the given operation number and offset.
+    """
+    if self.cache is not None:
+      if num_ops in self.cache:
+        if offset in self.cache[num_ops]:
+          schedules = self.cache[num_ops][offset]
+          self.stat[0] += 1
+          return schedules.schedules
+    self.stat[1] += 1
+    return Schedules(self.rattr, self.aattr, num_ops=num_ops, offset=offset,
+                     cache=self.cache, stat=self.stat,
+                     max_cost=self.max_cost + 1).schedules
+
+  def print_stats(self,
+                  logger: Callable[[str, Any], None] = _logger.info) -> None:
+    logger('trip count: | L1: %d | L2: %d | L3: %d |', *self.stat[2:])
+    logger('cache hit rate: %2.3f%%', self.cache_hit_rate * 100)
+
+class Expression:
+  """An expression suitable for temporal CSE.
 
   Attributes:
     operator: String of the operator.
     operands: Tuple of all operands.
+    rattr: Tuple of relative attributes.
+    aattr: Tuple of absolute attributes or None.
   """
-  _schedule_cache = {0: (Schedule('1'),)}
   class CannotHandle(Exception):
-    def __init__(self, msg, details: str = ''):
+    def __init__(self, msg, details: str = '') -> None:
       details = details or (': ' + str(details))
       super().__init__('cannot handle ' + str(msg) + ' yet' + str(details))
 
-  def __init__(self, polynomial: ir.BinaryOp):
-    """Constructs the Schedules.
+  def __init__(self, polynomial: ir.BinaryOp) -> None:
+    """Figure out whether a ir.BinaryOp is suitable for temporal CSE.
 
-    Construct all possible schedules of the input polynomial. If it cannot be
-    handled but is a valid ir.Node instance, it raises Schedules.CannotHandle
-    so that the recursive visitor can continue to find polynomials.
+    Construct a TCSE Expression of the input polynomial. If it cannot be handled
+    but is a valid ir.Node instance, it raises Expression.CannotHandle so that
+    the recursive visitor can continue to find polynomials.
 
     Args:
       polynomial: ir.BinaryOp to work with.
     Raises:
-      Schedules.CannotHandle: If the input cannot be handled but is not error.
+      Expression.CannotHandle: If the input cannot be handled but is not error.
       TypeError: If the input is not an instance of ir.Node.
     """
     if isinstance(polynomial, ir.BinaryOp):
       if any(op != polynomial.operator[0] for op in polynomial.operator):
-        raise Schedules.CannotHandle('mixed operators', polynomial.operator)
+        raise Expression.CannotHandle('mixed operators', polynomial.operator)
       self.operator = polynomial.operator[0]
       if self.operator not in ('+', '*'):
-        raise Schedules.CannotHandle('%s operator' % self.operator)
+        raise Expression.CannotHandle('%s operator' % self.operator)
       for operand in polynomial.operand:
         if len(soda_visitor.get_load_set(operand)) > 1:
-          raise Schedules.CannotHandle('multi-index operands', operand)
+          raise Expression.CannotHandle('multi-index operands', operand)
       self.operands = tuple(sorted(
           polynomial.operand,
           key=lambda x: tuple(reversed(soda_visitor.get_load_set(x)[0].idx))))
+      self.rattr = tuple(soda_visitor.get_load_set(operand)[0].idx
+                         for operand in self.operands)
+      self.aattr = tuple(soda_visitor.get_load_set(operand)[0].name
+                         for operand in self.operands)
       _logger.debug(
           'polynomial: %s%s', self.operator, util.idx2str(self.operands))
+      _logger.debug('rattr: %s', util.idx2str(self.rattr))
+      _logger.debug('aattr: %s', util.idx2str(self.aattr))
     elif isinstance(polynomial, ir.Node):
-      raise Schedules.CannotHandle(type(polynomial).__name__)
+      raise Expression.CannotHandle(type(polynomial).__name__)
     else:
       raise TypeError('expect an instance of ir.BinaryOp')
 
-  def __iter__(self) -> Iterator[Schedule]:
-    return iter(map(lambda x: x.bind(self.operator, self.operands),
-                    self._get_b_reprs(len(self.operands) - 1)))
+  @cached_property.cached_property
+  def schedules(self) -> Schedules:
+    return Schedules(self.rattr, self.aattr, cache={})
 
   @cached_property.cached_property
-  def best(self) -> Schedule:
-    return min(self)
-
-  def _get_b_reprs(self, n: int) -> Tuple[Schedule]:
-    if n not in Schedules._schedule_cache:
-      Schedules._schedule_cache[n] = tuple(self._generate_b_reprs(n))
-    return Schedules._schedule_cache[n]
-
-  def _generate_b_reprs(self, n: int) -> Iterator[Schedule]:
-    for m in range(n):
-      for prefix, suffix in itertools.product(self._get_b_reprs(m),
-                                              self._get_b_reprs(n - 1 - m)):
-        yield Schedule('0' + prefix + suffix)
-
-# The following is developped but deprecated because of its inefficiency.
-class KernelIntersectionMatrix(_OrderedDict):
-  """A kernel intersection matrix.
-
-  An instance of this class is a dict mapping offsets to dicts mapping shifted
-  operands to original operands.
-
-  Attributes:
-    operands: A tuple of all original operands.
-  """
-  def __init__(self, polynomial):
-    """Create the kernel intersection matrix for a polynomial.
-
-    Args:
-      polynomial: soda.ir.BinaryOp to work on.
-    """
-    super().__init__()
-    def _visitor(polynomial, args=None):
-      if isinstance(polynomial, ir.BinaryOp):
-        for operand in polynomial.operand:
-          if len(soda_visitor.get_load_set(operand)) > 1:
-            _logger.warn('cannot handle multi-index operands yet: %s', operand)
-            return
-        for op in polynomial.operator:
-          if op != '+':
-            _logger.warn('cannot handle %s operator yet', op)
-            return
-        _logger.debug(polynomial)
-        indices = sorted(
-            {load.idx for load in soda_visitor.get_load_set(polynomial)},
-            key=base.compose(reversed, tuple))
-        offsets = tuple(tuple(a - b for a, b in zip(offset, indices[0]))
-                        for offset in indices)
-        _logger.debug('shifting offsets: %s', offsets)
-        _logger.debug(indices)
-        for offset in offsets:
-          shifted = mutator.shift(polynomial, offset)
-          ops = _OrderedDict()
-          for op, op0 in zip(shifted.operand, polynomial.operand):
-            for load, load0 in zip(soda_visitor.get_load_set(op),
-                                   soda_visitor.get_load_set(op0)):
-              if tuple(reversed(load.idx)) >= tuple(reversed(indices[0])):
-                ops[load] = load0
-                operands[load0] = None
-          self[offset] = ops
-
-    operands = _OrderedDict()
-    polynomial.visit(_visitor)
-    self.operands = tuple(operands)
-
-  def pretty_print(self, printer=_logger.debug, covering=None):
-    """Pretty print the kernel intersection matrix.
-
-    Pretty print the kernel intersection matrix. If covering is not None, only
-    covered items are printed.
-
-    Args:
-      printer: A function printing 1 line at a time. Default to _logger.debug.
-      covering: A Covering mapping operands to (offset, shifted operand) tuples.
-    """
-    title = 'KIM'
-    strs = {}
-    lens = {col: len(str(col)) for col in self.cols}
-    for row in self.rows:
-      lens[None] = max(lens.get(None, len(title)), len(str(row)))
-      strs[row] = {}
-      for col in self.cols:
-        if col in self[row]:
-          strs[row][col] = str(self[row][col])
-          lens[col] = max(lens[col], len(strs[row][col]))
-    def print_divider():
-      def generate_divider():
-        for col in (None,) + self.cols:
-          yield '-' * lens[col]
-      printer('+-%s-+', '-+-'.join(generate_divider()))
-    def generate_header():
-      yield ('{!s:%d}' % lens[None]).format(title)
-      for col in self.cols:
-        yield ('{!s:%d}' % lens[col]).format(col)
-    print_divider()
-    printer('| %s |', ' | '.join(generate_header()))
-    print_divider()
-    for row in self.rows:
-      def generate_item():
-        yield ('{!s:%d}' % lens[None]).format(row)
-        for col in self.cols:
-          max_len = lens[col]
-          if col in self[row]:
-            if covering is not None:
-              if covering[self[row][col]][0] == row:
-                yield ('{!s:%d}' % max_len).format(self[row][col])
-              else:
-                yield ' ' * max_len
-            else:
-              yield ('{!s:%d}' % max_len).format(self[row][col])
-          else:
-            yield ' ' * max_len
-      printer('| %s |', ' | '.join(generate_item()))
-    print_divider()
-
-  @cached_property.cached_property
-  def rows(self):
-    """Produces the row headers of the kernel intersection matrix.
-
-    Returns:
-      A tuple of row headers.
-    """
-    return tuple(self)
-
-  @cached_property.cached_property
-  def cols(self):
-    """Produces the column headers of the kernel intersection matrix.
-
-    If all headers have attribute idx, they will be sorted according to idx.
-    Otherwise, they will be returned in the seen order.
-
-    Returns:
-      A tuple of column headers.
-    """
-    operands = tuple(_OrderedDict.fromkeys(
-        op for ops in self.values() for op in ops))
-    try:
-      return tuple(sorted(operands, key=lambda x: tuple(reversed(x.idx))))
-    except AttributeError:
-      return operands
-
-  @cached_property.cached_property
-  def operand_appearances(self):
-    """All operand appearances.
-
-    Returns:
-      A dict mapping operands to a list of its appearances. Each appearance is
-      a (row, col) tuple.
-    """
-    operand_appearances = _OrderedDict((op, []) for op in self.operands)
-    for row in self.rows:
-      for col in self.cols:
-        if col in self[row]:
-          operand_appearances[self[row][col]].append((row, col))
-    return operand_appearances
-
-  @property
-  def coverings(self):
-    """Generates valid coverings.
-
-    Yields:
-      Each valid covering.
-    """
-    for appearance in itertools.product(*self.operand_appearances.values()):
-      yield Covering(self, zip(self.operands, appearance))
-
-class Covering(_OrderedDict):
-  """A covering of a kernel intersection matrix.
-
-  An instance of this class is a dict mapping operands to
-  (offset, shifted operand) tuples.
-
-  Attributes:
-    matrix: The corresponding KernelIntersectionMatrix.
-  """
-  def __init__(self, matrix: KernelIntersectionMatrix, *args, **kwargs):
-    self.matrix = matrix
-    super().__init__(*args, **kwargs)
-
-  def pretty_print(self, printer=_logger.debug):
-    self.matrix.pretty_print(printer=printer, covering=self)
-
-  @cached_property.cached_property
-  def cost(self) -> int:
-    """Return the cost of this covering.
-    """
-    for row in self.matrix.rows:
-      for col in self.matrix.cols:
-        try:
-          if self[self.matrix[row][col]][0] is row:
-            _logger.debug('row: %s, col: %s', row, col)
-        except KeyError:
-          pass
-    return 0
-
-  @cached_property.cached_property
-  def has_rectangles(self) -> bool:
-    """Return whether this covering has any rectange that is at least 2x2.
-    """
-    row_count = _OrderedDict.fromkeys(self.matrix.rows, 0)
-    col_count = _OrderedDict.fromkeys(self.matrix.cols, 0)
-    for row, col in self.values():
-      row_count[row] += 1
-      col_count[col] += 1
-    row_count = _OrderedDict(((row, count) for row, count in row_count.items()
-                              if count > 1))
-    col_count = _OrderedDict(((col, count) for col, count in col_count.items()
-                              if count > 1))
-    if len(row_count) > 1 and len(col_count) > 1:
-      _logger.debug(util.lst2str(row_count.items()))
-      _logger.debug(util.lst2str(col_count.items()))
-      return True
-    return False
+  def best_schedule(self) -> Schedule:
+    return self.schedules.best.bind_operator(self.operator)

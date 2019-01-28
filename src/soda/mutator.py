@@ -1,3 +1,4 @@
+from typing import Dict, Optional, Set, Tuple
 import collections
 import logging
 import operator
@@ -68,3 +69,34 @@ def normalize(obj):
   if isinstance(obj, ir.Node):
     return shifter(obj)
   raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')
+
+def replace_expressions(obj: ir.Node, cses: Dict[ir.Node, str],
+                        used: Optional[Set[ir.Node]] = None) -> ir.Node:
+  """Get AST with common subexpression elimination.
+
+  Get AST with the given common subexpressions. If used is not None, the used
+  common subexpressions will be added to used.
+
+  Args:
+    obj: An ir.Node.
+    cses: Dict mapping common subexpressions to the new names.
+    used: Set of used common subexpressions, or None.
+  Returns:
+    The ir.Node as the AST.
+  """
+  def visitor(obj: ir.Node, args: Tuple[Dict[ir.Node, str],
+                                        Optional[Set[ir.Node]]]) -> ir.Node:
+    cses, used = args
+    norm_idx = soda_visitor.get_normalize_index(obj)
+    normalized = shift(obj, norm_idx) if any(norm_idx) else obj
+    if normalized in cses:
+      if used is not None:
+        if normalized not in used:
+          used[normalized] = replace_expressions(
+              normalized,
+              {k: v for k, v in cses.items() if k != normalized}, used)
+      new_var = cses[normalized]
+      _logger.debug('replacing %s with %s%s', obj, new_var, norm_idx)
+      return ir.Ref(name=new_var, idx=norm_idx, lat=None)
+    return obj
+  return obj.visit(visitor, (cses, used))
