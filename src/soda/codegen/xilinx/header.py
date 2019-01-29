@@ -1,6 +1,6 @@
 import logging
 
-from soda import util
+from haoda import util
 
 logger = logging.getLogger().getChild(__name__)
 

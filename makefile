@@ -41,9 +41,7 @@ RPT ?= rpt/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 TMP ?= tmp/$(LABEL)/$(word 2,$(subst :, ,$(XDEVICE)))
 SRC ?= $(TMP)
 
-COMMIT := $(shell git rev-parse --short HEAD)$(shell git diff --exit-code --quiet || echo '-dirty')
-
-SUPPORTED_XDEVICES = xilinx:adm-pcie-7v3:1ddr:3.0 xilinx:aws-vu9p-f1:4ddr-xpr-2pr:4.0 xilinx:adm-pcie-ku3:2ddr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:3.3 xilinx:adm-pcie-ku3:2ddr-xpr:4.0 xilinx:vcu1525:dynamic:5.0 xilinx:vcu1525:dynamic:5.1 xilinx:aws-vu9p-f1-04261818:dynamic:5.0
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)$(shell git diff --exit-code --quiet 2>/dev/null || echo '-dirty')
 
 HOST_CFLAGS ?= -O2 -fopenmp -I$(TMP)
 HOST_LFLAGS ?= -fopenmp
@@ -53,10 +51,6 @@ XDEVICE ?= xilinx:aws-vu9p-f1-04261818:dynamic:5.0
 else # AWS_BUCKET
 XDEVICE ?= xilinx:adm-pcie-7v3:1ddr:3.0
 endif # AWS_BUCKET
-
-ifeq (,$(findstring $(XDEVICE),$(SUPPORTED_XDEVICES)))
-$(error $(XDEVICE) is not supported)
-endif
 
 HOST_CFLAGS += -DTILE_SIZE_DIM_0=$(TILE_SIZE_DIM_0) $(if $(TILE_SIZE_DIM_1),-DTILE_SIZE_DIM_1=$(TILE_SIZE_DIM_1)) -DUNROLL_FACTOR=$(UNROLL_FACTOR)
 
@@ -79,7 +73,7 @@ include sdaccel-examples/makefile
 ifeq ($(SYNTHESIS_FLOW),rtl)
 $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP) $(OBJ)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-platform $(XILINX_SDX)/platforms/$(PLATFORM) --xocl-hw-xo $@ $(SODA_SRC)/$(APP).soda
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-hw-xo $@ $(SODA_SRC)/$(APP).soda
 endif
 
 check-git-status:
@@ -87,15 +81,15 @@ check-git-status:
 
 $(TMP)/$(KERNEL_SRCS): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-kernel $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-kernel $@ $^
 
 $(TMP)/$(HOST_BIN).cpp: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-host $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-host $@ $^
 
 $(TMP)/$(APP).h: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --border $(BORDER) --cluster $(CLUSTER) --xocl-header $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse --border $(BORDER) --cluster $(CLUSTER) --xocl-header $@ $^
 
 $(OBJ)/%.o: $(TMP)/%.cpp $(TMP)/$(APP).h
 	@mkdir -p $(OBJ)

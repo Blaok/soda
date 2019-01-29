@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+import contextlib
 import collections
 import logging
 import os
@@ -8,7 +8,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
-from soda import util
+from haoda import util
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -225,7 +225,7 @@ def print_kernel_xml(top_name, ports, kernel_xml):
 
   Args:
     top_name: name of the top-level kernel function.
-    ports: sequence of (port_name, bundle_name, soda_type, _) of the m_axi ports
+    ports: sequence of (port_name, bundle_name, haoda_type, _) of m_axi ports
     kernel_xml: file object to write to.
   """
   m_axi_ports = ''
@@ -233,16 +233,16 @@ def print_kernel_xml(top_name, ports, kernel_xml):
   offset = 0x10
   arg_id = 0
   bundle_set = set()
-  for port_name, bundle_name, soda_type, _ in ports:
+  for port_name, bundle_name, haoda_type, _ in ports:
     size = host_size = 8
     if bundle_name not in bundle_set:
       m_axi_ports += PORT_TEMPLATE.format(
           name=bundle_name,
-          width=util.get_width_in_bits(soda_type)).rstrip('\n')
+          width=util.get_width_in_bits(haoda_type)).rstrip('\n')
       bundle_set.add(bundle_name)
     args += ARG_TEMPLATE.format(
         name=port_name, addr_qualifier=1, arg_id=arg_id,
-        port_name='m_axi_' + bundle_name, c_type=util.get_c_type(soda_type),
+        port_name='m_axi_' + bundle_name, c_type=util.get_c_type(haoda_type),
         size=size, offset=offset, host_size=host_size).rstrip('\n')
     offset += size + 4
     arg_id += 1
@@ -569,7 +569,7 @@ class VerilogPrinter(util.Printer):
   def parameter(self, key, value):
     self.println('parameter {} = {};'.format(key, value))
 
-  @contextmanager
+  @contextlib.contextmanager
   def initial(self):
     self.println('initial begin')
     self.do_indent()
@@ -577,7 +577,7 @@ class VerilogPrinter(util.Printer):
     self.un_indent()
     self.println('end')
 
-  @contextmanager
+  @contextlib.contextmanager
   def always(self, condition):
     self.println('always @ (%s) begin' % condition)
     self.do_indent()
@@ -585,7 +585,7 @@ class VerilogPrinter(util.Printer):
     self.un_indent()
     self.println('end')
 
-  @contextmanager
+  @contextlib.contextmanager
   def if_(self, condition):
     self.println('if (%s) begin' % condition)
     self.do_indent()

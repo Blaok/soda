@@ -1,4 +1,4 @@
-from collections import OrderedDict
+import collections
 import concurrent
 import logging
 import os
@@ -7,8 +7,8 @@ import sys
 import tarfile
 import tempfile
 
+from haoda import util
 from haoda.backend import xilinx as backend
-from soda import util
 from soda.codegen.xilinx import hls_kernel
 
 _logger = logging.getLogger().getChild(__name__)
@@ -31,33 +31,35 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
   outputs = []
   for stmt in stencil.output_stmts + stencil.input_stmts:
     for bank in stmt.dram:
-      soda_type = 'uint%d' % stencil.burst_width
+      haoda_type = 'uint%d' % stencil.burst_width
       bundle_name = util.get_bundle_name(stmt.name, bank)
       m_axi_names.append(bundle_name)
-      m_axi_bundles.append((bundle_name, soda_type))
+      m_axi_bundles.append((bundle_name, haoda_type))
 
   for stmt in stencil.output_stmts:
     for bank in stmt.dram:
-      soda_type = 'uint%d' % stencil.burst_width
+      haoda_type = 'uint%d' % stencil.burst_width
       bundle_name = util.get_bundle_name(stmt.name, bank)
       outputs.append((util.get_port_name(stmt.name, bank), bundle_name,
-                      soda_type, util.get_port_buf_name(stmt.name, bank)))
+                      haoda_type, util.get_port_buf_name(stmt.name, bank)))
   for stmt in stencil.input_stmts:
     for bank in stmt.dram:
-      soda_type = 'uint%d' % stencil.burst_width
+      haoda_type = 'uint%d' % stencil.burst_width
       bundle_name = util.get_bundle_name(stmt.name, bank)
       inputs.append((util.get_port_name(stmt.name, bank), bundle_name,
-                     soda_type, util.get_port_buf_name(stmt.name, bank)))
+                     haoda_type, util.get_port_buf_name(stmt.name, bank)))
 
   top_name = stencil.app_name + '_kernel'
 
-  if platform is None:
-    if 'XILINX_SDX' in os.environ and 'XDEVICE' in os.environ:
-      platform = os.path.join(
-          os.environ['XILINX_SDX'], 'platforms',
-          os.environ['XDEVICE'].replace(':', '_').replace('.', '_'))
-    else:
-      raise ValueError('Cannot determine platform from environment.')
+  if 'XDEVICE' in os.environ:
+    xdevice = os.environ['XDEVICE'].replace(':', '_').replace('.', '_')
+    if platform is None or not os.path.exists(platform):
+      platform = os.path.join('/opt/xilinx/platforms', xdevice)
+    if platform is None or not os.path.exists(platform):
+      if 'XILINX_SDX' in os.environ:
+        platform = os.path.join(os.environ['XILINX_SDX'], 'platforms', xdevice)
+  if platform is None or not os.path.exists(platform):
+    raise ValueError('Cannot determine platform from environment.')
   device_info = backend.get_device_info(platform)
 
   with tempfile.TemporaryDirectory(prefix='sodac-xrtl-') as tmpdir:
@@ -162,16 +164,16 @@ def print_top_module(printer, super_source, inputs, outputs):
     println('input  %s;' % arg)
   for arg in output_args:
     println('output %s;' % arg)
-  for port_name, _, soda_type, _ in outputs:
+  for port_name, _, haoda_type, _ in outputs:
     kwargs = dict(port_name=port_name, **FIFO_PORT_SUFFIXES)
     println('output [{}:0] {port_name}_V_V{data_in};'.format(
-        util.get_width_in_bits(soda_type) - 1, **kwargs))
+        util.get_width_in_bits(haoda_type) - 1, **kwargs))
     println('input  {port_name}_V_V{not_full};'.format(**kwargs))
     println('output {port_name}_V_V{write_enable};'.format(**kwargs))
-  for port_name, _, soda_type, _ in inputs:
+  for port_name, _, haoda_type, _ in inputs:
     kwargs = dict(port_name=port_name, **FIFO_PORT_SUFFIXES)
     println('input  [{}:0] {port_name}_V_V{data_out};'.format(
-        util.get_width_in_bits(soda_type) - 1, **kwargs))
+        util.get_width_in_bits(haoda_type) - 1, **kwargs))
     println('input  {port_name}_V_V{not_empty};'.format(**kwargs))
     println('output {port_name}_V_V{read_enable};'.format(**kwargs))
   println()
@@ -180,12 +182,12 @@ def print_top_module(printer, super_source, inputs, outputs):
   println("reg ap_idle = 1'b1;")
   println("reg ap_ready = 1'b0;")
 
-  for port_name, _, soda_type, _ in outputs:
+  for port_name, _, haoda_type, _ in outputs:
     kwargs = dict(port_name=port_name, **FIFO_PORT_SUFFIXES)
     println('reg [{}:0] {port_name}{data_in};'.format(
-        util.get_width_in_bits(soda_type) - 1, **kwargs))
+        util.get_width_in_bits(haoda_type) - 1, **kwargs))
     println('wire {port_name}_V_V{write_enable};'.format(**kwargs))
-  for port_name, _, soda_type, _ in inputs:
+  for port_name, _, haoda_type, _ in inputs:
     println('wire {}_V_V{read_enable};'.format(port_name, **FIFO_PORT_SUFFIXES))
   println('reg ap_rst_n_inv;')
   with printer.always('*'):
@@ -229,7 +231,7 @@ def print_top_module(printer, super_source, inputs, outputs):
       println('wire {name}{read_enable};'.format(**kwargs))
       println()
 
-      args = OrderedDict((
+      args = collections.OrderedDict((
           ('clk', 'ap_clk'),
           ('reset', 'ap_rst_n_inv'),
           ('if_read_ce', "1'b1"),
@@ -253,7 +255,7 @@ def print_top_module(printer, super_source, inputs, outputs):
 
   for module in super_source.tpo_node_gen():
     module_trait, module_trait_id = super_source.module_table[module]
-    args = OrderedDict((('ap_clk', 'ap_clk'),
+    args = collections.OrderedDict((('ap_clk', 'ap_clk'),
                         ('ap_rst', 'ap_rst_n_inv'),
                         ('ap_start', "1'b1")))
     for dram_ref, bank in module.dram_writes:
@@ -340,23 +342,23 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
     println('to[epoch] = from->read();')
   un_scope()
 
-  params = ['hls::stream<{}>* {}'.format(util.get_c_type(soda_type), name)
-            for name, _, soda_type, _ in m_axi_ports]
+  params = ['hls::stream<{}>* {}'.format(util.get_c_type(haoda_type), name)
+            for name, _, haoda_type, _ in m_axi_ports]
   print_func('void Dataflow', params, align=0)
   do_scope()
-  for name, _, soda_type, _ in inputs:
+  for name, _, haoda_type, _ in inputs:
     println('volatile {c_type} {name}_read;'.format(
-        c_type=util.get_c_type(soda_type), name=name))
-  for name, _, soda_type, _ in inputs:
+        c_type=util.get_c_type(haoda_type), name=name))
+  for name, _, haoda_type, _ in inputs:
     println('{name}_read = {name}->read();'.format(name=name))
-  for name, _, soda_type, _ in outputs:
+  for name, _, haoda_type, _ in outputs:
     println(
         '{name}->write({c_type}());'.format(
-        c_type=util.get_c_type(soda_type), name=name))
+        c_type=util.get_c_type(haoda_type), name=name))
   un_scope()
 
-  params = ['{}* {}'.format(util.get_c_type(soda_type), name)
-            for name, _, soda_type, _ in m_axi_ports]
+  params = ['{}* {}'.format(util.get_c_type(haoda_type), name)
+            for name, _, haoda_type, _ in m_axi_ports]
   params.append('uint64_t coalesced_data_num')
   print_func('void %s' % top_name, params, align=0)
   do_scope()
@@ -374,12 +376,12 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
   println('#pragma HLS interface s_axilite port=return bundle=control', 0)
   println()
 
-  for _, _, soda_type, name in m_axi_ports:
+  for _, _, haoda_type, name in m_axi_ports:
     println('hls::stream<{c_type}> {name}("{name}");'.format(
-        c_type=util.get_c_type(soda_type), name=name))
+        c_type=util.get_c_type(haoda_type), name=name))
     println('#pragma HLS stream variable={name} depth=32'.format(name=name), 0)
 
-  for port_name, _, soda_type, buf_name in inputs:
+  for port_name, _, haoda_type, buf_name in inputs:
     print_func('BurstRead', [
         '&{name}'.format(name=buf_name), '{name}'.format(name=port_name),
         'coalesced_data_num'], suffix=';', align=0)
@@ -387,7 +389,7 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
   params = ['&{}'.format(name) for _, _, _, name in m_axi_ports]
   printer.print_func('Dataflow', params, suffix=';', align=0)
 
-  for port_name, _, soda_type, buf_name in outputs:
+  for port_name, _, haoda_type, buf_name in outputs:
     print_func('BurstWrite', [
         '{name}'.format(name=port_name), '&{name}'.format(name=buf_name),
         'coalesced_data_num'],

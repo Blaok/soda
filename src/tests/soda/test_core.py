@@ -3,29 +3,30 @@ import unittest
 
 import textx
 
+from haoda import ir
+from haoda import util
 from soda import core
 from soda import grammar
-from soda import util
 
 class TestStencil(unittest.TestCase):
 
   def setUp(self):
     self.tile_size = [233, 0]
-    self.soda_type = 'uint16'
+    self.haoda_type = 'uint16'
     self.unroll_factor = 1
-    self.expr_ref = core.grammar.Ref(name='foo', idx=(233, 42), lat=None)
-    self.expr = core.grammar.Expr(operand=(self.expr_ref,), operator=())
-    self.input_stmt = core.grammar.InputStmt(
-        soda_type=self.soda_type, name='foo_i', tile_size=self.tile_size,
+    self.expr_ref = ir.Ref(name='foo', idx=(233, 42), lat=None)
+    self.expr = ir.Expr(operand=(self.expr_ref,), operator=())
+    self.input_stmt = grammar.InputStmt(
+        haoda_type=self.haoda_type, name='foo_i', tile_size=self.tile_size,
         dram=())
-    self.param_stmt = core.grammar.ParamStmt(
-        soda_type=self.soda_type, name='foo_p', attr=(), size=(), dram=())
-    self.local_ref = core.grammar.Ref(name='foo_l', idx=(0, 0), lat=None)
-    self.local_stmt = core.grammar.LocalStmt(
-      soda_type=self.soda_type, let=(), ref=self.local_ref, expr=self.expr)
-    self.output_ref = core.grammar.Ref(name='foo_o', idx=(0, 0), lat=None)
-    self.output_stmt = core.grammar.OutputStmt(
-      soda_type=self.soda_type, let=(), ref=self.output_ref, expr=self.expr,
+    self.param_stmt = grammar.ParamStmt(
+        haoda_type=self.haoda_type, name='foo_p', attr=(), size=(), dram=())
+    self.local_ref = ir.Ref(name='foo_l', idx=(0, 0), lat=None)
+    self.local_stmt = grammar.LocalStmt(
+      haoda_type=self.haoda_type, let=(), ref=self.local_ref, expr=self.expr)
+    self.output_ref = ir.Ref(name='foo_o', idx=(0, 0), lat=None)
+    self.output_stmt = grammar.OutputStmt(
+      haoda_type=self.haoda_type, let=(), ref=self.output_ref, expr=self.expr,
       dram=())
     self.args = {
       'burst_width': 512,
@@ -42,7 +43,7 @@ class TestStencil(unittest.TestCase):
       'unroll_factor': self.unroll_factor,
       'replication_factor': self.unroll_factor}
     self.soda_mm = textx.metamodel_from_str(
-      grammar.SODA_GRAMMAR, classes=grammar.SODA_GRAMMAR_CLASSES)
+      grammar.GRAMMAR, classes=grammar.CLASSES)
     self.blur = self.soda_mm.model_from_str(
 r'''
 kernel: blur
@@ -69,10 +70,10 @@ cluster: none
       'number of input tensors must be the same as output if iterate > 1 times,'
       ' currently there are 2 input(s) but 1 output(s)')
 
-  def test_soda_type_of_input_stmts_different_with_output(self):
+  def test_haoda_type_of_input_stmts_different_with_output(self):
     args = {**self.blur.__dict__, **{'replication_factor': 1}}
     input_stmt = copy.copy(self.input_stmt)
-    input_stmt.soda_type = 'half'
+    input_stmt.haoda_type = 'half'
     args['input_stmts'] = [input_stmt]
     with self.assertRaises(util.SemanticError) as context:
       core.Stencil(**args)

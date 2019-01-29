@@ -4,12 +4,11 @@ import logging
 import os
 import sys
 
-from textx import metamodel_from_str
-from textx.exceptions import TextXSyntaxError
+import textx
 
+from haoda import util
 from soda import core
 from soda import grammar
-from soda import util
 from soda.codegen.xilinx import opencl as xocl
 from soda.model import xilinx as model
 
@@ -65,6 +64,12 @@ def main():
             dest='iterate',
             help='override iterate directive; '
             'repeat execution multiple times iteratively')
+  parser.add_argument('--temporal-cse',
+            type=str,
+            metavar='(yes|no)',
+            dest='temporal_cse',
+            nargs='?', const='yes', default='yes',
+            help='enable temporal common subexpression elimination or not')
   parser.add_argument('--border',
             type=str,
             metavar='(ignore|preserve)',
@@ -110,8 +115,7 @@ def main():
   logger.info('set log level to %s', logging.getLevelName(logging_level))
   # TODO: check tile size
 
-  soda_mm = metamodel_from_str(grammar.SODA_GRAMMAR,
-                 classes=grammar.SODA_GRAMMAR_CLASSES)
+  soda_mm = textx.metamodel_from_str(grammar.GRAMMAR, classes=grammar.CLASSES)
   logger.info('build metamodel')
   try:
     if args.soda_src == '-':
@@ -145,6 +149,10 @@ def main():
       unroll_factor = args.replication_factor
       replication_factor = args.replication_factor
 
+    optimizations = set()
+    if args.temporal_cse == 'yes':
+      optimizations.add('temporal_cse')
+
     stencil = core.Stencil(
       burst_width=args.burst_width if args.burst_width is not None
                      else soda_model.burst_width,
@@ -164,7 +172,8 @@ def main():
       dim=soda_model.dim,
       tile_size=tile_size,
       unroll_factor=unroll_factor,
-      replication_factor=replication_factor)
+      replication_factor=replication_factor,
+      optimizations=optimizations)
 
     logger.debug('stencil obtained: %s', stencil)
 
@@ -199,7 +208,7 @@ def main():
           print_estimation()
 
 
-  except TextXSyntaxError as e:
+  except textx.exceptions.TextXSyntaxError as e:
     logger.error(e)
     sys.exit(1)
   except util.SemanticError as e:
