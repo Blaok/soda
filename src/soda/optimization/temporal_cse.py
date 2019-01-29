@@ -212,6 +212,10 @@ class Schedule(ScheduleBase):
       self.operator = operator
     return self
 
+  def bind_aattr(self, aattr: Optional[tuple]) -> 'Schedule':
+    self.aattr = aattr
+    return self
+
   def print_tree(self, printer=_logger.debug) -> None:
     printer('B-repr: %s', self.brepr)
     base.print_tree(self.get_ast(), printer)
@@ -315,6 +319,23 @@ class Schedules(ScheduleBase):
   range_func = range_from_middle
   skip = True
   lazy = True
+  @staticmethod
+  def set_optimizations(optimizations: Sequence[str] = (
+      'reorder-exploration', 'skip-with-partial-cost',
+      'lazy-cartesian-product')) -> None:
+    if 'reorder-exploration' in optimizations:
+      Schedules.range_func = range_from_middle
+    if 'no-reorder-exploration' in optimizations:
+      Schedules.range_func = range
+    if 'skip-with-partial-cost' in optimizations:
+      Schedules.skip = True
+    if 'no-skip-with-partial-cost' in optimizations:
+      Schedules.skip = False
+    if 'lazy-cartesian-product' in optimizations:
+      Schedules.lazy = True
+    if 'no-lazy-cartesian-product' in optimizations:
+      Schedules.lazy = False
+
   def __init__(self, rattr: Tuple[Union[int, Tuple[int, ...]]],
                aattr: Optional[tuple] = None,
                num_ops: int = None, offset: int = 0,
@@ -332,17 +353,6 @@ class Schedules(ScheduleBase):
     if stat is None:
       self.stat = [0, 0, 0, 0, 0]
     self.max_cost = self.num_ops if max_cost is None else max_cost
-
-  @staticmethod
-  def set_optimizations(optimizations: Sequence[str] = (
-      'reorder-exploration', 'skip-with-partial-cost',
-      'lazy-cartesian-product')) -> None:
-    if 'reorder-exploration' in optimizations:
-      Schedules.range_func = range_from_middle
-    else:
-      Schedules.range_func = range
-    Schedules.skip = 'skip-with-partial-cost' in optimizations
-    Schedules.lazy = 'lazy-cartesian-product' in optimizations
 
   def __iter__(self) -> Iterator[Schedule]:
     return iter(self.schedules)
@@ -516,6 +526,17 @@ class Expression:
     rattr: Tuple of relative attributes.
     aattr: Tuple of absolute attributes or None.
   """
+  nullify_uniform_aattr = True
+  @staticmethod
+  def set_optimizations(optimizations: Sequence[str] = (
+      'reorder-exploration', 'skip-with-partial-cost',
+      'lazy-cartesian-product', 'nullify-uniform-aattr')) -> None:
+    if 'nullify-uniform-aattr' in optimizations:
+      uniform_uniform_aattr = True
+    if 'no-nullify-uniform-aattr' in optimizations:
+      uniform_uniform_aattr = False
+    Schedules.set_optimizations(optimizations)
+
   class CannotHandle(Exception):
     def __init__(self, msg, details: str = '') -> None:
       details = details or (': ' + str(details))
@@ -561,8 +582,13 @@ class Expression:
 
   @cached_property.cached_property
   def schedules(self) -> Schedules:
+    if Expression.nullify_uniform_aattr:
+      if self.aattr is not None:
+        if len(set(self.aattr)) == 1:
+          return Schedules(self.rattr, None, cache={})
     return Schedules(self.rattr, self.aattr, cache={})
 
   @cached_property.cached_property
   def best_schedule(self) -> Schedule:
-    return self.schedules.best.bind_operator(self.operator)
+    best_schedule = self.schedules.best
+    return best_schedule.bind_operator(self.operator).bind_aattr(self.aattr)
