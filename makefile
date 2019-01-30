@@ -1,4 +1,4 @@
-.PHONY: check-git-status unittest pylint pre-commit
+.PHONY: check-git-status kernel unittest pre-commit pylint
 
 APP ?= blur
 SDA_VER ?= 2017.4
@@ -78,6 +78,8 @@ endif
 
 check-git-status:
 	@echo $(COMMIT)
+
+kernel: $(TMP)/$(KERNEL_SRCS)
 
 $(TMP)/$(KERNEL_SRCS): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
