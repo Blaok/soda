@@ -2,7 +2,7 @@
 
 ## Publication
 
-+ **Yuze Chi**, Jason Cong, Peng Wei, Peipei Zhou. SODA: Stencil with Optimized Dataflow Architecture. In ICCAD, 2018. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/iccad18.pdf) [[Slides]](https://about.blaok.me/pub/iccad18.slides.pdf)
++ Yuze Chi, Jason Cong, Peng Wei, Peipei Zhou. [SODA: Stencil with Optimized Dataflow Architecture](https://doi.org/10.1145/3240765.3240850). In ICCAD, 2018. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/iccad18.pdf) [[Slides]](https://about.blaok.me/pub/iccad18.slides.pdf)
 
 ## SODA DSL Example
 
@@ -12,24 +12,27 @@
     burst width: 512  # DRAM burst I/O width in bits, for Xilinx platform by default it's 512
     unroll factor: 16 # how many pixels are generated per cycle
     
-    # specify the type, name, dimension, and dram bank of input tile
+    # specify the dram bank, type, name, and dimension of the input tile
     # the last dimension is not needed and a placeholder '*' must be given
     # dram bank is optional
     # multiple inputs can be specified but 1 and only 1 must specify the dimensions
     input dram 0 uint16: input(2000, *)
     
     # specify an intermediate stage of computation, may appear 0 or more times
-    local uint16: tmp(0,0) = (input(-1,0)+input(0,0)+input(1,0))/3
+    local uint16: tmp(0, 0) = (input(-1, 0) + input(0, 0) + input(1, 0)) / 3
     
     # specify the output
     # dram bank is optional
-    output dram 1 uint16: output(0,0) = (tmp(0,-1)+tmp(0,0)+tmp(0,1))/3
+    output dram 1 uint16: output(0, 0) = (tmp(0, -1) + tmp(0, 0) + tmp(0, 1)) / 3
     
-    # how many times the whole computation is repeated (if input has the same type and channel as output)
+    # how many times the whole computation is repeated (only works if input matches output)
     iterate: 2
     
-    # how to deal with border, currently 'preserve' and 'ignore' are available ('preserve' doesn't support tiling yet)
-    border: preserve
+    # how to deal with border, currently only 'ignore' is available
+    border: ignore
+    
+    # how to cluster modules, currently only 'none' is available
+    cluster: none
     
     # constant values that may be referenced as coefficients or lookup tables (implementation currently broken)
     # array partitioning information can be passed to HLS code
@@ -51,16 +54,16 @@
 + Note that `2.0` will be a `double` number. To generate `float`, use `2.0f`. This may help reduce DSP usage
 + SODA is tiling-based and the size of the tile is specified in the `input` keyword. The last dimension is omitted because it is not needed in the reuse buffer generation
 
-
 ## Getting Started
 
 ### Prerequisites
 
-+ Python dependencies specified in `requirements.txt`
-+ SDAccel 2017.4 or 2018.2 (earlier version from 2017.1 should work but not tested)
++ Python 3.3+
++ Python dependencies installed via `python3 -m pip install -r requirements.txt`
++ SDAccel 2018.3 (earlier versions might work but won't be supported)
 
 ### Clone the Repo
-    git clone https://github.com/Blaok/soda.git
+    git clone https://github.com/UCLA-VAST/soda.git
     cd soda
 
 ### Generate HLS kernel code
@@ -83,69 +86,107 @@
 
 ## Code Snippets
 
-The following code snippets no longer correspond to the latest code base but the idea is the same.
-
 ### Configuration
 
-+ 5-point 2D Jacobi
-+ tile size is (2000, *)
++ 5-point 2D Jacobi: `t0(0, 0) = (t1(0, 1) + t1(1, 0) + t1(0, 0) + t1(0, -1) + t1(-1, 0)) * 0.2f`
++ tile size is `(2000, *)`
+
+Each function in the below code snippets is synthesized into an RTL module.
+Their arguments are all `hls::stream` FIFOs; Without unrolling, a simple line-buffer pipeline is generated, producing 1 pixel per cycle.
+With unrolling, a SODA microarchitecture pipeline is generated, procuding 2 pixeles per cycle.
 
 ### Without Unrolling
 
     #pragma HLS dataflow
-        load(input_stream_chan_0_bank_0, var_input_chan_0_bank_0, coalesced_data_num);
-        unpack_float(
-            t1_offset_0_chan_0,
-            input_stream_chan_0_bank_0, coalesced_data_num);
+    Module1Func(
+      /*output*/ &from_t1_offset_0_to_t1_offset_1999,
+      /*output*/ &from_t1_offset_0_to_t0_pe_0,
+      /* input*/ &from_super_source_to_t1_offset_0);
+    Module2Func(
+      /*output*/ &from_t1_offset_1999_to_t1_offset_2000,
+      /*output*/ &from_t1_offset_1999_to_t0_pe_0,
+      /* input*/ &from_t1_offset_0_to_t1_offset_1999);
+    Module3Func(
+      /*output*/ &from_t1_offset_2000_to_t1_offset_2001,
+      /*output*/ &from_t1_offset_2000_to_t0_pe_0,
+      /* input*/ &from_t1_offset_1999_to_t1_offset_2000);
+    Module3Func(
+      /*output*/ &from_t1_offset_2001_to_t1_offset_4000,
+      /*output*/ &from_t1_offset_2001_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2000_to_t1_offset_2001);
+    Module4Func(
+      /*output*/ &from_t1_offset_4000_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2001_to_t1_offset_4000);
+    Module5Func(
+      /*output*/ &from_t0_pe_0_to_super_sink,
+      /* input*/ &from_t1_offset_0_to_t0_pe_0,
+      /* input*/ &from_t1_offset_1999_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2000_to_t0_pe_0,
+      /* input*/ &from_t1_offset_4000_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2001_to_t0_pe_0);
 
-        forward_2<float, 0>(from_t1_to_t0_param_4_chan_0_pe_0, t1_offset_1999_chan_0, t1_offset_0_chan_0, epoch_num);
-        forward_2<float, 1999>(from_t1_to_t0_param_3_chan_0_pe_0, t1_offset_2000_chan_0, t1_offset_1999_chan_0, epoch_num);
-        forward_2<float, 1>(from_t1_to_t0_param_2_chan_0_pe_0, t1_offset_2001_chan_0, t1_offset_2000_chan_0, epoch_num);
-        forward_2<float, 1>(from_t1_to_t0_param_1_chan_0_pe_0, t1_offset_4000_chan_0, t1_offset_2001_chan_0, epoch_num);
-        forward_1<float, 1999>(from_t1_to_t0_param_0_chan_0_pe_0, t1_offset_4000_chan_0, epoch_num);
-
-        compute_t0<0>(t0_offset_0_chan_0, from_t1_to_t0_param_0_chan_0_pe_0, from_t1_to_t0_param_1_chan_0_pe_0, from_t1_to_t0_param_2_chan_0_pe_0, from_t1_to_t0_param_3_chan_0_pe_0, from_t1_to_t0_param_4_chan_0_pe_0, input_size_dim_0, input_
-    size_dim_1, epoch_num);
-
-        pack_float(output_stream_chan_0_bank_0,
-            t0_offset_0_chan_0,
-            coalesced_data_num);
-        store(var_output_chan_0_bank_0, output_stream_chan_0_bank_0, coalesced_data_num);
+In the above code snippet, `Module1Func` to `Module4Func` are forwarding modules; they constitute the line buffer.
+The line buffer size is approximately two lines of pixels, i.e. 4000 pixels.
+`Module5Func` is a computing module; it implements the computation kernel.
+The whole design is fully pipelined; however, with only 1 computing module, it can only produce 1 pixel per cycle.
 
 ### Unroll 2 Times
 
     #pragma HLS dataflow
-        load(input_stream_chan_0_bank_0, var_input_chan_0_bank_0, coalesced_data_num);
-        unpack_float(
-            t1_offset_1_chan_0,
-            t1_offset_0_chan_0,
-            input_stream_chan_0_bank_0, coalesced_data_num);
+    Module1Func(
+      /*output*/ &from_t1_offset_1_to_t1_offset_1999,
+      /*output*/ &from_t1_offset_1_to_t0_pe_0,
+      /* input*/ &from_super_source_to_t1_offset_1);
+    Module1Func(
+      /*output*/ &from_t1_offset_0_to_t1_offset_2000,
+      /*output*/ &from_t1_offset_0_to_t0_pe_1,
+      /* input*/ &from_super_source_to_t1_offset_0);
+    Module2Func(
+      /*output*/ &from_t1_offset_1999_to_t1_offset_2001,
+      /*output*/ &from_t1_offset_1999_to_t0_pe_1,
+      /* input*/ &from_t1_offset_1_to_t1_offset_1999);
+    Module3Func(
+      /*output*/ &from_t1_offset_2000_to_t1_offset_2002,
+      /*output*/ &from_t1_offset_2000_to_t0_pe_1,
+      /*output*/ &from_t1_offset_2000_to_t0_pe_0,
+      /* input*/ &from_t1_offset_0_to_t1_offset_2000);
+    Module4Func(
+      /*output*/ &from_t1_offset_2001_to_t1_offset_4001,
+      /*output*/ &from_t1_offset_2001_to_t0_pe_1,
+      /*output*/ &from_t1_offset_2001_to_t0_pe_0,
+      /* input*/ &from_t1_offset_1999_to_t1_offset_2001);
+    Module5Func(
+      /*output*/ &from_t1_offset_2002_to_t1_offset_4000,
+      /*output*/ &from_t1_offset_2002_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2000_to_t1_offset_2002);
+    Module6Func(
+      /*output*/ &from_t1_offset_4001_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2001_to_t1_offset_4001);
+    Module7Func(
+      /*output*/ &from_t0_pe_0_to_super_sink,
+      /* input*/ &from_t1_offset_1_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2000_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2001_to_t0_pe_0,
+      /* input*/ &from_t1_offset_4001_to_t0_pe_0,
+      /* input*/ &from_t1_offset_2002_to_t0_pe_0);
+    Module8Func(
+      /*output*/ &from_t1_offset_4000_to_t0_pe_1,
+      /* input*/ &from_t1_offset_2002_to_t1_offset_4000);
+    Module7Func(
+      /*output*/ &from_t0_pe_1_to_super_sink,
+      /* input*/ &from_t1_offset_0_to_t0_pe_1,
+      /* input*/ &from_t1_offset_1999_to_t0_pe_1,
+      /* input*/ &from_t1_offset_2000_to_t0_pe_1,
+      /* input*/ &from_t1_offset_4000_to_t0_pe_1,
+      /* input*/ &from_t1_offset_2001_to_t0_pe_1);
 
-        forward_2<float, 0>(from_t1_to_t0_param_4_chan_0_pe_1, t1_offset_2000_chan_0, t1_offset_0_chan_0, epoch_num);
-        forward_2<float, 0>(from_t1_to_t0_param_4_chan_0_pe_0, t1_offset_1999_chan_0, t1_offset_1_chan_0, epoch_num);
-        forward_2<float, 999>(from_t1_to_t0_param_3_chan_0_pe_1, t1_offset_2001_chan_0, t1_offset_1999_chan_0, epoch_num);
-        forward_3<float, 1000>(from_t1_to_t0_param_2_chan_0_pe_1, from_t1_to_t0_param_3_chan_0_pe_0, t1_offset_2002_chan_0, t1_offset_2000_chan_0, epoch_num);
-        forward_3<float, 1>(from_t1_to_t0_param_1_chan_0_pe_1, from_t1_to_t0_param_2_chan_0_pe_0, t1_offset_4001_chan_0, t1_offset_2001_chan_0, epoch_num);
-        forward_2<float, 1>(from_t1_to_t0_param_1_chan_0_pe_0, t1_offset_4000_chan_0, t1_offset_2002_chan_0, epoch_num);
-        forward_1<float, 999>(from_t1_to_t0_param_0_chan_0_pe_1, t1_offset_4000_chan_0, epoch_num);
-        forward_1<float, 1000>(from_t1_to_t0_param_0_chan_0_pe_0, t1_offset_4001_chan_0, epoch_num);
+In the above code snippet, `Module1Func` to `Module6Func` and `Module8Func` are forwarding modules; they constitute the line buffers of the SODA microarchitecture.
+Although unrolled, the line buffer size is still approximately two lines of pixels, i.e. 4000 pixels.
+`Module7Func` is a computing module; it is instanciated twice.
+The whole design is fully pipelined and can produce 2 pixel per cycle.
+In general, the unroll factor can be set to any number that satisfies the throughput requirement.
 
-        compute_t0<0>(t0_offset_1_chan_0, from_t1_to_t0_param_0_chan_0_pe_0, from_t1_to_t0_param_1_chan_0_pe_0, from_t1_to_t0_param_2_chan_0_pe_0, from_t1_to_t0_param_3_chan_0_pe_0, from_t1_to_t0_param_4_chan_0_pe_0, input_size_dim_0, input_
-    size_dim_1, epoch_num);
-        compute_t0<1>(t0_offset_0_chan_0, from_t1_to_t0_param_0_chan_0_pe_1, from_t1_to_t0_param_1_chan_0_pe_1, from_t1_to_t0_param_2_chan_0_pe_1, from_t1_to_t0_param_3_chan_0_pe_1, from_t1_to_t0_param_4_chan_0_pe_1, input_size_dim_0, input_
-    size_dim_1, epoch_num);
+## Projects Using SODA
 
-        pack_float(output_stream_chan_0_bank_0,
-            t0_offset_1_chan_0,
-            t0_offset_0_chan_0,
-            coalesced_data_num);
-        store(var_output_chan_0_bank_0, output_stream_chan_0_bank_0, coalesced_data_num);
-    
-### Functions Explained
-
-+ `load`/`store` performs burst DRAM I/O
-+ `unpack`/`pack` performs memory coalescing
-+ `forward` forwards data from source to multiple destintaions, with a certain number of cycles' delay
-  - They form the reuse buffers
-+ `compute` computes output using the inputs
-  - They are the PEs
++ Yi-Hsiang Lai, Yuze Chi, Yuwei Hu, Jie Wang, Cody Hao Yu, Yuan Zhou, Jason Cong, Zhiru Zhang. [HeteroCL: A Multi-Paradigm Programming Infrastructure for Software-Defined Reconfigurable Computing](https://doi.org/10.1145/3289602.3293910). In FPGA, 2019. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/fpga19-heterocl.pdf) [[Slides]](https://about.blaok.me/pub/fpga19-heterocl.slides.pdf)
++ Yuze Chi, Young-kyu Choi, Jason Cong, Jie Wang. [Rapid Cycle-Accurate Simulator for High-Level Synthesis](https://doi.org/10.1145/3289602.3293918). In FPGA, 2019. [[PDF]](https://about.blaok.me/pub/fpga19-flash.pdf) [[Slides]](https://about.blaok.me/pub/fpga19-flash.slides.pdf)
