@@ -103,8 +103,7 @@ $(SRC)/$(APP)_run.cpp: $(SODA_SRC)/$(APP)_run.cpp $(SRC)/$(APP).h
 	ln -sf $(abspath $<) $@
 
 unittest:
-	@echo python3 -m unittest
-	@cd src;python3 -m unittest
+	python3 -m unittest discover --start-directory src
 
 pylint:
 	@+exec src/pylint.sh src src/sodac
