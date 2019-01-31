@@ -10,7 +10,6 @@ from haoda import util
 from soda import core
 from soda import grammar
 from soda.codegen.xilinx import opencl as xocl
-from soda.model import xilinx as model
 
 logging.basicConfig(level=logging.WARNING,
                     format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
@@ -38,11 +37,6 @@ def main():
                       metavar='UNROLL_FACTOR',
                       dest='unroll_factor',
                       help='override unroll factor')
-  parser.add_argument('--replication-factor',
-                      type=int,
-                      metavar='REPLICATION_FACTOR',
-                      dest='replication_factor',
-                      help='override replication factor')
   parser.add_argument('--tile-size',
                       type=int,
                       nargs='+',
@@ -64,44 +58,12 @@ def main():
             dest='iterate',
             help='override iterate directive; '
             'repeat execution multiple times iteratively')
-  parser.add_argument('--temporal-cse',
-            type=str,
-            metavar='(yes|no)',
-            dest='temporal_cse',
-            nargs='?', const='yes', default='yes',
-            help='enable temporal common subexpression elimination or not')
-  parser.add_argument('--border',
-            type=str,
-            metavar='(ignore|preserve)',
-            dest='border',
-            help='override border handling strategy')
-  parser.add_argument('--cluster',
-            type=str,
-            metavar='(none|fine|coarse|full)',
-            dest='cluster',
-            help='module clustering level, `none` generates '
-               'standalone compute / forward modules, `fine` '
-               'fuses forwarders into compute modules, `coarse` '
-               'fuses each stage together, `full` fuses '
-               'everything together')
   parser.add_argument(type=str,
             dest='soda_src',
             metavar='file',
             help='soda source code')
 
   xocl.add_arguments(parser.add_argument_group('Xilinx OpenCL backend'))
-
-  parser.add_argument('--model-file',
-            type=str,
-            dest='model_file',
-            metavar='file',
-            help='resource model specified as json file')
-  parser.add_argument('--estimation-file',
-            type=str,
-            dest='estimation_file',
-            metavar='file',
-            help='report resource and performance estimation as '
-               'json file')
 
   args = parser.parse_args()
   verbose = 0 if args.verbose is None else args.verbose
@@ -139,29 +101,16 @@ def main():
         tile_size.append(soda_model.tile_size[dim])
     tile_size.append(0)
 
-    if args.replication_factor is None:
-      if args.unroll_factor is not None:
-        unroll_factor = args.unroll_factor
-      else:
-        unroll_factor = soda_model.unroll_factor
-      replication_factor = 1
+    if args.unroll_factor is not None:
+      unroll_factor = args.unroll_factor
     else:
-      unroll_factor = args.replication_factor
-      replication_factor = args.replication_factor
-
-    optimizations = set()
-    if args.temporal_cse == 'yes':
-      optimizations.add('temporal_cse')
+      unroll_factor = soda_model.unroll_factor
 
     stencil = core.Stencil(
       burst_width=args.burst_width if args.burst_width is not None
                      else soda_model.burst_width,
-      border=args.border if args.border is not None
-                 else soda_model.border,
       iterate=args.iterate if args.iterate is not None
                  else soda_model.iterate,
-      cluster=args.cluster if args.cluster is not None
-                 else soda_model.cluster,
       dram_in=args.dram_in,
       dram_out=args.dram_out,
       app_name=soda_model.app_name,
@@ -171,42 +120,11 @@ def main():
       output_stmts=soda_model.output_stmts,
       dim=soda_model.dim,
       tile_size=tile_size,
-      unroll_factor=unroll_factor,
-      replication_factor=replication_factor,
-      optimizations=optimizations)
+      unroll_factor=unroll_factor)
 
     logger.debug('stencil obtained: %s', stencil)
 
     xocl.print_code(stencil, args)
-
-    if args.estimation_file is not None:
-      if args.model_file is None:
-        if args.soda_src.endswith('.soda'):
-          model_file = args.soda_src[:-len('.soda')]+'_model.json'
-        else:
-          logger.fatal('cannot find resource model file')
-          sys.exit(1)
-      else:
-        model_file = args.model_file
-
-      def print_estimation():
-        def print_estimation():
-          model.print_estimation(stencil,
-                       model_file,
-                       estimation_file)
-        if args.estimation_file == '-':
-          estimation_file = sys.stdout
-          print_estimation()
-        else:
-          with open(args.estimation_file, 'w') as estimation_file:
-            print_estimation()
-      if model_file == '-':
-        model_file = sys.stdin
-        print_estimation()
-      else:
-        with open(model_file) as model_file:
-          print_estimation()
-
 
   except textx.exceptions.TextXSyntaxError as e:
     logger.error(e)

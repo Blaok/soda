@@ -160,124 +160,68 @@ def create_dataflow_graph(stencil):
 
   print_node = color_id
 
-  if stencil.replication_factor > 1:
-    replicated_next_fifo = stencil.get_replicated_next_fifo()
-    replicated_all_points = stencil.get_replicated_all_points()
-    replicated_reuse_buffers = stencil.get_replicated_reuse_buffers()
+  next_fifo = stencil.next_fifo
+  all_points = stencil.all_points
+  reuse_buffers = stencil.reuse_buffers
 
-    def add_fwd_nodes(src_name):
-      dsts = replicated_all_points[src_name]
-      reuse_buffer = replicated_reuse_buffers[src_name][1:]
-      nodes_to_add = []
-      for dst_point_dicts in dsts.values():
-        for offset in dst_point_dicts:
-          if (src_name, offset) in super_source.fwd_nodes:
-            continue
-          fwd_node = ForwardNode(
-            tensor=stencil.tensors[src_name],
-            offset=offset,
-            depth=stencil.get_replicated_reuse_buffer_length(
-              src_name, offset))
-          _logger.debug('create %s', print_node(fwd_node))
-          init_offsets = [start
-            for start, end in reuse_buffer if start == end]
-          if offset in init_offsets:
-            if src_name in [stencil.input.name]:
-              super_source.add_child(fwd_node)
-            else:
-              (super_source.cpt_nodes[(src_name, 0)]
-                .add_child(fwd_node))
-          super_source.fwd_nodes[(src_name, offset)] = fwd_node
-          if offset in replicated_next_fifo[src_name]:
-            nodes_to_add.append(
-              (fwd_node, (src_name,
-                replicated_next_fifo[src_name][offset])))
-      for src_node, key in nodes_to_add:
-        src_node.add_child(super_source.fwd_nodes[key])
+  def add_fwd_nodes(src_name):
+    dsts = all_points[src_name]
+    reuse_buffer = reuse_buffers[src_name][1:]
+    nodes_to_add = []
+    for dst_point_dicts in dsts.values():
+      for offset in dst_point_dicts:
+        if (src_name, offset) in super_source.fwd_nodes:
+          continue
+        fwd_node = ForwardNode(
+          tensor=stencil.tensors[src_name], offset=offset)
+        #depth=stencil.get_reuse_buffer_length(src_name, offset))
+        _logger.debug('create %s', print_node(fwd_node))
+        # init_offsets is the start of each reuse chain
+        init_offsets = [start for start, end in reuse_buffer if start == end]
+        if offset in init_offsets:
+          if src_name in stencil.input_names:
+            # fwd from external input
+            super_source.add_child(fwd_node)
+          else:
+            # fwd from output of last stage
+            # tensor name and offset are used to find the cpt node
+            cpt_offset = next(unroll_idx
+              for unroll_idx in range(stencil.unroll_factor)
+              if init_offsets[unroll_idx] == offset)
+            cpt_node = super_source.cpt_nodes[(src_name, cpt_offset)]
+            cpt_node.add_child(fwd_node)
+        super_source.fwd_nodes[(src_name, offset)] = fwd_node
+        if offset in next_fifo[src_name]:
+          nodes_to_add.append(
+            (fwd_node, (src_name, next_fifo[src_name][offset])))
+    for src_node, key in nodes_to_add:
+      # fwd from another fwd node
+      src_node.add_child(super_source.fwd_nodes[key])
 
-    add_fwd_nodes(stencil.input.name)
+  for input_name in stencil.input_names:
+    add_fwd_nodes(input_name)
 
-    for stage in stencil.get_stages_chronologically():
-      cpt_node = ComputeNode(stage=stage, pe_id=0)
+  for tensor in chronological_tensors:
+    if tensor.is_input():
+      continue
+    for unroll_index in range(stencil.unroll_factor):
+      pe_id = stencil.unroll_factor-1-unroll_index
+      cpt_node = ComputeNode(tensor=tensor, pe_id=pe_id)
       _logger.debug('create %s', print_node(cpt_node))
-      super_source.cpt_nodes[(stage.name, 0)] = cpt_node
-      for input_name, input_window in stage.window.items():
+      super_source.cpt_nodes[(tensor.name, pe_id)] = cpt_node
+      for input_name, input_window in tensor.ld_indices.items():
         for i in range(len(input_window)):
           offset = next(offset for offset, points in
-            (replicated_all_points[input_name][stage.name]
-              .items())
-            if points == i)
+            all_points[input_name][tensor.name].items()
+            if pe_id in points and points[pe_id] == i)
           fwd_node = super_source.fwd_nodes[(input_name, offset)]
           _logger.debug('  access %s', print_node(fwd_node))
           fwd_node.add_child(cpt_node)
-      if stage.is_output():
-        super_source.cpt_nodes[stage.name, 0].add_child(super_sink)
-      else:
-        add_fwd_nodes(stage.name)
-
-  else:
-    next_fifo = stencil.next_fifo
-    all_points = stencil.all_points
-    reuse_buffers = stencil.reuse_buffers
-
-    def add_fwd_nodes(src_name):
-      dsts = all_points[src_name]
-      reuse_buffer = reuse_buffers[src_name][1:]
-      nodes_to_add = []
-      for dst_point_dicts in dsts.values():
-        for offset in dst_point_dicts:
-          if (src_name, offset) in super_source.fwd_nodes:
-            continue
-          fwd_node = ForwardNode(
-            tensor=stencil.tensors[src_name], offset=offset)
-          #depth=stencil.get_reuse_buffer_length(src_name, offset))
-          _logger.debug('create %s', print_node(fwd_node))
-          # init_offsets is the start of each reuse chain
-          init_offsets = [start for start, end in reuse_buffer if start == end]
-          if offset in init_offsets:
-            if src_name in stencil.input_names:
-              # fwd from external input
-              super_source.add_child(fwd_node)
-            else:
-              # fwd from output of last stage
-              # tensor name and offset are used to find the cpt node
-              cpt_offset = next(unroll_idx
-                for unroll_idx in range(stencil.unroll_factor)
-                if init_offsets[unroll_idx] == offset)
-              cpt_node = super_source.cpt_nodes[(src_name, cpt_offset)]
-              cpt_node.add_child(fwd_node)
-          super_source.fwd_nodes[(src_name, offset)] = fwd_node
-          if offset in next_fifo[src_name]:
-            nodes_to_add.append(
-              (fwd_node, (src_name, next_fifo[src_name][offset])))
-      for src_node, key in nodes_to_add:
-        # fwd from another fwd node
-        src_node.add_child(super_source.fwd_nodes[key])
-
-    for input_name in stencil.input_names:
-      add_fwd_nodes(input_name)
-
-    for tensor in chronological_tensors:
-      if tensor.is_input():
-        continue
-      for unroll_index in range(stencil.unroll_factor):
-        pe_id = stencil.unroll_factor-1-unroll_index
-        cpt_node = ComputeNode(tensor=tensor, pe_id=pe_id)
-        _logger.debug('create %s', print_node(cpt_node))
-        super_source.cpt_nodes[(tensor.name, pe_id)] = cpt_node
-        for input_name, input_window in tensor.ld_indices.items():
-          for i in range(len(input_window)):
-            offset = next(offset for offset, points in
-              all_points[input_name][tensor.name].items()
-              if pe_id in points and points[pe_id] == i)
-            fwd_node = super_source.fwd_nodes[(input_name, offset)]
-            _logger.debug('  access %s', print_node(fwd_node))
-            fwd_node.add_child(cpt_node)
-      if tensor.is_output():
-        for pe_id in range(stencil.unroll_factor):
-          super_source.cpt_nodes[tensor.name, pe_id].add_child(super_sink)
-      else:
-        add_fwd_nodes(tensor.name)
+    if tensor.is_output():
+      for pe_id in range(stencil.unroll_factor):
+        super_source.cpt_nodes[tensor.name, pe_id].add_child(super_sink)
+    else:
+      add_fwd_nodes(tensor.name)
 
   # pylint: disable=too-many-nested-blocks
   for src_node in super_source.tpo_node_gen():

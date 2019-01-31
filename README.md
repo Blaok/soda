@@ -1,8 +1,9 @@
-# SODA: Stencil with Optimized Dataflow Architecture
+# SODA Compiler
+Stencil with Optimized Dataflow Architecture Compiler
 
 ## Publication
 
-+ Yuze Chi, Jason Cong, Peng Wei, Peipei Zhou. [SODA: Stencil with Optimized Dataflow Architecture](https://doi.org/10.1145/3240765.3240850). In ICCAD, 2018. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/iccad18.pdf) [[Slides]](https://about.blaok.me/pub/iccad18.slides.pdf)
++ Yuze Chi, Jason Cong, Peng Wei, Peipei Zhou. [SODA: Stencil with Optimized Dataflow Architecture](https://doi.org/10.1145/3240765.3240850). In *ICCAD*, 2018. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/iccad18.pdf) [[Slides]](https://about.blaok.me/pub/iccad18.slides.pdf)
 
 ## SODA DSL Example
 
@@ -16,43 +17,17 @@
     # the last dimension is not needed and a placeholder '*' must be given
     # dram bank is optional
     # multiple inputs can be specified but 1 and only 1 must specify the dimensions
-    input dram 0 uint16: input(2000, *)
+    input dram 1 uint16: input(2000, *)
     
     # specify an intermediate stage of computation, may appear 0 or more times
-    local uint16: tmp(0, 0) = (input(-1, 0) + input(0, 0) + input(1, 0)) / 3
+    local uint16: blur_x(0, 0) = (input(0, 0) + input(0, 1) + input(0, 2)) / 3
     
     # specify the output
     # dram bank is optional
-    output dram 1 uint16: output(0, 0) = (tmp(0, -1) + tmp(0, 0) + tmp(0, 1)) / 3
+    output dram 1 uint16: blur_y(0, 0) = (blur_x(0, 0) + blur_x(1, 0) + blur_x(2, 0)) / 3
     
     # how many times the whole computation is repeated (only works if input matches output)
-    iterate: 2
-    
-    # how to deal with border, currently only 'ignore' is available
-    border: ignore
-    
-    # how to cluster modules, currently only 'none' is available
-    cluster: none
-    
-    # constant values that may be referenced as coefficients or lookup tables (implementation currently broken)
-    # array partitioning information can be passed to HLS code
-    param uint16, partition cyclic factor=2 dim=1, partition cyclic factor=2 dim=2: p1[20][30]
-    # keyword 'dup' allows simultaneous access to the same parameter
-    param uint16, dup 3, partition complete: p2[20]
-    
-## TODOs
-
-+ [x] support multiple inputs & outputs
-+ [x] use RTL flow to accelerate HLS
-
-## Design Considerations
-
-+ All keywords are mandatory except intermediate `local` and extra `param` are optional
-+ For non-iterative stencil, `unroll factor` shall be determined by the DRAM bandwidth, i.e. saturate the external bandwidth, since the resource is usually not the bottleneck
-+ For iterative stencil, to use more PEs in a single iteration or to implement more iterations is yet to be explored
-+ Currently `math.h` functions can be parsed but type induction is not fully implemented
-+ Note that `2.0` will be a `double` number. To generate `float`, use `2.0f`. This may help reduce DSP usage
-+ SODA is tiling-based and the size of the tile is specified in the `input` keyword. The last dimension is omitted because it is not needed in the reuse buffer generation
+    iterate: 1
 
 ## Getting Started
 
@@ -63,39 +38,100 @@
 + SDAccel 2018.3 (earlier versions might work but won't be supported)
 
 ### Clone the Repo
-    git clone https://github.com/UCLA-VAST/soda.git
-    cd soda
+    git clone https://github.com/UCLA-VAST/soda-compiler.git
+    cd soda-compiler
 
-### Generate HLS kernel code
-    make kernel
+### Parameter Setup
+    app=blur
+    platform=xilinx_u200_xdma_201830_1
+    # The following can be set via sourcing /path/to/xilinx/sdx/settings64.sh
+    XILINX_SDX=/path/to/xilinx/sdx
+    XILINX_VIVADO=/path/to/xilinx/vivado
 
-### Run C-Sim
-    make csim
+### Generate HLS Kernel Code
+    src/sodac tests/src/${app}.soda --xocl-kernel ${app}_kernel.cpp
 
-### Generate HDL code
-    make hls SYNTHESIS_FLOW=rtl
+### Generate OpenCL Host Code
+    src/sodac tests/src/${app}.soda --xocl-header ${app}.h
+    src/sodac tests/src/${app}.soda --xocl-host ${app}.cpp
+
+### Create Testbench
+    cat >${app}_run.cpp <<EOF
+    #include <cstdio>
+    #include <cstdlib>
     
-### Run Co-Sim
-    make cosim SYNTHESIS_FLOW=rtl
+    #include "${app}.h"                                                                            
     
-### Generate FPGA Bitstream
-    make bitstream SYNTHESIS_FLOW=rtl
-    
-### Run Bitstream
-    make hw SYNTHESIS_FLOW=rtl # requires actual FPGA hardware and driver
+    int ${app}_test(const char* xclbin, const int dims[4]);
+    int main(int argc, char **argv) {
+      if (argc != 4) {
+        fprintf(stderr, "Usage: \n    %s <xclbin> <input width> <input height>\n", argv[0]);
+        return 1;
+      }
+      int dims[4] = {atoi(argv[2]), atoi(argv[3]), 0, 0};
+      return ${app}_test(argv[1], dims);
+    }
+    EOF
 
-## Code Snippets
+### Compile OpenCL Host Executable
+    # Please set TILE_SIZE_DIM_0 and UNROLL_FACTOR macros to match the kernel.
+    g++ -std=c++11 -I${XILINX_SDX}/runtime/include -I${XILINX_VIVADO}/include ${app}.cpp ${app}_run.cpp -o ${app} \
+        -lxilinxopencl -DTILE_SIZE_DIM_0=2000 -DUNROLL_FACTOR=2 -fopenmp -Wno-deprecated-declarations -Wall
 
-### Configuration
+### Create Emulation Config
+    emconfigutil -f ${platform}
 
-+ 5-point 2D Jacobi: `t0(0, 0) = (t1(0, 1) + t1(1, 0) + t1(0, 0) + t1(0, -1) + t1(-1, 0)) * 0.2f`
-+ tile size is `(2000, *)`
+### Software Emulation
 
+#### Compile for Software Emulation
+    xocc -t sw_emu -f ${platform} --kernel ${app}_kernel --xp prop:kernel.${app}_kernel.kernel_flags="-std=c++0x" \
+        -c ${app}_kernel.cpp -o ${app}.sw_emu.xo
+
+#### Link for Software Emulation
+    xocc -t sw_emu -f ${platform} -l ${app}.sw_emu.xo -o ${app}.sw_emu.xclbin
+
+#### Run Software Emulation
+    XCL_EMULATION_MODE=sw_emu ./${app} ${app}.sw_emu.xclbin 2000 100
+
+### High-Level Synthesis
+    xocc -t hw -f ${platform} --kernel ${app}_kernel --xp prop:kernel.${app}_kernel.kernel_flags="-std=c++0x" \
+        -c ${app}_kernel.cpp -o ${app}.hw.xo
+
+### Hardware Emulation
+
+#### Link for Hardware Emulation
+    xocc -t hw_emu -f ${platform} -l ${app}.hw.xo -o ${app}.hw_emu.xclbin
+
+#### Run Hardware Emulation
+    # By default, kernel ports are connected via DRAM bank 1 on the xilinx_u200_xdma_201830_1 platform.
+    DRAM_IN=1 DRAM_OUT=1 XCL_EMULATION_MODE=hw_emu ./${app} ${app}.hw_emu.xclbin 2000 10
+
+### Hardware Deployment
+
+#### Logic Synthesis, Place, and Route
+    xocc -t hw -f ${platform} -l ${app}.hw.xo -o ${app}.hw.xclbin
+
+#### Run Bitstream on FPGA
+    # By default, kernel ports are connected via DRAM bank 1 on the xilinx_u200_xdma_201830_1 platform.
+    DRAM_IN=1 DRAM_OUT=1 ./${app} ${app}.hw.xclbin 2000 1000
+
+## Code Snippet Example
+
+### Source Code
+
+    kernel: jacobi2d
+    burst width: 512
+    unroll factor: 2
+    input float: t1(2000, *)
+    output float: t0(0, 0) = (t1(0, 1) + t1(1, 0) + t1(0, 0) + t1(0, -1) + t1(-1, 0)) * 0.2f
+    iterate: 1
+
+### HLS Kernel Code
 Each function in the below code snippets is synthesized into an RTL module.
 Their arguments are all `hls::stream` FIFOs; Without unrolling, a simple line-buffer pipeline is generated, producing 1 pixel per cycle.
 With unrolling, a SODA microarchitecture pipeline is generated, procuding 2 pixeles per cycle.
 
-### Without Unrolling
+#### Without Unrolling (`--unroll-factor=1`)
 
     #pragma HLS dataflow
     Module1Func(
@@ -125,12 +161,12 @@ With unrolling, a SODA microarchitecture pipeline is generated, procuding 2 pixe
       /* input*/ &from_t1_offset_4000_to_t0_pe_0,
       /* input*/ &from_t1_offset_2001_to_t0_pe_0);
 
-In the above code snippet, `Module1Func` to `Module4Func` are forwarding modules; they constitute the line buffer.
+In the above code snippet, `Module1Func` to `Module4Func` are forwarding modules; they constitute the data-reuse line buffer.
 The line buffer size is approximately two lines of pixels, i.e. 4000 pixels.
 `Module5Func` is a computing module; it implements the computation kernel.
 The whole design is fully pipelined; however, with only 1 computing module, it can only produce 1 pixel per cycle.
 
-### Unroll 2 Times
+#### Unroll 2 Times (`--unroll-factor=2`)
 
     #pragma HLS dataflow
     Module1Func(
@@ -180,13 +216,21 @@ The whole design is fully pipelined; however, with only 1 computing module, it c
       /* input*/ &from_t1_offset_4000_to_t0_pe_1,
       /* input*/ &from_t1_offset_2001_to_t0_pe_1);
 
-In the above code snippet, `Module1Func` to `Module6Func` and `Module8Func` are forwarding modules; they constitute the line buffers of the SODA microarchitecture.
-Although unrolled, the line buffer size is still approximately two lines of pixels, i.e. 4000 pixels.
+In the above code snippet, `Module1Func` to `Module6Func` and `Module8Func` are forwarding modules; they constitute the reuse buffers of the SODA microarchitecture.
+Although unrolled, the reuse buffer size is still approximately two lines of pixels, i.e. 4000 pixels.
 `Module7Func` is a computing module; it is instanciated twice.
 The whole design is fully pipelined and can produce 2 pixel per cycle.
 In general, the unroll factor can be set to any number that satisfies the throughput requirement.
 
+## Design Considerations
+
++ `kernel`, `burst width`, `unroll factor`, `input`, `output`, and `iterate` keywords are mandatory
++ For non-iterative stencil, `unroll factor` shall be determined by the DRAM bandwidth, i.e. saturate the external bandwidth, since the resource is usually not the bottleneck
++ For iterative stencil, prefer to use more PEs in a single iteration rather than implement more iterations
++ Note that `2.0` will be a `double` number. To generate `float`, use `2.0f`. This may help reduce DSP usage
++ SODA is tiling-based and the size of the tile is specified in the `input` keyword. The last dimension is a placeholder because it is not needed in the reuse buffer generation
+
 ## Projects Using SODA
 
-+ Yi-Hsiang Lai, Yuze Chi, Yuwei Hu, Jie Wang, Cody Hao Yu, Yuan Zhou, Jason Cong, Zhiru Zhang. [HeteroCL: A Multi-Paradigm Programming Infrastructure for Software-Defined Reconfigurable Computing](https://doi.org/10.1145/3289602.3293910). In FPGA, 2019. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/fpga19-heterocl.pdf) [[Slides]](https://about.blaok.me/pub/fpga19-heterocl.slides.pdf)
-+ Yuze Chi, Young-kyu Choi, Jason Cong, Jie Wang. [Rapid Cycle-Accurate Simulator for High-Level Synthesis](https://doi.org/10.1145/3289602.3293918). In FPGA, 2019. [[PDF]](https://about.blaok.me/pub/fpga19-flash.pdf) [[Slides]](https://about.blaok.me/pub/fpga19-flash.slides.pdf)
++ Yi-Hsiang Lai, Yuze Chi, Yuwei Hu, Jie Wang, Cody Hao Yu, Yuan Zhou, Jason Cong, Zhiru Zhang. [HeteroCL: A Multi-Paradigm Programming Infrastructure for Software-Defined Reconfigurable Computing](https://doi.org/10.1145/3289602.3293910). In *FPGA*, 2019. (Best Paper Candidate) [[PDF]](https://about.blaok.me/pub/fpga19-heterocl.pdf) [[Slides]](https://about.blaok.me/pub/fpga19-heterocl.slides.pdf)
++ Yuze Chi, Young-kyu Choi, Jason Cong, Jie Wang. [Rapid Cycle-Accurate Simulator for High-Level Synthesis](https://doi.org/10.1145/3289602.3293918). In *FPGA*, 2019. [[PDF]](https://about.blaok.me/pub/fpga19-flash.pdf) [[Slides]](https://about.blaok.me/pub/fpga19-flash.slides.pdf)

@@ -8,9 +8,7 @@ _logger = logging.getLogger().getChild(__name__)
 GRAMMAR = r'''
 SodaProgram:
 (
-  ('border' ':' border=BorderStrategies)
   ('burst' 'width' ':' burst_width=INT)
-  ('cluster' ':' cluster=ClusterStrategies)
   ('iterate' ':' iterate=INT)
   ('kernel' ':' app_name=ID)
   ('unroll' 'factor' ':' unroll_factor=INT)
@@ -21,9 +19,6 @@ SodaProgram:
 )#;
 
 YesOrNo: 'yes'|'no';
-
-BorderStrategies: 'ignore'|'preserve';
-ClusterStrategies: 'none'|'fine'|'coarse'|'full';
 
 Comment: /\s*#.*$/;
 
@@ -132,9 +127,8 @@ class ParamAttr(ir.Node):
     return result
 
 class SodaProgram(ir.Node):
-  SCALAR_ATTRS = ('border', 'burst_width', 'cluster', 'iterate', 'app_name',
-                  'unroll_factor', 'input_stmts', 'param_stmts', 'local_stmts',
-                  'output_stmts')
+  SCALAR_ATTRS = ('burst_width', 'iterate', 'app_name', 'unroll_factor',
+                  'input_stmts', 'param_stmts', 'local_stmts', 'output_stmts')
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     for node in self.input_stmts:
@@ -156,9 +150,7 @@ class SodaProgram(ir.Node):
 
   def __str__(self):
     return '\n'.join(filter(None, (
-      'border: {}'.format(self.border),
       'burst width: {}'.format(self.burst_width),
-      'cluster: {}'.format(self.cluster),
       'iterate: {}'.format(self.iterate),
       'kernel: {}'.format(self.app_name),
       'unroll factor: {}'.format(self.unroll_factor),

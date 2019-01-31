@@ -829,46 +829,27 @@ def print_wrapped(printer, stencil):
             '*tile_index_dim_{0} : TILE_SIZE_DIM_{0};'.format(
                 dim, stencil.input_names[0]))
 
-  if stencil.preserve_border:
-    overall_stencil_window = util.get_overall_stencil_window(
-        stencil.output.parent.preserve_border_from(), stencil.output)
-    overall_stencil_offset = util.get_stencil_window_offset(
-        overall_stencil_window)
-    overall_stencil_dim = util.get_stencil_dim(overall_stencil_window)
-    println('for(int32_t {var} = 0; {var} < {0}_size_dim_{1}; ++{var})'.format(
-        stencil.input.name, stencil.dim-1,
-        var=util.COORDS_IN_TILE[stencil.dim-1]))
+  overall_stencil_window = core.get_overall_stencil_window(
+      stencil.tensors[stencil.input_names[0]],
+      stencil.tensors[stencil.output_names[0]])
+  overall_stencil_offset = core.get_stencil_window_offset(
+      overall_stencil_window)
+  overall_stencil_dim = core.get_stencil_dim(overall_stencil_window)
+  println('#pragma omp parallel for', 0)
+  println('for(int32_t {var} = {}; {var} < {}_size_dim_{}-{}; ++{var})'
+          ''.format(overall_stencil_offset[stencil.dim-1],
+                    stencil.output_names[0], stencil.dim-1,
+                    overall_stencil_dim[stencil.dim-1]-1-
+                    overall_stencil_offset[stencil.dim-1],
+                    var=util.COORDS_IN_TILE[stencil.dim-1]))
+  do_scope()
+  for dim in range(stencil.dim-2, -1, -1):
+    println('for(int32_t {var} = {}; {var} < actual_tile_size_dim_{}-{}; '
+            '++{var})'.format(
+        overall_stencil_offset[dim], dim,
+        overall_stencil_dim[dim]-1-overall_stencil_offset[dim],
+        var=util.COORDS_IN_TILE[dim]))
     do_scope()
-    for dim in range(stencil.dim-2, -1, -1):
-      println('for(int32_t {var} = tile_index_dim_{dim}==0 ? 0 : {0}; {var} < a'
-              'ctual_tile_size_dim_{dim}-(tile_index_dim_{dim}==tile_num_dim_{d'
-              'im}-1 ? 0 : {1}); ++{var})'.format(
-                  overall_stencil_offset[dim],
-                  overall_stencil_dim[dim]-1-overall_stencil_offset[dim],
-                  dim=dim, var=util.COORDS_IN_TILE[dim]))
-      do_scope()
-  else:
-    overall_stencil_window = core.get_overall_stencil_window(
-        stencil.tensors[stencil.input_names[0]],
-        stencil.tensors[stencil.output_names[0]])
-    overall_stencil_offset = core.get_stencil_window_offset(
-        overall_stencil_window)
-    overall_stencil_dim = core.get_stencil_dim(overall_stencil_window)
-    println('#pragma omp parallel for', 0)
-    println('for(int32_t {var} = {}; {var} < {}_size_dim_{}-{}; ++{var})'
-            ''.format(overall_stencil_offset[stencil.dim-1],
-                      stencil.output_names[0], stencil.dim-1,
-                      overall_stencil_dim[stencil.dim-1]-1-
-                      overall_stencil_offset[stencil.dim-1],
-                      var=util.COORDS_IN_TILE[stencil.dim-1]))
-    do_scope()
-    for dim in range(stencil.dim-2, -1, -1):
-      println('for(int32_t {var} = {}; {var} < actual_tile_size_dim_{}-{}; '
-              '++{var})'.format(
-          overall_stencil_offset[dim], dim,
-          overall_stencil_dim[dim]-1-overall_stencil_offset[dim],
-          var=util.COORDS_IN_TILE[dim]))
-      do_scope()
 
   println('// (%s) is coordinates in tiled image' %
           ', '.join(util.COORDS_TILED))
@@ -1167,70 +1148,6 @@ def print_test(printer, stencil):
       un_scope()
     println()
 
-    # pylint: disable=pointless-string-statement
-    '''
-    if False and s.preserve_border_from():
-      println('// handle borders for iterative stencil')
-      println('#pragma omp parallel for', 0)
-      bb = s.preserve_border_from()
-      stencil_window = util.get_overall_stencil_window(bb, s.output)
-      stencil_dim = util.get_stencil_dim(stencil_window)
-      output_idx = util.get_stencil_window_offset(stencil_window)
-      for d in range(0, stencil.dim):
-        dim = stencil.dim-d-1
-        println('for(int32_t {var} = 0; {var} < dims[{dim}]; ++{var})'.format(
-            var=util.COORDS_IN_ORIG[dim], dim=dim))
-        do_scope()
-      println('if(!(%s))' % ' && '.join(
-          '{var} >= {} && {var}<dims[{}]-{}'.format(
-              output_idx[d], d, stencil_dim[d]-output_idx[d]-1,
-              var=util.COORDS_IN_ORIG[d]) for d in range(stencil.dim)))
-      do_scope()
-      GroudTruth = lambda c: '%s_img[%s + %d * %s.stride[%d]]' % (
-          bb.name, '+'.join('%c*%s.stride[%d]' % (
-              util.COORDS_IN_ORIG[d], bb.name, d) for d in range(stencil.dim)),
-          c, bb.name, stencil.dim)
-      for e in s.expr:
-        println('%s = %s;' % (StorePrinter(e), GroudTruth(e.chan)))
-      if len(s.output.children) == 0:
-        for c in range(stencil.output.chan):
-          run_result = '%s_img[%s+%d*%s.stride[%d]]' % (
-              stencil.output.name, '+'.join(
-                  '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d],
-                                        stencil.output.name, d)
-                  for d in range(stencil.dim)), c, stencil.output.name,
-              stencil.dim)
-          println('%s val_fpga = %s;' % (stencil.output.type, run_result))
-          println('%s val_cpu = result_chan_%d;' % (stencil.output.type, c))
-          if util.is_float(stencil.output.type):
-            println('double threshold = 0.00001;')
-            println('if(nullptr!=getenv("THRESHOLD"))')
-            do_scope()
-            println('threshold = atof(getenv("THRESHOLD"));')
-            un_scope()
-            println('threshold *= threshold;')
-            println('if (double(val_fpga - val_cpu) * double(val_fpga - val_cpu'
-                    ') / (double(val_cpu) * double(val_cpu)) > threshold)')
-            do_scope()
-            params = (c, ', '.join(['%d']*stencil.dim),
-                      ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
-            println('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double'
-                    '(val_fpga), double(val_cpu), %s);' % params)
-          else:
-            println('if(val_fpga!=val_cpu)')
-            do_scope()
-            params = (c, ', '.join(['%d']*stencil.dim),
-                      ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
-            println('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_'
-                    't(val_fpga), int64_t(val_cpu), %s);' % params)
-          println('++error_count;')
-          un_scope()
-      un_scope()
-      for d in range(0, stencil.dim):
-        un_scope()
-      println()
-  '''
-
   println('if(error_count==0)')
   do_scope()
   println('fprintf(*error_report, "INFO: PASS!\\n");')
@@ -1263,13 +1180,9 @@ def print_code(stencil, host_file):
 
   print_define('BURST_WIDTH', stencil.burst_width)
 
-  if stencil.preserve_border:
-    overall_stencil_window = core.get_overall_stencil_window(
-      stencil.output.parent.preserve_border_from(), stencil.output)
-  else:
-    overall_stencil_window = core.get_overall_stencil_window(
-      map(stencil.tensors.get, stencil.input_names),
-      stencil.tensors[stencil.output_names[0]])
+  overall_stencil_window = core.get_overall_stencil_window(
+    map(stencil.tensors.get, stencil.input_names),
+    stencil.tensors[stencil.output_names[0]])
 
   overall_stencil_distance = core.get_stencil_distance(overall_stencil_window,
     stencil.tile_size)
@@ -1278,8 +1191,6 @@ def print_code(stencil, host_file):
     print_define('STENCIL_DIM_%d' % i, dim)
   stencil_offset = overall_stencil_distance - soda_util.serialize(
     core.get_stencil_window_offset(overall_stencil_window), stencil.tile_size)
-  if stencil.preserve_border:
-    stencil_offset *= stencil.iterate
 
   overall_stencil_distance = max(overall_stencil_distance, stencil_offset)
 

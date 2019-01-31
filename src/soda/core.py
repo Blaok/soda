@@ -14,7 +14,6 @@ from soda import grammar
 from soda import util as soda_util
 from soda import visitor
 from soda import mutator
-from soda.optimization import temporal_cse
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -160,15 +159,10 @@ class Stencil():
   """
   Attributes:
     iterate: int, number of iteration to implement.
-    border: Reserved.
-    preserve_border: Reserved.
-    cluster: Reserved.
     burst_width: int, width of bits for DRAM burst access.
     app_name: str, application's name.
     tile_size: List of int.
     unroll_factor: int.
-    replication_factor: int.
-    optimizations: Set of enabled optimizations.
     dim: int.
     param_stmts: List of ParamStmt.
     input_stmts: List of InputStmt.
@@ -186,9 +180,6 @@ class Stencil():
     self.iterate = kwargs.pop('iterate')
     if self.iterate < 1:
       raise util.SemanticError('cannot iterate %d times' % self.iterate)
-    self.border = kwargs.pop('border')
-    self.preserve_border = self.border == 'preserve'
-    self.cluster = kwargs.pop('cluster')
     # platform determined
     self.burst_width = kwargs.pop('burst_width')
     # application determined
@@ -196,7 +187,6 @@ class Stencil():
     # parameters that can be explored
     self.tile_size = tuple(kwargs.pop('tile_size'))
     self.unroll_factor = kwargs.pop('unroll_factor')
-    self.replication_factor = kwargs.pop('replication_factor')
     # stage-independent
     self.dim = kwargs.pop('dim')
     self.param_stmts = kwargs.pop('param_stmts')
@@ -204,9 +194,6 @@ class Stencil():
     self.input_stmts = kwargs.pop('input_stmts')
     self.local_stmts = kwargs.pop('local_stmts')
     self.output_stmts = kwargs.pop('output_stmts')
-    self.optimizations = set()
-    if 'optimizations' in kwargs:
-      self.optimizations = kwargs.pop('optimizations')
 
     if 'dram_in' in kwargs:
       dram_in = kwargs.pop('dram_in')
@@ -259,9 +246,6 @@ class Stencil():
       _logger.debug('simplify %s', stmt.name)
       stmt.expr = arithmetic.simplify(stmt.expr)
       stmt.let = arithmetic.simplify(stmt.let)
-
-    if 'temporal_cse' in self.optimizations:
-      temporal_cse.temporal_cse(self)
 
     # soda frontend successfully parsed
     # triggers cached property
@@ -685,60 +669,6 @@ class Stencil():
     self.reuse_buffers
     return self._reuse_buffer_lengths
 
-  def get_replicated_next_fifo(self):
-    if not hasattr(self, 'replicated_next_fifo'):
-      self.replicated_next_fifo = {}
-      for name, reuse_buffer in (self.get_replicated_reuse_buffers()
-          .items()):
-        self.replicated_next_fifo[name] = {}
-        for start, end in reuse_buffer[1:]:
-          if start < end:
-            self.replicated_next_fifo[name][start] = end
-      _logger.debug('replicated_next_fifo: %s'
-        % self.replicated_next_fifo)
-    return self.replicated_next_fifo
-
-  def get_replicated_reuse_buffer_length(self, name, offset):
-    if not hasattr(self, 'replicated_reuse_buffer_lengths'):
-      self.get_replicated_reuse_buffers()
-    return self.replicated_reuse_buffer_lengths[name][offset]
-
-  def get_replicated_reuse_buffers(self):
-    if not hasattr(self, 'replicated_reuse_buffers'):
-      replication_factor = self.replication_factor
-      self.replicated_reuse_buffer_lengths = {}
-      self.replicated_reuse_buffers = {}
-      for tensor in self.producer_tensors:
-        reuse_buffer = _get_replicated_reuse_buffer(self.tile_size,
-          tensor, replication_factor)
-        self.replicated_reuse_buffers[tensor.name] = reuse_buffer
-        self.replicated_reuse_buffer_lengths[tensor.name] = {}
-        first = [True]*self.replication_factor
-        for start, end in reuse_buffer[1:]:
-          if first[start%replication_factor]:
-            first[start%replication_factor] = False
-            if start >= replication_factor:
-              self.replicated_reuse_buffer_lengths[tensor.name][
-                end] = end//replication_factor
-              continue
-          self.replicated_reuse_buffer_lengths[tensor.name][end] = (
-            end-start)//replication_factor
-      _logger.debug('replicated_reuse_buffers: %s' %
-        self.replicated_reuse_buffers)
-      _logger.debug('replicated_reuse_buffer_lengths: %s' %
-        self.replicated_reuse_buffer_lengths)
-    return self.replicated_reuse_buffers
-
-  def get_replicated_all_points(self):
-    if not hasattr(self, 'replicated_all_points'):
-      self.replicated_all_points = {}
-      for tensor in self.producer_tensors:
-        self.replicated_all_points[tensor.name
-          ] = _get_replicated_points(self.tile_size, tensor)
-      _logger.debug('replicated_all_points: %s' %
-        self.replicated_all_points)
-    return self.replicated_all_points
-
 def _get_reuse_chains(tile_size, tensor, unroll_factor):
   """Generates reuse chains for a Tensor.
 
@@ -844,55 +774,6 @@ def _get_reuse_buffer(tile_size, tensor, unroll_factor):
       offsets.append(chain[j+1])
   reuse_buffer[0] = max(offsets)+1
   _logger.debug('reuse chains of tensor %s: %s' % (tensor.name, reuse_buffer))
-  return reuse_buffer
-
-def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
-  _logger.debug('\033[1mget replicated reuse chains of tensor %s\033[0m' %
-    tensor.name)
-  A_dag = set()
-  for stage in tensor.children:
-    offsets = soda_util.serialize_iter(stage.window[tensor.name], tile_size)
-    A_dag |= {max(offsets)-offset+stage.delay[tensor.name]
-      for offset in offsets}
-  _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
-  chains = sum(reversed([
-    tuple([tuple(sorted(x for x in A_dag if x%replication_factor == i))])
-    for i in range(replication_factor)]), ())
-  for idx, chain in enumerate(chains):
-    _logger.debug('reuse chain %d of tensor %s: %s' %
-      (idx, tensor.name, chain))
-  return chains
-
-def _get_replicated_points(tile_size, tensor):
-  all_points = {} # {name:{offset:point_index}}
-  for stage in tensor.children:
-    all_points[stage.name] = {}
-    offsets = soda_util.serialize_iter(stage.window[tensor.name], tile_size)
-    max_offset = max(offsets)
-    for idx, offset in enumerate(offsets):
-      all_points[stage.name][
-        max_offset-offset+stage.delay[tensor.name]] = idx
-  for stage in tensor.children:
-    for offset, points in all_points[stage.name].items():
-      _logger.debug('%s <- %s @ offset=%d <=> (%s)' % (
-        stage.name, tensor.name, offset,
-        ', '.join(map(str, stage.window[tensor.name][points]))))
-  return all_points
-
-def _get_replicated_reuse_buffer(tile_size, tensor, replication_factor):
-  reuse_buffer = [None] # [length, (start, end), (start, end), ...]
-  offsets = []
-  for chain in _get_replicated_reuse_chains(tile_size, tensor,
-      replication_factor):
-    if chain:
-      reuse_buffer.append((chain[0], chain[0]))
-      offsets.append(chain[0])
-      for j in range(len(chain)-1):
-        reuse_buffer.append((chain[j], chain[j+1]))
-        offsets.append(chain[j+1])
-  reuse_buffer[0] = max(offsets)+1
-  _logger.debug('reuse chains of tensor %s: %s' %
-    (tensor.name, reuse_buffer))
   return reuse_buffer
 
 def get_indices_id(indices):
