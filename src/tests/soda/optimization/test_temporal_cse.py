@@ -36,7 +36,8 @@ class TestTemporalCse(unittest.TestCase):
   def setUp(self):
     temporal_cse.Schedules.set_optimizations(('reorder-exploration',
                                               'skip-with-partial-cost',
-                                              'lazy-cartesian-product'))
+                                              'lazy-cartesian-product',
+                                              'no-c-temporal-cse'))
     self.caching = True
     self.strict = True
     if 'PROFILING' in os.environ:
@@ -95,21 +96,21 @@ class TestTemporalCse(unittest.TestCase):
   def test_5x5_temporal_cse(self):
     """Test a 5x5 temporal CSE case."""
     m, n = 5, 5
-    rattr = tuple(map(tuple, itertools.product(range(m), range(n))))
+    rattr = tuple(map(tuple, map(reversed,
+                                 itertools.product(range(m), range(n)))))
     schedule = temporal_cse.Schedules(rattr, cache=self.cache).best
     self.assertEqual(6, schedule.cost)
 
 class TestTemporalCseWithoutLazyCartesianProduct(TestTemporalCse):
   def setUp(self):
     super().setUp()
-    temporal_cse.Schedules.set_optimizations(('reorder-exploration',
-                                              'skip-with-partial-cost'))
+    temporal_cse.Schedules.set_optimizations(('no-lazy-cartesian-product',))
 
 class TestTemporalCseWithoutSkipping(TestTemporalCse):
   def setUp(self):
     super().setUp()
-    temporal_cse.Schedules.set_optimizations(('reorder-exploration',
-                                              'lazy-cartesian-product'))
+    temporal_cse.Schedules.set_optimizations(('no-skip-with-partial-cost',))
+
   @unittest.skip
   def test_more_temporal_cse(self):
     pass
@@ -121,8 +122,7 @@ class TestTemporalCseWithoutSkipping(TestTemporalCse):
 class TestTemporalCseWithoutReorderingExploration(TestTemporalCse):
   def setUp(self):
     super().setUp()
-    temporal_cse.Schedules.set_optimizations(('skip-with-partial-cost',
-                                              'lazy-cartesian-product'))
+    temporal_cse.Schedules.set_optimizations(('no-reorder-exploration',))
     self.strict = False
 
 class TestTemporalCseWithoutCaching(TestTemporalCse):
@@ -137,3 +137,17 @@ class TestTemporalCseWithoutCaching(TestTemporalCse):
   @unittest.skip
   def test_5x5_temporal_cse(self):
     pass
+
+class TestTemporalCseWithC(TestTemporalCse):
+  def setUp(self):
+    super().setUp()
+    temporal_cse.Schedules.set_optimizations(('c-temporal-cse',))
+    self.strict = False
+
+  def test_9x9_temporal_cse(self):
+    """Test a 9x9 temporal CSE case."""
+    m, n = 9, 9
+    rattr = tuple(map(tuple, map(reversed,
+                                 itertools.product(range(m), range(n)))))
+    schedule = temporal_cse.Schedules(rattr, cache=self.cache).best
+    self.assertEqual(8, schedule.cost)

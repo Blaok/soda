@@ -1,9 +1,11 @@
 from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, \
     Sequence, Set, Tuple, Type, Union
-import enum
 import collections
+import ctypes
+import enum
 import itertools
 import logging
+import os
 
 import cached_property
 
@@ -319,10 +321,9 @@ class Schedules(ScheduleBase):
   range_func = range_from_middle
   skip = True
   lazy = True
+  libtcse = None
   @staticmethod
-  def set_optimizations(optimizations: Sequence[str] = (
-      'reorder-exploration', 'skip-with-partial-cost',
-      'lazy-cartesian-product')) -> None:
+  def set_optimizations(optimizations: Sequence[str]) -> None:
     if 'reorder-exploration' in optimizations:
       Schedules.range_func = range_from_middle
     if 'no-reorder-exploration' in optimizations:
@@ -335,6 +336,15 @@ class Schedules(ScheduleBase):
       Schedules.lazy = True
     if 'no-lazy-cartesian-product' in optimizations:
       Schedules.lazy = False
+    if 'c-temporal-cse' in optimizations:
+      tcse_so = os.path.join(os.path.dirname(__file__), "libtemporal-cse.so")
+      try:
+        Schedules.libtcse = ctypes.CDLL(tcse_so)
+      except OSError as e:
+        _logger.warning(e)
+        Schedules.libtcse = None
+    if 'no-c-temporal-cse' in optimizations:
+      Schedules.libtcse = None
 
   def __init__(self, rattr: Tuple[Union[int, Tuple[int, ...]]],
                aattr: Optional[tuple] = None,
@@ -348,7 +358,7 @@ class Schedules(ScheduleBase):
     self.offset = offset
     self.cache = cache
     if cache is not None:
-      cache.setdefault(num_ops, {})[offset] = self
+      cache.setdefault(self.num_ops, {})[self.offset] = self
     self.stat = stat
     if stat is None:
       self.stat = [0, 0, 0, 0, 0]
@@ -472,6 +482,66 @@ class Schedules(ScheduleBase):
 
   @cached_property.cached_property
   def best(self) -> Schedule:
+    if Schedules.libtcse is not None:
+      n = len(self.rattr)
+
+      # prepare C arguments
+      c_rattrs = (ctypes.c_int64 * n)()
+      if self.aattr is None:
+        c_aattrs = ctypes.POINTER(ctypes.c_int64)()
+      else:
+        c_aattrs = (ctypes.c_int64 * n)()
+      c_n = ctypes.c_uint64(n)
+      c_cost = ctypes.c_uint64()
+      c_brepr = (ctypes.c_char * (2 * n))()
+      c_operations = (ctypes.c_uint64 * (2 * (n - 2)))()
+      c_stat = (ctypes.c_uint64 * len(self.stat))()
+
+      # prepare relative attributes
+      if isinstance(self.rattr[0], int):
+        for i in range(n):
+          c_rattrs[i] = self.rattr[i]
+      else:
+        # relative attributes are tuples; linearize them
+        def linearize(rattr: Sequence[int], weights: Sequence[int]) -> int:
+          return sum(rattr * weight for rattr, weight in zip(rattr, weights))
+
+        num_dim = len(self.rattr[0])
+        maxs = [None] * num_dim
+        mins = [None] * num_dim
+        weights = [1] * num_dim
+        for d in range(num_dim - 1):
+          maxs[d] = max(rattr[d] for rattr in self.rattr)
+          mins[d] = min(rattr[d] for rattr in self.rattr)
+        for d in range(1, num_dim):
+          weights[d] = weights[d - 1] * (maxs[d - 1] - mins[d - 1] + 1)
+        for i in range(n):
+          c_rattrs[i] = linearize(self.rattr[i], weights)
+
+      # prepare absolute attributes
+      if self.aattr is not None:
+        tag = 0
+        aattr_table = {}
+        for aattr in self.aattr:
+          if aattr not in aattr_table:
+            aattr_table[aattr] = tag
+            tag += 1
+        for i in range(n):
+          c_aattrs[i] = aattr_table[self.aattr[i]]
+
+      Schedules.libtcse.TemporalCse(
+          c_rattrs, c_aattrs, c_n, ctypes.byref(c_cost),
+          c_brepr, c_operations, c_stat)
+
+      for i in range(len(self.stat)):
+        self.stat[i] = c_stat[i]
+      operations = tuple(slice(c_operations[i * 2], c_operations[i * 2 + 1])
+                         for i in range(n - 2))
+      c_best = Schedule(c_brepr.value.decode(), operations, None,
+                        self.rattr, self.aattr)
+      c_best.cost = c_cost.value
+      return c_best
+
     best = None
     if self.skip:
       for best in self:
@@ -486,10 +556,18 @@ class Schedules(ScheduleBase):
     return best
 
   @property
-  def cache_hit_rate(self) -> float:
-    return self.stat[0] / sum(self.stat)
+  def cache_hit(self) -> int:
+    return self.stat[0]
 
-  def get_schedules(self, num_ops, offset) -> 'Schedules':
+  @property
+  def cache_miss(self) -> int:
+    return self.stat[1]
+
+  @property
+  def cache_hit_rate(self) -> float:
+    return self.cache_hit / (self.cache_hit + self.cache_miss)
+
+  def get_schedules(self, num_ops, offset) -> Tuple[Schedule]:
     """Get schedules with the given operation number and offset.
 
     If self.cache is not None and the same arguments were given in previous runs
@@ -514,8 +592,9 @@ class Schedules(ScheduleBase):
 
   def print_stats(self,
                   logger: Callable[[str, Any], None] = _logger.info) -> None:
-    logger('trip count: | L1: %d | L2: %d | L3: %d |', *self.stat[2:])
-    logger('cache hit rate: %2.3f%%', self.cache_hit_rate * 100)
+    logger('loops: | L1: %d | L2: %d | L3: %d |', *self.stat[2:])
+    logger('cache: | hit: %d | miss: %d | hit rate: %2.3f %% |',
+           self.cache_hit, self.cache_miss, self.cache_hit_rate * 100)
 
 class Expression:
   """An expression suitable for temporal CSE.
@@ -592,3 +671,7 @@ class Expression:
   def best_schedule(self) -> Schedule:
     best_schedule = self.schedules.best
     return best_schedule.bind_operator(self.operator).bind_aattr(self.aattr)
+
+
+def set_optimizations(optimizations: Sequence[str]) -> None:
+  Schedules.set_optimizations(optimizations)
