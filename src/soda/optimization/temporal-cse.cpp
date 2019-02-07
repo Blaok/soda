@@ -181,6 +181,9 @@ void TemporalCseKernel(const int64_t* rattr_ptr, const int64_t* aattr_ptr,
                  uint64_t* operations, uint64_t* stat) {
   vector<RAttr> rattr(n);
   vector<AAttr>* aattr = nullptr;
+  for (size_t i = 0; i < n; ++i) {
+    rattr[i] = rattr_ptr[i];
+  }
   if (aattr_ptr != nullptr) {
     aattr = new vector<AAttr>(n);
     for (size_t i = 0; i < n; ++i) {
@@ -211,7 +214,7 @@ extern "C" {
 void TemporalCse(const int64_t* rattr_ptr, const int64_t* aattr_ptr,
                  uint64_t n, uint64_t* cost, char* brepr,
                  uint64_t* operations, uint64_t* stat) {
-  int64_t max_rattr = rattr_ptr[n-1];
+  int64_t max_rattr = rattr_ptr[n - 1];
   if (max_rattr < numeric_limits<int8_t>::max()) {
     if (n < numeric_limits<int8_t>::max()) {
       TemporalCseKernel<int8_t, int8_t>(
