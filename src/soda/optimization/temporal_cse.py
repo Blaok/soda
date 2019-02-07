@@ -6,6 +6,7 @@ import enum
 import itertools
 import logging
 import os
+import subprocess
 
 import cached_property
 
@@ -339,6 +340,13 @@ class Schedules(ScheduleBase):
     if 'c-temporal-cse' in optimizations:
       tcse_so = os.path.join(os.path.dirname(__file__), "libtemporal-cse.so")
       try:
+        with subprocess.Popen(
+            ['make'], cwd=os.path.dirname(tcse_so),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE) as make_proc:
+          for msg in make_proc.stdout.read().decode().splitlines():
+            _logger.info(msg)
+          for msg in make_proc.stderr.read().decode().splitlines():
+            _logger.info(msg)
         Schedules.libtcse = ctypes.CDLL(tcse_so)
       except OSError as e:
         _logger.warning(e)
