@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import argparse
+import ctypes.util
 import logging
 import os
 import sys
@@ -112,6 +113,13 @@ def main():
   if logging_level < logging.DEBUG:
     logging_level = logging.DEBUG
   logging.getLogger().setLevel(logging_level)
+  # preload after argparse to honor logging levels
+  if 'LD_PRELOAD' not in os.environ:
+    libjemalloc = ctypes.util.find_library('jemalloc')
+    if libjemalloc:
+      os.environ['LD_PRELOAD'] = libjemalloc
+      logger.info('preload %s', libjemalloc)
+      os.execvp(sys.argv[0], sys.argv)
   logger.info('set log level to %s', logging.getLevelName(logging_level))
   # TODO: check tile size
 

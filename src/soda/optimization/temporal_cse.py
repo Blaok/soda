@@ -346,7 +346,7 @@ class Schedules(ScheduleBase):
           for msg in make_proc.stdout.read().decode().splitlines():
             _logger.info(msg)
           for msg in make_proc.stderr.read().decode().splitlines():
-            _logger.info(msg)
+            _logger.warning(msg)
         Schedules.libtcse = ctypes.CDLL(tcse_so)
       except OSError as e:
         _logger.warning(e)
@@ -522,7 +522,7 @@ class Schedules(ScheduleBase):
           maxs[d] = max(rattr[d] for rattr in self.rattr)
           mins[d] = min(rattr[d] for rattr in self.rattr)
         for d in range(1, num_dim):
-          weights[d] = weights[d - 1] * (maxs[d - 1] - mins[d - 1] + 1)
+          weights[d] = weights[d - 1] * (maxs[d - 1] - mins[d - 1] + 1) * 2
         for i in range(n):
           c_rattrs[i] = linearize(self.rattr[i], weights)
 
