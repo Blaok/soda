@@ -46,6 +46,7 @@ def temporal_cse(stencil: 'soda.core.Stencil') -> 'soda.core.Stencil':
     Modified stencil object.
   """
   _logger.debug('invoke stencil temporal common subexpression elimination')
+  propagate_type = lambda node: base.propagate_type(node, stencil.symbol_table)
 
   # pylint: disable=unsubscriptable-object
   def visitor(node: ir.Node, args: Tuple[Mapping[ir.BinaryOp, str],
@@ -71,9 +72,11 @@ def temporal_cse(stencil: 'soda.core.Stencil') -> 'soda.core.Stencil':
                       expression.best_schedule.cost)
         expression.best_schedule.print_tree()
         for expr in expression.best_schedule.common_subexpressions:
+          expr = propagate_type(expr)
           # pylint: disable=global-statement
           global _temporal_cse_counter
           cses[expr] = 'tcse_var_%d' % _temporal_cse_counter
+          stencil.symbol_table[cses[expr]] = expr.haoda_type
           _logger.debug('common subexpression: %s <= %s',
                         cses[expr], ir.unparenthesize(expr))
           _temporal_cse_counter += 1
@@ -83,13 +86,13 @@ def temporal_cse(stencil: 'soda.core.Stencil') -> 'soda.core.Stencil':
     return node
 
   new_local_stmts = []
-  transform = lambda node: base.propagate_type(
-      node, stencil.symbol_table).visit(visitor, (cses, used))
+  transform = lambda node: propagate_type(node).visit(visitor, (cses, used))
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     cses, used = {}, {}
     stmt.expr = transform(stmt.expr)
     stmt.let = tuple(map(transform, stmt.let))
-    cses = {used[k]: v for k, v in cses.items() if k in used}
+    # used points to old exprs so here it has to propagate type again
+    cses = {propagate_type(used[k]): v for k, v in cses.items() if k in used}
     for expr, var in cses.items():
       new_local_stmts.append(grammar.LocalStmt(
           ref=ir.Ref(name=var, lat=None, idx=(0,) * stencil.dim),
