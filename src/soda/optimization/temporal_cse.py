@@ -5,6 +5,7 @@ import ctypes
 import enum
 import itertools
 import logging
+import operator
 import os
 import subprocess
 
@@ -32,6 +33,35 @@ REDUCTION_OPS = {
   '+': ir.AddSub,
   '*': ir.MulDiv
 }
+
+def extract_attr(node: ir.Node) -> Tuple[Tuple[int, ...], ir.Node]:
+  """Extract attributes from a node.
+
+  Extract relative and absolute attributes from a node. The relative attribute
+  would be the load index and the absolute attribute is the normalized node.
+
+  Args:
+    node: the ir.node to be extracted
+
+  Returns:
+    Tuple of rattr and aattr.
+  """
+  load = soda_visitor.get_load_set(node)[0]
+  return load.idx, mutator.shift(node, load.idx)
+
+def assemble_attr(attr: Tuple[Tuple[int, ...], ir.Node]) -> ir.Node:
+  """Assemble a node from attributes.
+
+  The absolute attribute must be a normalized ir.Node. The relative attribute
+  will be used as the shifting offset to obtain the original ir.Node.
+
+  Args:
+    attr: tuple of relative and absolute attributes
+
+  Returns:
+    ir.Node assembled from the attributes.
+  """
+  return mutator.shift(attr[1], attr[0], op=operator.add)
 
 _temporal_cse_counter = 0
 def temporal_cse(stencil: 'soda.core.Stencil') -> 'soda.core.Stencil':
@@ -211,11 +241,11 @@ class Schedule(ScheduleBase):
         mapping[node_count] = idx + 1
     return mapping
 
-  def bind_operator(self, operator: Optional[str]) -> 'Schedule':
-    if operator is None:
+  def bind_operator(self, op: Optional[str]) -> 'Schedule':
+    if op is None:
       del self.operator
     else:
-      self.operator = operator
+      self.operator = op
     return self
 
   def bind_aattr(self, aattr: Optional[tuple]) -> 'Schedule':
@@ -249,8 +279,7 @@ class Schedule(ScheduleBase):
     # pylint: disable=not-callable
     root = self.op_type(operator=(self.operator,), operand=(None, None))
     stack = [(root, Child.RIGHT), (root, Child.LEFT)]
-    operands = (ir.Ref(name=aval, idx=rval, lat=None)
-                for rval, aval in zip(self.rattr[operation],
+    operands = map(assemble_attr, zip(self.rattr[operation],
                                       self.aattr[operation]))
     def add_child(stack: List[Tuple[ir.BinaryOp, Child]],
                   child: ir.BinaryOp) -> None:
@@ -657,10 +686,7 @@ class Expression:
       self.operands = tuple(sorted(
           polynomial.operand,
           key=lambda x: tuple(reversed(soda_visitor.get_load_set(x)[0].idx))))
-      self.rattr = tuple(soda_visitor.get_load_set(operand)[0].idx
-                         for operand in self.operands)
-      self.aattr = tuple(soda_visitor.get_load_set(operand)[0].name
-                         for operand in self.operands)
+      self.rattr, self.aattr = zip(*map(extract_attr, self.operands))
       _logger.debug(
           'polynomial: %s%s', self.operator, util.idx2str(self.operands))
       _logger.debug('rattr: %s', util.idx2str(self.rattr))
