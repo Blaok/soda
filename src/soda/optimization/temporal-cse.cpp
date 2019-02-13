@@ -28,8 +28,9 @@ inline uint64_t RangeFromMiddle(uint64_t n, uint64_t i) {
 template<typename RAttr, typename AAttr>
 Schedules<RAttr, AAttr>::Schedules(
     const vector<RAttr>& rattr, const vector<AAttr>* aattr,
-    shared_ptr<CacheType> cache, AAttr num_ops, AAttr offset,
-    shared_ptr<StatType> stat, AAttr max_cost)
+    const shared_ptr<CacheType>& cache,
+    AAttr num_ops, AAttr offset, const shared_ptr<StatType>& stat,
+    AAttr max_cost)
     : ScheduleBase(
         stat == nullptr ? shared_ptr<StatType>(new StatType({})) : stat),
       rattr_(&rattr), aattr_(aattr), cache_(cache),
@@ -74,8 +75,8 @@ Schedules<RAttr, AAttr>::GetSchedules(AAttr num_ops, AAttr offset) {
 template<typename RAttr, typename AAttr>
 const typename Schedules<RAttr, AAttr>::ScheduleVec&
 Schedules<RAttr, AAttr>::Generate() {
-  AAttr n = num_ops_;
-  AAttr k = offset_;
+  const AAttr n = num_ops_;
+  const AAttr k = offset_;
   if (schedules_.size() > 0) {
     return schedules_;
   }
@@ -160,7 +161,7 @@ typename Schedules<RAttr, AAttr>::Schedule Schedules<RAttr, AAttr>::Best() {
   return best;
 }
 
-void ScheduleBase::PrintStats(std::ostream& stream) {
+void ScheduleBase::PrintStats(std::ostream& stream) const {
   stream << "loops: | L1: " << LoopTripCount(1) << " | L2: "
          << LoopTripCount(2) << " | L3: " << LoopTripCount(3) << " |\n"
          << "cache: | hit: " << CacheHit() << " | miss: " << CacheMiss()
