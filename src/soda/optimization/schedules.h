@@ -20,10 +20,10 @@ class ScheduleBase {
   void HitCache() { if (stat_) { (*stat_)[0] += 1; } }
   void MissCache() { if (stat_) { (*stat_)[1] += 1; } }
   void VisitLoop(int level) { if (stat_) { (*stat_)[level + 1] += 1; } }
-  uint64_t CacheHit() { return (*stat_)[0]; }
-  uint64_t CacheMiss() { return (*stat_)[1]; }
-  uint64_t LoopTripCount(int level) { return (*stat_)[level + 1]; }
-  void PrintStats(std::ostream&);
+  uint64_t CacheHit() const { return (*stat_)[0]; }
+  uint64_t CacheMiss() const { return (*stat_)[1]; }
+  uint64_t LoopTripCount(int level) const { return (*stat_)[level + 1]; }
+  void PrintStats(std::ostream&) const;
 
  protected:
   std::shared_ptr<StatType> stat_;
@@ -36,7 +36,7 @@ class Schedules : public ScheduleBase {
   using RAttrVec = std::vector<RAttr>;
   using AAttrVec = std::vector<AAttr>;
   using CacheType = std::unordered_map<
-      AAttr, std::unordered_map<AAttr, std::shared_ptr<Schedules>>>;
+      AAttr, std::unordered_map<AAttr, std::shared_ptr<const Schedules>>>;
   using Schedule = templated::Schedule<RAttr, AAttr>;
   using ScheduleVec = std::vector<std::shared_ptr<const Schedule>>;
   using Operation = typename Schedule::Operation;
@@ -47,9 +47,10 @@ class Schedules : public ScheduleBase {
   // Constructors
   Schedules(const std::vector<RAttr>& rattr,
             const std::vector<AAttr>* aattr = nullptr,
-            std::shared_ptr<CacheType> cache = nullptr,
+            const std::shared_ptr<CacheType>& cache = nullptr,
             AAttr num_ops = -1, AAttr offset = 0,
-            std::shared_ptr<StatType> stat = nullptr, AAttr max_cost = -1);
+            const std::shared_ptr<StatType>& stat = nullptr,
+            AAttr max_cost = -1);
 
   // Other functions
   Operation MakeOperation(const Slice&, const BRepr&);
