@@ -1,5 +1,8 @@
 #include "schedules.h"
 
+#include <csignal>
+#include <cstdlib>
+
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -214,6 +217,8 @@ extern "C" {
 void TemporalCse(const int64_t* rattr_ptr, const int64_t* aattr_ptr,
                  uint64_t n, uint64_t* cost, char* brepr,
                  uint64_t* operations, uint64_t* stat) {
+  auto handler = [](int signum) { exit(signum); };
+  signal(SIGINT, handler);
   int64_t max_rattr = rattr_ptr[n - 1];
   if (max_rattr < numeric_limits<int8_t>::max()) {
     if (n < numeric_limits<int8_t>::max()) {
