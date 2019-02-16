@@ -536,6 +536,7 @@ class Schedules(ScheduleBase):
       c_brepr = (ctypes.c_char * (2 * n))()
       c_operations = (ctypes.c_uint64 * (2 * (n - 2)))()
       c_stat = (ctypes.c_uint64 * len(self.stat))()
+      c_config = ctypes.POINTER(ctypes.c_uint64)()
 
       # prepare relative attributes
       if isinstance(self.rattr[0], int):
@@ -571,7 +572,7 @@ class Schedules(ScheduleBase):
 
       Schedules.libtcse.TemporalCse(
           c_rattrs, c_aattrs, c_n, ctypes.byref(c_cost),
-          c_brepr, c_operations, c_stat)
+          c_brepr, c_operations, c_stat, c_config)
 
       for i in range(len(self.stat)):
         self.stat[i] = c_stat[i]
