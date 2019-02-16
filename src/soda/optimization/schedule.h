@@ -59,7 +59,6 @@ struct Schedule {
            const RAttrVec* rattr, const AAttrVec* aattr)
       : brepr(brepr), operations(operations), operation_set(operation_set),
         rattr(rattr), aattr(aattr), cost(operation_set->size() + 1) {}
-  Schedule& operator=(const Schedule&) = default;
 
   std::shared_ptr<const BRepr> brepr;
   std::shared_ptr<const Operations> operations;
