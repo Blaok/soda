@@ -2,12 +2,14 @@ from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, \
     Sequence, Set, Tuple, Type, Union
 import collections
 import ctypes
+import ctypes.util
 import enum
 import itertools
 import logging
 import operator
 import os
 import subprocess
+import sys
 
 import cached_property
 
@@ -713,3 +715,17 @@ class Expression:
 
 def set_optimizations(optimizations: Sequence[str]) -> None:
   Schedules.set_optimizations(optimizations)
+
+def set_env_vars() -> None:
+  if 'OMP_NUM_THREADS' not in os.environ:
+    os.environ['OMP_NUM_THREADS'] = str(os.cpu_count() // 2)
+    os.execvp(sys.argv[0], sys.argv)
+  if 'OMP_PROC_BIND' not in os.environ:
+    os.environ['OMP_PROC_BIND'] = 'close'
+    os.execvp(sys.argv[0], sys.argv)
+  if 'LD_PRELOAD' not in os.environ:
+    libjemalloc = ctypes.util.find_library('jemalloc')
+    if libjemalloc:
+      os.environ['LD_PRELOAD'] = libjemalloc
+      _logger.info('preload %s', libjemalloc)
+      os.execvp(sys.argv[0], sys.argv)
