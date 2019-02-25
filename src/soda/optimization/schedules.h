@@ -30,11 +30,11 @@ namespace tcse {
 #endif
 
 enum ExplorationOrder : uint64_t {
-  kNormal,
-  kReversed,
-  kRandom,
-  kFromMiddle,
-  kDefault = kRandom
+  kNormal = 0,
+  kReversed = 1,
+  kRandom = 2,
+  kFromMiddle = 3,
+  kDefault = kFromMiddle
 };
 
 };  // namespace tcse
