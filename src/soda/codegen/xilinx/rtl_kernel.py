@@ -1,5 +1,10 @@
+from typing import (
+    Optional,
+    TextIO
+)
 import collections
 import concurrent
+import json
 import logging
 import os
 import shutil
@@ -9,11 +14,15 @@ import tempfile
 
 from haoda import util
 from haoda.backend import xilinx as backend
+from haoda.report.xilinx import hls as hls_report
+from soda import core
 from soda.codegen.xilinx import hls_kernel
 
 _logger = logging.getLogger().getChild(__name__)
 
-def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
+def print_code(stencil: core.Stencil, xo_file: TextIO,
+               platform: Optional[str] = None, jobs: int = os.cpu_count(),
+               rpt_file: Optional[str] = None) -> None:
   """Generate hardware object file for the given Stencil.
 
   Working `vivado` and `vivado_hls` is required in the PATH.
@@ -23,6 +32,7 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
     xo_file: file object to write to.
     platform: path to the SDAccel platform directory.
     jobs: maximum number of jobs running in parallel.
+    rpt_file: path of the generated report; None disables report generation.
   """
 
   m_axi_names = []
@@ -96,6 +106,27 @@ def print_code(stencil, xo_file, platform=None, jobs=os.cpu_count()):
           util.pause_for_debugging()
           sys.exit(returncode)
 
+    # generate HLS report
+    hls_resources = hls_report.resources(
+        os.path.join(tmpdir, 'report', top_name + '_csynth.xml'))
+    hls_resources -= hls_report.resources(
+        os.path.join(tmpdir, 'report', 'Dataflow_csynth.xml'))
+    _logger.info(hls_resources)
+    for module_id, nodes in enumerate(super_source.module_trait_table.values()):
+      module_name = util.get_func_name(module_id)
+      report_file = os.path.join(tmpdir, 'report', module_name + '_csynth.xml')
+      hls_resource = hls_report.resources(report_file)
+      use_count = len(nodes)
+      _logger.info('%s, usage: %5d times', hls_resource, use_count)
+      hls_resources += hls_resource * use_count
+    _logger.info('total usage:')
+    _logger.info(hls_resources)
+    if rpt_file:
+      rpt_json = collections.OrderedDict([('name', top_name)] +
+                                         list(hls_resources))
+      with open(rpt_file, mode='w') as rpt_fileobj:
+        json.dump(rpt_json, rpt_fileobj, indent=2)
+
     hdl_dir = os.path.join(tmpdir, 'hdl')
     with open(os.path.join(hdl_dir, 'Dataflow.v'), mode='w') as dataflow_v:
       print_top_module(backend.VerilogPrinter(dataflow_v),
@@ -127,8 +158,9 @@ def synthesis_module(tmpdir, kernel_files, module_name, device_info):
     if proc.returncode == 0:
       tarfileobj.seek(0)
       with tarfile.open(mode='r', fileobj=tarfileobj) as tar:
-        tar.extractall(tmpdir, filter(lambda _: _.name.startswith('hdl'),
-                                      tar.getmembers()))
+        tar.extractall(tmpdir, (
+            f for f in tar.getmembers()
+            if f.name.startswith('hdl') or f.name.startswith('report')))
   return proc.returncode, stdout, stderr
 
 FIFO_PORT_SUFFIXES = dict(
