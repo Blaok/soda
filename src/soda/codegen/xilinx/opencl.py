@@ -29,6 +29,9 @@ def add_arguments(parser):
       help='SDAccel platform directory of the Xilinx OpenCL flow')
   parser.add_argument('--xocl-hw-xo', type=str, dest='xo_file', metavar='file',
                       help='hardware object file for the Xilinx OpenCL flow')
+  parser.add_argument(
+      '--xocl-hw-xo-rpt', type=str, dest='xo_rpt', metavar='file',
+      help='Vivado HLS report for the Xilinx OpenCL hardware object')
 
 def print_code(stencil, args):
   if args.kernel_file is not None:
@@ -63,7 +66,8 @@ def print_code(stencil, args):
 
   if args.xo_file is not None:
     with tempfile.TemporaryFile(mode='w+b') as tmp:
-      rtl_kernel.print_code(stencil, tmp, platform=args.xocl_platform)
+      rtl_kernel.print_code(stencil, tmp, platform=args.xocl_platform,
+                            rpt_file=args.xo_rpt)
       tmp.seek(0)
       if args.xo_file == '-':
         shutil.copyfileobj(tmp, sys.stdout)

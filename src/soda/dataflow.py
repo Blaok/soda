@@ -1,3 +1,8 @@
+from typing import (
+    Dict,
+    List,
+    Tuple
+)
 import collections
 import logging
 
@@ -51,8 +56,12 @@ class SuperSourceNode(ir.Module):
     return 'super_source'
 
   @cached_property.cached_property
-  def module_table(self):
-    """Returns a Node to (module_trait, module_trait_id) map."""
+  def module_table(self) -> Dict[ir.Node, Tuple[ir.ModuleTrait, int]]:
+    """Module table maps an IR node to (module_trait, module_id).
+
+    Returns:
+      A dict mapping an IR node to (module_trait, module_id) tuple.
+    """
     self._module_traits = collections.OrderedDict()
     module_table = collections.OrderedDict()
     for node in self.tpo_node_gen():
@@ -63,10 +72,14 @@ class SuperSourceNode(ir.Module):
     return module_table
 
   @cached_property.cached_property
-  def module_traits(self):
+  def module_traits(self) -> Tuple[ir.ModuleTrait]:
+    return tuple(self.module_trait_table)
+
+  @property
+  def module_trait_table(self) -> Dict[ir.ModuleTrait, List[ir.Node]]:
     # pylint: disable=pointless-statement
     self.module_table
-    return tuple(self._module_traits)
+    return self._module_traits
 
 class SuperSinkNode(ir.Module):
   """A node representing the super sink in the dataflow graph.
