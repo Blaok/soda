@@ -222,11 +222,17 @@ class Schedule(ScheduleBase):
 
   @cached_property.cached_property
   def common_subexpressions(self) -> Tuple[ir.BinaryOp]:
-    operations = tuple(mutator.normalize(self.get_ast(operation))
-                       for operation in self.operations)
-    return tuple(mutator.normalize(
-        schedule for schedule, count in OrderedCounter(operations).items()
+    exprs = tuple(attr for attr in self.aattr
+                  if isinstance(attr, ir.BinaryOp))
+    absolute_cses = tuple(
+        schedule for schedule, count in OrderedCounter(exprs).items()
+        if count > 1)
+    exprs = tuple(mutator.normalize(self.get_ast(operation))
+                  for operation in self.operations)
+    relative_cses = tuple(mutator.normalize(
+        schedule for schedule, count in OrderedCounter(exprs).items()
         if count > 1))
+    return absolute_cses + relative_cses
 
   @property
   def op_type(self) -> Type[ir.BinaryOp]:
