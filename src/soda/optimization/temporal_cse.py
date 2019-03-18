@@ -30,7 +30,6 @@ class OrderedCounter(collections.Counter, collections.OrderedDict):
 
 _logger = logging.getLogger().getChild(__name__)
 
-
 REDUCTION_OPS = {
   '+': ir.AddSub,
   '*': ir.MulDiv
@@ -184,7 +183,7 @@ class ScheduleBase:
     normalize = normalize_int if isinstance(offset, int) else normalize_tuple
     return tuple(map(normalize, zip(self.rattr[idx], self.aattr[idx])))
 
-class Schedule(ScheduleBase):
+class AssoSchedule(ScheduleBase):
   """A schedule of an expression.
 
   A schedule represents a general schedule of n operands, described by the
@@ -249,14 +248,14 @@ class Schedule(ScheduleBase):
         mapping[node_count] = idx + 1
     return mapping
 
-  def bind_operator(self, op: Optional[str]) -> 'Schedule':
+  def bind_operator(self, op: Optional[str]) -> 'AssoSchedule':
     if op is None:
       del self.operator
     else:
       self.operator = op
     return self
 
-  def bind_aattr(self, aattr: Optional[tuple]) -> 'Schedule':
+  def bind_aattr(self, aattr: Optional[tuple]) -> 'AssoSchedule':
     self.aattr = aattr
     return self
 
@@ -342,8 +341,8 @@ def range_from_middle(n: int) -> Iterator[int]:
       yield middle - shift
       yield middle + shift
 
-class Schedules(ScheduleBase):
-  """Schedules of an Expression.
+class AssoSchedules(ScheduleBase):
+  """Schedules of an Expression considering associativity only.
 
   Class Attributes:
     range_func: The range function to use for range(n).
@@ -353,7 +352,7 @@ class Schedules(ScheduleBase):
   Attributes:
     num_ops: Number of operations to consider, may not equal len(rattr) - 1.
     offset: Number of operations to skip.
-    cache: A mapping from num_ops to a mapping from offset to Schedules, or
+    cache: A mapping from num_ops to a mapping from offset to AssoSchedules, or
         None.
     stat: A list of [cache_hit, cache_miss, loop 1 trip count, loop 2 trip
         count, loop 3 trip count], or None.
@@ -366,17 +365,17 @@ class Schedules(ScheduleBase):
   @staticmethod
   def set_optimizations(optimizations: Sequence[str]) -> None:
     if 'reorder-exploration' in optimizations:
-      Schedules.range_func = range_from_middle
+      AssoSchedules.range_func = range_from_middle
     if 'no-reorder-exploration' in optimizations:
-      Schedules.range_func = range
+      AssoSchedules.range_func = range
     if 'skip-with-partial-cost' in optimizations:
-      Schedules.skip = True
+      AssoSchedules.skip = True
     if 'no-skip-with-partial-cost' in optimizations:
-      Schedules.skip = False
+      AssoSchedules.skip = False
     if 'lazy-cartesian-product' in optimizations:
-      Schedules.lazy = True
+      AssoSchedules.lazy = True
     if 'no-lazy-cartesian-product' in optimizations:
-      Schedules.lazy = False
+      AssoSchedules.lazy = False
     if 'c-temporal-cse' in optimizations:
       tcse_so = os.path.join(os.path.dirname(__file__), "libtemporal-cse.so")
       try:
@@ -387,18 +386,19 @@ class Schedules(ScheduleBase):
             _logger.info(msg)
           for msg in make_proc.stderr.read().decode().splitlines():
             _logger.warning(msg)
-        Schedules.libtcse = ctypes.CDLL(tcse_so)
+        AssoSchedules.libtcse = ctypes.CDLL(tcse_so)
       except OSError as e:
         _logger.warning(e)
-        Schedules.libtcse = None
+        AssoSchedules.libtcse = None
     if 'no-c-temporal-cse' in optimizations:
-      Schedules.libtcse = None
+      AssoSchedules.libtcse = None
 
   def __init__(self, rattr: Tuple[Union[int, Tuple[int, ...]]],
                aattr: Optional[tuple] = None,
                num_ops: int = None, offset: int = 0,
                # pylint: disable=unsubscriptable-object
-               cache: Optional[Mapping[int, Mapping[int, 'Schedules']]] = None,
+               cache: Optional[Mapping[int,
+                                       Mapping[int, 'AssoSchedules']]] = None,
                stat: Optional[List[int]] = None,
                max_cost: int = None) -> None:
     super().__init__(rattr, aattr)
@@ -412,34 +412,34 @@ class Schedules(ScheduleBase):
       self.stat = [0, 0, 0, 0, 0]
     self.max_cost = self.num_ops if max_cost is None else max_cost
 
-  def __iter__(self) -> Iterator[Schedule]:
+  def __iter__(self) -> Iterator[AssoSchedule]:
     return iter(self.schedules)
 
   @cached_property.cached_property
-  def schedules(self) -> Tuple[Schedule, ...]:
+  def schedules(self) -> Tuple[AssoSchedule, ...]:
     return tuple(self.generator)
 
   @property
-  def generator(self) -> Iterator[Schedule]:
-    if Schedules.lazy:
+  def generator(self) -> Iterator[AssoSchedule]:
+    if AssoSchedules.lazy:
       return self.lazy_generator
     return self.materializing_generator
 
   @property
-  def materializing_generator(self) -> Iterator[Schedule]:
+  def materializing_generator(self) -> Iterator[AssoSchedule]:
     """Generates possible schedules via dynamic programming.
 
     This generator will materialize both sub-problems for the Cartesian product.
 
     Yields:
-      One Schedule at a time. If self.skip is on, the cost of generated Schedule
-      with be monotonically decreasing.
+      One AssoSchedule at a time. If self.skip is on, the cost of generated
+      AssoSchedule with be monotonically decreasing.
     """
     n, k = self.num_ops, self.offset
     if n == 0:
-      yield Schedule('1', [], set(), self.aattr, self.rattr)
+      yield AssoSchedule('1', [], set(), self.aattr, self.rattr)
       return
-    for m in Schedules.range_func(n):
+    for m in AssoSchedules.range_func(n):
       self.stat[2] += 1
       for prefix, suffix in itertools.product(
           self.get_schedules(m, k),
@@ -453,43 +453,43 @@ class Schedules(ScheduleBase):
           operations.append(slice(k, k + m + 1))
           operation_set.add((self.make_operation(operations[-1]),
                              prefix.brepr))
-          if Schedules.skip and len(operation_set) >= self.max_cost:
+          if AssoSchedules.skip and len(operation_set) >= self.max_cost:
             continue
         if n > m + 1:
           operations.append(slice(k + m + 1, k + n + 1))
           operation_set.add((self.make_operation(operations[-1]),
                              suffix.brepr))
-          if Schedules.skip and len(operation_set) >= self.max_cost:
+          if AssoSchedules.skip and len(operation_set) >= self.max_cost:
             continue
         operations.extend(prefix.operations)
         operation_set |= prefix.operation_set
-        if Schedules.skip and len(operation_set) >= self.max_cost:
+        if AssoSchedules.skip and len(operation_set) >= self.max_cost:
           continue
         operations.extend(suffix.operations)
         operation_set |= suffix.operation_set
-        if Schedules.skip and len(operation_set) >= self.max_cost:
+        if AssoSchedules.skip and len(operation_set) >= self.max_cost:
           continue
         self.max_cost = len(operation_set)
-        yield Schedule('0{}{}'.format(prefix.brepr, suffix.brepr),
+        yield AssoSchedule('0{}{}'.format(prefix.brepr, suffix.brepr),
                         operations, operation_set,
                         self.rattr, self.aattr)
 
   @property
-  def lazy_generator(self) -> Iterator[Schedule]:
+  def lazy_generator(self) -> Iterator[AssoSchedule]:
     """Generates possible schedules via dynamic programming.
 
     This generator will lazily materialize sub-problems for the Cartesian
     product.
 
     Yields:
-      One Schedule at a time. If self.skip is on, the cost of generated Schedule
-      with be monotonically decreasing.
+      One AssoSchedule at a time. If self.skip is on, the cost of generated
+      AssoSchedule with be monotonically decreasing.
     """
     n, k = self.num_ops, self.offset
     if n == 0:
-      yield Schedule('1', [], set(), self.aattr, self.rattr)
+      yield AssoSchedule('1', [], set(), self.aattr, self.rattr)
       return
-    for m in Schedules.range_func(n):
+    for m in AssoSchedules.range_func(n):
       self.stat[2] += 1
       for prefix in self.get_schedules(m, k):
         self.stat[3] += 1
@@ -501,11 +501,11 @@ class Schedules(ScheduleBase):
           prefix_operation_set.add((
               self.make_operation(prefix_operations[-1]),
               prefix.brepr))
-          if Schedules.skip and len(prefix_operation_set) >= self.max_cost:
+          if AssoSchedules.skip and len(prefix_operation_set) >= self.max_cost:
             continue
         prefix_operations.extend(prefix.operations)
         prefix_operation_set |= prefix.operation_set
-        if Schedules.skip and len(prefix_operation_set) >= self.max_cost:
+        if AssoSchedules.skip and len(prefix_operation_set) >= self.max_cost:
           continue
         for suffix in self.get_schedules(n - m - 1, k + m + 1):
           self.stat[4] += 1
@@ -517,20 +517,20 @@ class Schedules(ScheduleBase):
             operation_set.add((
                 self.make_operation(operations[-1]),
                 suffix.brepr))
-            if Schedules.skip and len(operation_set) >= self.max_cost:
+            if AssoSchedules.skip and len(operation_set) >= self.max_cost:
               continue
           operations.extend(suffix.operations)
           operation_set |= suffix.operation_set
-          if Schedules.skip and len(operation_set) >= self.max_cost:
+          if AssoSchedules.skip and len(operation_set) >= self.max_cost:
             continue
           self.max_cost = len(operation_set)
-          yield Schedule('0{}{}'.format(prefix.brepr, suffix.brepr),
+          yield AssoSchedule('0{}{}'.format(prefix.brepr, suffix.brepr),
                           operations, operation_set,
                           self.rattr, self.aattr)
 
   @cached_property.cached_property
-  def best(self) -> Schedule:
-    if Schedules.libtcse is not None:
+  def best(self) -> AssoSchedule:
+    if AssoSchedules.libtcse is not None:
       n = len(self.rattr)
 
       # prepare C arguments
@@ -578,7 +578,7 @@ class Schedules(ScheduleBase):
         for i in range(n):
           c_aattrs[i] = aattr_table[self.aattr[i]]
 
-      Schedules.libtcse.TemporalCse(
+      AssoSchedules.libtcse.TemporalCse(
           c_rattrs, c_aattrs, c_n, ctypes.byref(c_cost),
           c_brepr, c_operations, c_stat, c_config)
 
@@ -586,7 +586,7 @@ class Schedules(ScheduleBase):
         self.stat[i] = c_stat[i]
       operations = tuple(slice(c_operations[i * 2], c_operations[i * 2 + 1])
                          for i in range(n - 2))
-      c_best = Schedule(c_brepr.value.decode(), operations, None,
+      c_best = AssoSchedule(c_brepr.value.decode(), operations, None,
                         self.rattr, self.aattr)
       c_best.cost = c_cost.value
       return c_best
@@ -616,7 +616,7 @@ class Schedules(ScheduleBase):
   def cache_hit_rate(self) -> float:
     return self.cache_hit / (self.cache_hit + self.cache_miss)
 
-  def get_schedules(self, num_ops, offset) -> Tuple[Schedule]:
+  def get_schedules(self, num_ops, offset) -> Tuple[AssoSchedule]:
     """Get schedules with the given operation number and offset.
 
     If self.cache is not None and the same arguments were given in previous runs
@@ -626,7 +626,7 @@ class Schedules(ScheduleBase):
       num_ops: Number of operations to consider, may not equal len(rattr) - 1.
       offset: Number of operations to skip.
     Returns:
-      Schedules with the given operation number and offset.
+      AssoSchedules with the given operation number and offset.
     """
     if self.cache is not None:
       if num_ops in self.cache:
@@ -635,7 +635,7 @@ class Schedules(ScheduleBase):
           self.stat[0] += 1
           return schedules.schedules
     self.stat[1] += 1
-    return Schedules(self.rattr, self.aattr, num_ops=num_ops, offset=offset,
+    return AssoSchedules(self.rattr, self.aattr, num_ops=num_ops, offset=offset,
                      cache=self.cache, stat=self.stat,
                      max_cost=self.max_cost + 1).schedules
 
@@ -644,6 +644,8 @@ class Schedules(ScheduleBase):
     logger('loops: | L1: %d | L2: %d | L3: %d |', *self.stat[2:])
     logger('cache: | hit: %d | miss: %d | hit rate: %2.3f %% |',
            self.cache_hit, self.cache_miss, self.cache_hit_rate * 100)
+
+Schedules = AssoSchedules
 
 class Expression:
   """An expression suitable for temporal CSE.
@@ -663,7 +665,7 @@ class Expression:
       uniform_uniform_aattr = True
     if 'no-nullify-uniform-aattr' in optimizations:
       uniform_uniform_aattr = False
-    Schedules.set_optimizations(optimizations)
+    AssoSchedules.set_optimizations(optimizations)
 
   class CannotHandle(Exception):
     def __init__(self, msg, details: str = '') -> None:
@@ -706,7 +708,7 @@ class Expression:
       raise TypeError('expect an instance of ir.BinaryOp')
 
   @cached_property.cached_property
-  def schedules(self) -> Schedules:
+  def schedules(self) -> AssoSchedules:
     if Expression.nullify_uniform_aattr:
       if self.aattr is not None:
         if len(set(self.aattr)) == 1:
@@ -714,13 +716,13 @@ class Expression:
     return Schedules(self.rattr, self.aattr, cache={})
 
   @cached_property.cached_property
-  def best_schedule(self) -> Schedule:
+  def best_schedule(self) -> AssoSchedule:
     best_schedule = self.schedules.best
     return best_schedule.bind_operator(self.operator).bind_aattr(self.aattr)
 
 
 def set_optimizations(optimizations: Sequence[str]) -> None:
-  Schedules.set_optimizations(optimizations)
+  AssoSchedules.set_optimizations(optimizations)
 
 def set_env_vars() -> None:
   if 'OMP_NUM_THREADS' not in os.environ:
