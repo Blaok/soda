@@ -1,7 +1,7 @@
 from typing import (
     Dict,
     List,
-    Tuple
+    Tuple,
 )
 import collections
 import logging
@@ -62,8 +62,10 @@ class SuperSourceNode(ir.Module):
     Returns:
       A dict mapping an IR node to (module_trait, module_id) tuple.
     """
-    self._module_traits = collections.OrderedDict()
-    module_table = collections.OrderedDict()
+    self._module_traits = collections.OrderedDict() \
+        # type: Dict[ir.ModuleTrait, List[ir.Node]]
+    module_table = collections.OrderedDict() \
+        # type: Dict[ir.Node, Tuple[ir.ModuleTrait, int]]
     for node in self.tpo_node_gen():
       self._module_traits.setdefault(ir.ModuleTrait(node), []).append(node)
     for idx, module_trait in enumerate(self._module_traits):
@@ -72,7 +74,7 @@ class SuperSourceNode(ir.Module):
     return module_table
 
   @cached_property.cached_property
-  def module_traits(self) -> Tuple[ir.ModuleTrait]:
+  def module_traits(self) -> Tuple[ir.ModuleTrait, ...]:
     return tuple(self.module_trait_table)
 
   @property

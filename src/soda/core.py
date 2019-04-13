@@ -1,3 +1,8 @@
+from typing import (
+    Dict,
+    Tuple,
+)
+
 import collections
 import copy
 import itertools
@@ -910,7 +915,8 @@ def get_stencil_dim(points):
     [max([point[dim] for point in points]) for dim in range(dimension)],
     [min([point[dim] for point in points]) for dim in range(dimension)])]
 
-_overall_stencil_window_cache = {}
+_overall_stencil_window_cache = {} \
+    # type: Dict[Tuple[int, int], Tuple[Tuple[int, ...], ...]]
 def get_overall_stencil_window(input_tensor, output_tensor):
   if isinstance(input_tensor, collections.Iterable):
     all_points = tuple(sorted(set.union(*(

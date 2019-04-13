@@ -1,3 +1,7 @@
+from typing import (
+    Tuple,
+)
+
 import logging
 
 from haoda import ir
@@ -72,8 +76,8 @@ class InputStmt(ir.Node):
     return result
 
 class LocalStmtOrOutputStmt(ir.Node):
-  SCALAR_ATTRS = 'haoda_type', 'ref', 'expr'
-  LINEAR_ATTRS = ('let',)
+  SCALAR_ATTRS = 'haoda_type', 'ref', 'expr' # type: Tuple[str, ...]
+  LINEAR_ATTRS = ('let',) # type: Tuple[str, ...]
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     var_types = {}
