@@ -203,3 +203,12 @@ def pause_for_debugging():
       signal.pause()
     except KeyboardInterrupt:
       pass
+
+@contextlib.contextmanager
+def timeout(seconds=1, error_message='Timeout'):
+  def handler(signum, frame):
+    raise TimeoutError(error_message)
+  signal.signal(signal.SIGALRM, handler)
+  signal.alarm(seconds)
+  yield
+  signal.alarm(0)
