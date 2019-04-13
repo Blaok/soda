@@ -1,4 +1,9 @@
-from typing import Dict, Optional, Set, Tuple
+from typing import (
+    Dict,
+    Optional,
+    Tuple,
+)
+
 import collections
 import logging
 import operator
@@ -70,8 +75,9 @@ def normalize(obj):
     return shifter(obj)
   raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')
 
-def replace_expressions(obj: ir.Node, cses: Dict[ir.Node, str],
-                        used: Optional[Set[ir.Node]] = None) -> ir.Node:
+def replace_expressions(
+    obj: ir.Node, cses: Dict[ir.Node, str],
+    used: Optional[Dict[ir.Node, ir.Node]] = None) -> ir.Node:
   """Get AST with common subexpression elimination.
 
   Get AST with the given common subexpressions. If used is not None, the used
@@ -84,8 +90,8 @@ def replace_expressions(obj: ir.Node, cses: Dict[ir.Node, str],
   Returns:
     The ir.Node as the AST.
   """
-  def visitor(obj: ir.Node, args: Tuple[Dict[ir.Node, str],
-                                        Optional[Set[ir.Node]]]) -> ir.Node:
+  def visitor(obj: ir.Node, args: Tuple[
+      Dict[ir.Node, str], Optional[Dict[ir.Node, ir.Node]]]) -> ir.Node:
     cses, used = args
     norm_idx = soda_visitor.get_normalize_index(obj)
     normalized = shift(obj, norm_idx) if any(norm_idx) else obj

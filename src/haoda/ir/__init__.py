@@ -1,3 +1,7 @@
+from typing import (
+    Tuple,
+)
+
 import collections
 import copy
 import logging
@@ -66,8 +70,8 @@ Var: name=ID ('[' idx=Int ']')*;
 class Node():
   """A immutable, hashable IR node.
   """
-  SCALAR_ATTRS = ()
-  LINEAR_ATTRS = ()
+  SCALAR_ATTRS = ()   # type: Tuple[str, ...]
+  LINEAR_ATTRS = ()   # type: Tuple[str, ...]
 
   @property
   def ATTRS(self):
