@@ -2,10 +2,16 @@ kernel: seidel2d
 burst width: 512
 unroll factor: 2
 input float: input(32, *)
-local float:
-  tmp(0, 0) = (input(-1, 0) + input( 0, 0) + input( 1, 0)) * .3333333f
+#local float:
+#  tmp(0, 0) = (input(-1, 0) + input( 0, 0) + input( 1, 0)) * .3333333f
+#output float:
+#  output(0, 0) = (tmp(0, -1) + tmp(0,  0) + tmp(0,  1)) * .3333333f
 output float:
-  output(0, 0) = (tmp(0, -1) + tmp(0,  0) + tmp(0,  1)) * .3333333f
+  output(0, 0) = (
+    input(-1, -1) + input(-1,  0) + input(-1,  1) +
+    input( 0, -1) + input( 0,  0) + input( 0,  1) +
+    input( 1, -1) + input( 1,  0) + input( 1,  1)
+  ) * .1111111f
 iterate: 2
 border: ignore
 cluster: none
