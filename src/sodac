@@ -11,7 +11,6 @@ from soda import core
 from soda import grammar
 from soda.codegen.xilinx import opencl as xocl
 from soda.model import xilinx as model
-from soda.optimization import temporal_cse
 
 logging.basicConfig(level=logging.WARNING,
                     format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
@@ -113,9 +112,6 @@ def main():
   if logging_level < logging.DEBUG:
     logging_level = logging.DEBUG
   logging.getLogger().setLevel(logging_level)
-  # preload after argparse to honor logging levels
-  if args.temporal_cse == 'yes':
-    temporal_cse.set_env_vars()
   logger.info('set log level to %s', logging.getLevelName(logging_level))
   # TODO: check tile size
 
