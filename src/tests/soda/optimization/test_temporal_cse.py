@@ -1,10 +1,24 @@
+from typing import (
+    Tuple,
+)
+
 import cProfile
 import itertools
-import pstats
 import os
+import pstats
+import tracemalloc
 import unittest
 
+import logging
+
 from soda.optimization import temporal_cse
+
+logging.basicConfig(level=logging.FATAL,
+                    format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
+
+_logger = logging.getLogger().getChild(__name__)
+if 'DEBUG' in os.environ:
+  logging.getLogger().setLevel(logging.DEBUG)
 
 class TestHelpers(unittest.TestCase):
   def test_range_from_middle(self):
@@ -19,13 +33,110 @@ class TestHelpers(unittest.TestCase):
     for n in range(100):
       self.assertCountEqual(range(n), temporal_cse.range_from_middle(n))
 
+class TestCommSchedule(unittest.TestCase):
+  def get_int_attrs(self, idx: int) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+    return self.rattrs['int'][idx], self.aattrs[idx]
+
+  def get_tuple_attrs(self, idx: int) \
+      -> Tuple[Tuple[Tuple[int, int], ...], Tuple[int, ...]]:
+    return self.rattrs['int'][idx], self.aattrs[idx]
+
+  def setUp(self):
+    self.rattrs = {
+        'int' : {
+            9: (0, 1, 2, 10, 11, 12, 20, 21, 22),
+        },
+        'tuple': {
+            9: ((0, 0), (1, 0), (2, 0),
+                (0, 1), (1, 1), (2, 1),
+                (0, 2), (1, 2), (2, 2),),
+        },
+    }
+    self.aattrs = {
+        9: (1, 1, 1, 1, 2, 1, 1, 1, 1)
+    }
+
+    if 'PROFILING' in os.environ:
+      self.pr = cProfile.Profile()
+      self.pr.enable()
+      tracemalloc.start()
+      self.snapshot1 = tracemalloc.take_snapshot()
+      print('\n<<<--- %s ---' % self._testMethodName)
+
+  def tearDown(self):
+    if 'PROFILING' in os.environ:
+      self.snapshot2 = tracemalloc.take_snapshot()
+      p = pstats.Stats(self.pr)
+      p.strip_dirs()
+      p.sort_stats('cumtime')
+      p.print_stats()
+      top_stats = self.snapshot2.compare_to(self.snapshot1, 'lineno')
+      print("[ Top 10 differences ]")
+      for stat in top_stats[:10]:
+        print(stat)
+      print('\n--- %s --->>>' % self._testMethodName)
+
+  def test_norm_attrs(self):
+    rattrs, _ = self.get_int_attrs(9)
+    # 0 + ((1 + 3) + 2)
+    schedule = temporal_cse.CommSchedule(
+        None, None, rattrs[3] - rattrs[1], rattrs)
+    schedule = temporal_cse.CommSchedule(
+        schedule, None, rattrs[2] - rattrs[1], rattrs)
+    schedule = temporal_cse.CommSchedule(
+        None, schedule, rattrs[1] - rattrs[0], rattrs)
+    self.assertSequenceEqual(
+        tuple(sorted(schedule.norm_attrs)),
+        (rattrs[0], rattrs[1], rattrs[2], rattrs[3]))
+
+  def test_uniq_exprs(self):
+    rattrs, _ = self.get_int_attrs(9)
+    uniq_expr_dict = {}
+
+    # 1 + 3
+    schedule = temporal_cse.CommSchedule(
+        None, None, rattrs[3] - rattrs[1], rattrs)
+    expr = [0, rattrs[3] - rattrs[1]]
+    uniq_expr_dict[frozenset(expr)] = [schedule]
+
+    # (1 + 3) + 2
+    schedule = temporal_cse.CommSchedule(
+        schedule, None, rattrs[2] - rattrs[1], rattrs)
+    expr.append(rattrs[2] - rattrs[1])
+    uniq_expr_dict[frozenset(expr)] = [schedule]
+
+    # 0 + ((1 + 3) + 2)
+    schedule = temporal_cse.CommSchedule(
+        None, schedule, rattrs[1] - rattrs[0], rattrs)
+    uniq_expr_dict[frozenset(rattrs[:4])] = [schedule]
+
+    self.assertDictEqual(schedule.uniq_expr_dict, uniq_expr_dict)
+    self.assertSetEqual(schedule.uniq_expr_set, set(uniq_expr_dict))
+
+    uniq_expr_dict.clear()
+
+    # 0 + 1
+    schedule1 = temporal_cse.CommSchedule(
+        None, None, rattrs[1] - rattrs[0], rattrs)
+    # 3 + 4
+    schedule2 = temporal_cse.CommSchedule(
+        None, None, rattrs[4] - rattrs[3], rattrs)
+    expr = [0, rattrs[1] - rattrs[0]]
+    self.assertEqual(rattrs[4] - rattrs[3], expr[-1])
+    uniq_expr_dict[frozenset(expr)] = [schedule1, schedule2]
+
+    # (0 + 1) + (3 + 4)
+    schedule = temporal_cse.CommSchedule(
+        schedule1, schedule2, rattrs[3] - rattrs[0], rattrs)
+    uniq_expr_dict[frozenset(rattrs[0:2] + rattrs[3:5])] = [schedule]
+    self.assertDictEqual(schedule.uniq_expr_dict, uniq_expr_dict)
+    self.assertSetEqual(schedule.uniq_expr_set, set(uniq_expr_dict))
+
 class TestTemporalCse(unittest.TestCase):
   """Test temporal common sub-expression elimination.
 
   Attributes:
     caching: Boolean value of whether to enabling caching.
-    strict: Boolean value of whether to compare the CSE expressions in addition
-        to the cost.
   """
   @property
   def cache(self):
@@ -34,12 +145,11 @@ class TestTemporalCse(unittest.TestCase):
     return None
 
   def setUp(self):
-    temporal_cse.AssoSchedules.set_optimizations(('reorder-exploration',
+    temporal_cse.Schedules.set_optimizations(('reorder-exploration',
                                               'skip-with-partial-cost',
                                               'lazy-cartesian-product',
                                               'no-c-temporal-cse'))
     self.caching = True
-    self.strict = True
     if 'PROFILING' in os.environ:
       self.pr = cProfile.Profile()
       self.pr.enable()
@@ -61,12 +171,10 @@ class TestTemporalCse(unittest.TestCase):
     """
     aattr = (1, 2, 1, 2)
     rattr = (0, 1, 2, 3)
-    schedule = temporal_cse.AssoSchedules(rattr, aattr, cache=self.cache).best
-    if self.strict:
-      self.assertEqual('0011011', schedule.brepr)
-      self.assertSetEqual({(((0, 1), (1, 2)), '011')}, schedule.operation_set)
+    schedule = temporal_cse.Schedules(rattr, aattr, cache=self.cache).best
     self.assertEqual(2, schedule.cost)
 
+  @unittest.skip
   def test_more_temporal_cse(self):
     """Test a more complicated temporal CSE case.
 
@@ -80,36 +188,39 @@ class TestTemporalCse(unittest.TestCase):
     m, n = 3, 4
     rattr = tuple(map(tuple, map(reversed,
                                  itertools.product(range(m), range(n)))))
+    rattr = tuple(m * j + i for i in range(m) for j in range(n))
     aattr = tuple(range(1, n + 1)) * m
-    schedule = temporal_cse.AssoSchedules(rattr, aattr, cache=self.cache).best
-    if self.strict:
-      self.assertEqual('00011011000110110011011', schedule.brepr)
-      self.assertSetEqual({
-          ((((0, 0), 1), ((1, 0), 2)), '011'),
-          ((((0, 0), 3), ((1, 0), 4)), '011'),
-          ((((0, 0), 1), ((1, 0), 2), ((2, 0), 3), ((3, 0), 4)), '0011011'),
-          ((((0, 0), 1), ((1, 0), 2), ((2, 0), 3), ((3, 0), 4), ((0, 1), 1),
-            ((1, 1), 2), ((2, 1), 3), ((3, 1), 4)), '000110110011011')},
-                          schedule.operation_set)
+    schedule = temporal_cse.Schedules(rattr, aattr, cache=self.cache).best
     self.assertEqual(5, schedule.cost)
 
+  def test_3x3_temporal_cse(self):
+    """Test a 3x3 temporal CSE case."""
+    rattr = (0, 1, 2, 10, 11, 12)
+    aattr = (1, 1, 1, 1, 3, 1)
+    schedules = temporal_cse.CommSchedules(rattr, aattr, cache=self.cache)
+    schedule = schedules.best
+    schedules.print_stats()
+    self.assertEqual(4, schedule.cost)
+
+  @unittest.skip
   def test_5x5_temporal_cse(self):
     """Test a 5x5 temporal CSE case."""
     m, n = 5, 5
     rattr = tuple(map(tuple, map(reversed,
                                  itertools.product(range(m), range(n)))))
-    schedule = temporal_cse.AssoSchedules(rattr, cache=self.cache).best
+    rattrs = [i * (n * 2 + 1) + j for i in range(m) for j in range(n)]
+    schedule = temporal_cse.Schedules(rattr, cache=self.cache).best
     self.assertEqual(6, schedule.cost)
 
 class TestTemporalCseWithoutLazyCartesianProduct(TestTemporalCse):
   def setUp(self):
     super().setUp()
-    temporal_cse.AssoSchedules.set_optimizations(('no-lazy-cartesian-product',))
+    temporal_cse.Schedules.set_optimizations(('no-lazy-evaluation',))
 
 class TestTemporalCseWithoutSkipping(TestTemporalCse):
   def setUp(self):
     super().setUp()
-    temporal_cse.AssoSchedules.set_optimizations(('no-skip-with-partial-cost',))
+    temporal_cse.Schedules.set_optimizations(('no-skip-with-partial-cost',))
 
   @unittest.skip
   def test_more_temporal_cse(self):
@@ -122,8 +233,7 @@ class TestTemporalCseWithoutSkipping(TestTemporalCse):
 class TestTemporalCseWithoutReorderingExploration(TestTemporalCse):
   def setUp(self):
     super().setUp()
-    temporal_cse.AssoSchedules.set_optimizations(('no-reorder-exploration',))
-    self.strict = False
+    temporal_cse.Schedules.set_optimizations(('no-reorder-exploration',))
 
 class TestTemporalCseWithoutCaching(TestTemporalCse):
   def setUp(self):
@@ -137,17 +247,3 @@ class TestTemporalCseWithoutCaching(TestTemporalCse):
   @unittest.skip
   def test_5x5_temporal_cse(self):
     pass
-
-class TestTemporalCseWithC(TestTemporalCse):
-  def setUp(self):
-    super().setUp()
-    temporal_cse.AssoSchedules.set_optimizations(('c-temporal-cse',))
-    self.strict = False
-
-  def test_9x9_temporal_cse(self):
-    """Test a 9x9 temporal CSE case."""
-    m, n = 9, 9
-    rattr = tuple(map(tuple, map(reversed,
-                                 itertools.product(range(m), range(n)))))
-    schedule = temporal_cse.AssoSchedules(rattr, cache=self.cache).best
-    self.assertEqual(8, schedule.cost)
