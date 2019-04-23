@@ -881,6 +881,14 @@ def parenthesize(expr) -> str:
 def unparenthesize(expr) -> str:
   expr_str = str(expr)
   while expr_str.startswith('(') and expr_str.endswith(')'):
+    count = 1
+    for char in expr_str[1:-1]:
+      if char == '(':
+        count += 1
+      elif char == ')':
+        count -= 1
+      if count == 0:  # the outermost parentheses are not paired
+        return expr_str
     expr_str = expr_str[1:-1]
   return expr_str
 
