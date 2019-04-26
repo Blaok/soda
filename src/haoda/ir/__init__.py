@@ -227,7 +227,7 @@ class BinaryOp(Node):
 
   @property
   def singleton(self) -> bool:
-    return len(self.operand) == 1
+    return len(self.operand) == 1   # type: ignore
 
 class Expr(BinaryOp):
   pass
