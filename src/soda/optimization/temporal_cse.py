@@ -256,13 +256,13 @@ class CommSchedule(ScheduleBase):
     if isinstance(self.left, CommSchedule):
       left = self.left.to_str_with_offset(offset)
     else:
-      left = str(offset)
+      left = str(self.left)
     offset += self.distance
     if isinstance(self.right, CommSchedule):
       right = self.right.to_str_with_offset(offset)
     else:
-      right = str(offset)
-    return '(%s %s)' % (left, right)
+      right = str(self.right)
+    return '(%s==%s=>%s)' % (left, self.distance, right)
 
   def print_tree(self, printer=_logger.debug) -> None:
     base.print_tree(self.ir_node, printer)
@@ -272,10 +272,10 @@ class CommSchedule(ScheduleBase):
     """Bind an Expression to the schedule.
     """
     if expression is None:
-      del self.aattrs_as_ir_nodes
-      del self.rattr_table
-      del self.aattr_table
-      del self.operator
+      del self.aattrs_as_ir_nodes   # type: ignore
+      del self.rattr_table  # type: ignore
+      del self.aattr_table  # type: ignore
+      del self.operator   # type: ignore
     else:
       self.aattrs_as_ir_nodes = expression.aattrs_as_ir_nodes
       self.rattr_table = expression.rattr_table
