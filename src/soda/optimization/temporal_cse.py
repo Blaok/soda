@@ -33,7 +33,8 @@ AbsoluteAttr = int
 Attr = Union[RelativeAttr, Tuple[RelativeAttr, Optional[AbsoluteAttr]]]
 
 OrderedDict = collections.OrderedDict
-class OrderedCounter(collections.Counter, collections.OrderedDict):
+class OrderedCounter(collections.Counter,   # type: ignore
+                     collections.OrderedDict):
   pass
 
 _logger = logging.getLogger().getChild(__name__)
@@ -106,7 +107,8 @@ def set_optimizations(optimizations: Sequence[str]) -> None:
   Expression.set_optimizations(optimizations)
 
 _temporal_cse_counter = 0
-def temporal_cse(stencil: 'soda.core.Stencil') -> 'soda.core.Stencil':
+def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
+                 ) -> 'soda.core.Stencil':  # type: ignore
   """Eliminate temporal common subexpressions.
 
   Eliminate temporal common subexpressions. The stencil object will be modified.
@@ -526,7 +528,7 @@ class CommSchedules(ScheduleBase):
       schedules.append(schedule)
       self.schedules = schedules
       self.max_cost = 0
-      yield schedule
+      yield schedule  # type: ignore
       return
     #if self.aattrs is None or len(set(
     #    self.aattrs[i] for i in range(num_operands)
@@ -565,13 +567,13 @@ class CommSchedules(ScheduleBase):
               continue
             distance = self.rattrs[right_indices[0]]
             distance -= self.rattrs[left_indices[0]]
-            schedule = CommSchedule(left, right, distance,
+            schedule = CommSchedule(left, right, distance,  # type: ignore
                                     self.rattrs, self.aattrs)
-            cost = schedule.cost
+            cost = schedule.cost  # type: ignore
             if cost < self.max_cost:
               self.max_cost = cost
             schedules.append(schedule)
-            yield schedule
+            yield schedule  # type: ignore
     self.schedules = schedules
 
   schedule_cache = {}   # type: Dict[CommSchedule, CommSchedule]
@@ -631,7 +633,7 @@ class CommSchedules(ScheduleBase):
       if schedules is not None:
         self.stat[0] += 1
         if hasattr(schedules, 'schedules'):
-          return iter(schedules.schedules)
+          return iter(schedules.schedules)  # type: ignore
         return schedules.generator
     self.stat[1] += 1
     return CommSchedules(
@@ -793,16 +795,18 @@ class Expression:
       TypeError: If the input is not an instance of ir.Node.
     """
     if isinstance(polynomial, ir.BinaryOp):
-      if any(op != polynomial.operator[0] for op in polynomial.operator):
-        raise Expression.CannotHandle('mixed operators', polynomial.operator)
-      self.operator = polynomial.operator[0]
+      if any(op != polynomial.operator[0]   # type: ignore
+             for op in polynomial.operator):  # type: ignore
+        raise Expression.CannotHandle('mixed operators',
+                                      polynomial.operator)  # type: ignore
+      self.operator = polynomial.operator[0]  # type: ignore
       if self.operator not in ('+', '*'):
         raise Expression.CannotHandle('%s operator' % self.operator)
-      for operand in polynomial.operand:
+      for operand in polynomial.operand:  # type: ignore
         if len(soda_visitor.get_load_set(operand)) > 1:
           raise Expression.CannotHandle('multi-index operands', operand)
       self.operands = tuple(sorted(
-          polynomial.operand,
+          polynomial.operand,   # type: ignore
           key=lambda x: tuple(reversed(soda_visitor.get_load_set(x)[0].idx))))
       rattrs, aattrs = zip(*map(extract_attr, self.operands))
       self.aattrs_as_ir_nodes = aattrs
@@ -827,10 +831,10 @@ class Expression:
       if len(set(aattrs)) == 1:
         self.aattrs = None  # type: Optional[Tuple[int, ...]]
         self.aattr_table = {None: aattrs[0]} \
-            # type: Dict[Optional[int], haoda.ir.Node]
+            # type: Dict[Optional[int], ir.Node]
       else:
         tag = 0
-        operand_table = {}      # type: Dict[haoda.ir.Node, int]
+        operand_table = {}      # type: Dict[ir.Node, int]
         self.aattr_table = {}
         for aattr in aattrs:
           if aattr not in operand_table:
