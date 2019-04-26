@@ -2,6 +2,7 @@ from typing import (
     Callable,
     Dict,
     FrozenSet,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -102,7 +103,7 @@ def shuffle_range(n: int) -> Iterator[int]:
   return iter(lst)
 
 def set_optimizations(optimizations: Sequence[str]) -> None:
-  Schedules.set_optimizations(optimizations)
+  Expression.set_optimizations(optimizations)
 
 _temporal_cse_counter = 0
 def temporal_cse(stencil: 'soda.core.Stencil') -> 'soda.core.Stencil':
@@ -644,8 +645,115 @@ class CommSchedules(ScheduleBase):
     logger('cache: | hit: %d | miss: %d | hit rate: %2.3f %% |',
            self.cache_hit, self.cache_miss, self.cache_hit_rate * 100)
 
+class GreedySchedules(ScheduleBase):
+  """Schedules of an Expression, found greedily.
+  """
+  def __init__(self, rattrs: Tuple[RelativeAttr, ...],
+               aattrs: Optional[Tuple[
+                   Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               cache: Optional[Dict] = None) -> None:
+    super().__init__(rattrs, aattrs)  # type: ignore
+
+  def __iter__(self) -> Iterator[CommSchedule]:
+    return self.generator
+
+  @property
+  def attrs(self) -> Iterator[Tuple[RelativeAttr, Optional[AbsoluteAttr]]]:
+    """Pack attributes.
+
+    Yields:
+      Each relative and absolute attribute pair.
+    """
+    return zip(self.rattrs,
+               self.aattrs or itertools.repeat(None, len(self.rattrs)))
+
+  def linear_schedule(self, indices: Iterable[int]) -> CommSchedule:
+    """Schedule the attributes linearily.
+
+    Args:
+      indices: Iterable of ints, indicating what attributes should be used.
+
+    Returns:
+      CommSchedule of the attributes, scheduled as a linear tree.
+    """
+    indices = tuple(indices)
+    distance = self.rattrs[indices[-1]] - self.rattrs[indices[0]]
+    other_args = distance, self.rattrs, self.aattrs
+    if len(indices) == 2:
+      if self.aattrs is None:
+        return CommSchedule(None, None, *other_args)
+      return CommSchedule(self.aattrs[indices[0]], self.aattrs[indices[-1]],
+                          *other_args)
+    if self.aattrs is None:
+      return CommSchedule(self.linear_schedule(indices[:-1]), None, *other_args)
+    return CommSchedule(self.linear_schedule(indices[:-1]),
+                        self.aattrs[indices[-1]], *other_args)
+
+  @property
+  def generator(self) -> Iterator[CommSchedule]:
+    count = {}  # type: Dict[CommSchedule, int]
+    attr_set = set(self.attrs)
+    best_reuse = 1
+    best_operation = None
+    _logger.debug('old attrs: %s', util.lst2str('%s:%s' % attr  # type: ignore
+                                                for attr in self.attrs))
+    for left, right in itertools.combinations(self.attrs, 2):
+      left_rattr, left_aattr = left
+      right_rattr, right_aattr = right
+      operation = CommSchedule(
+        left_aattr, right_aattr, right_rattr - left_rattr,
+        self.rattrs, self.aattrs)
+      if operation in count:
+        continue
+      _logger.debug('look for operation: %s', operation)
+      used = set()  # type: Set[Tuple[RelativeAttr, Optional[AbsoluteAttr]]]
+      reuse = 0
+      rattrs = []   # type: List[RelativeAttr]
+      aattrs = []   # type: List[Union[AbsoluteAttr, CommSchedule, None]]
+      for rattr_l, aattr_l in self.attrs:
+        rattr_r, aattr_r = rattr_l + right_rattr - left_rattr, right_aattr
+        if (rattr_l, aattr_l) in used or (rattr_r, aattr_r) in used:
+          continue
+        if aattr_l == left_aattr and \
+            (rattr_r, aattr_r) in attr_set:
+          _logger.debug('  found: %s:%s <=> %s:%s',
+                        rattr_l, aattr_l, rattr_r, aattr_r)
+          reuse += 1
+          rattrs.append(rattr_l)
+          aattrs.append(operation)
+          used.add((rattr_l, aattr_l))
+          used.add((rattr_r, aattr_r))
+        else:
+          rattrs.append(rattr_l)
+          aattrs.append(aattr_l)
+      count[operation] = reuse
+      # compare by the count first, then the relative distance
+      if best_operation is None or \
+          reuse > best_reuse or \
+          reuse == best_reuse and operation.distance < best_operation.distance:
+        best_reuse = reuse
+        best_operation = operation
+        best_rattrs, best_aattrs = rattrs, aattrs
+    if best_reuse == 1:
+      yield self.linear_schedule(range(len(self.rattrs)))
+      return
+    assert best_operation is not None
+    _logger.debug('best operation: %s x%d',
+                  best_operation, count[best_operation])
+    _logger.debug('new attrs: %s',
+                  util.lst2str('%s:%s' % attr
+                               for attr in zip(best_rattrs, best_aattrs)))
+    yield from GreedySchedules(tuple(best_rattrs), tuple(best_aattrs)).generator
+
+  @cached_property.cached_property
+  def best(self) -> CommSchedule:
+    return next(self.generator)
+
+  def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
+    return
+
 Schedule = CommSchedule
-Schedules = CommSchedules
+Schedules = GreedySchedules
 
 class Expression:
   """An expression suitable for temporal CSE.
@@ -663,7 +771,7 @@ class Expression:
   def set_optimizations(optimizations: Sequence[str] = (
       'reorder-exploration', 'skip-with-partial-cost',
       'lazy-evaluation')) -> None:
-    Schedules.set_optimizations(optimizations)
+    CommSchedules.set_optimizations(optimizations)
 
   class CannotHandle(Exception):
     def __init__(self, msg, details: str = '') -> None:

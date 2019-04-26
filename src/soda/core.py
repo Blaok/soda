@@ -266,7 +266,6 @@ class Stencil():
       stmt.let = arithmetic.simplify(stmt.let)
 
     if 'temporal_cse' in self.optimizations:
-      temporal_cse.Schedules.set_optimizations(('c-temporal-cse',))
       temporal_cse.temporal_cse(self)
 
     # soda frontend successfully parsed
