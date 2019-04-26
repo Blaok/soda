@@ -175,7 +175,49 @@ class TestCommSchedules(unittest.TestCase):
     schedule = self.Schedules(rattr, aattr, cache=self.cache).best
     self.assertEqual(2, schedule.cost)
 
-  @unittest.skip
+  def test_3x3_temporal_cse(self):
+    """Test a 3x3 temporal CSE case."""
+    rattr = (0, 1, 2, 10, 11, 12)
+    aattr = (1, 1, 1, 1, 3, 1)
+    schedules = self.Schedules(rattr, aattr, cache=self.cache)
+    schedule = schedules.best
+    schedules.print_stats()
+    self.assertEqual(4, schedule.cost)
+
+class TestCommSchedulesWithoutLazyCartesianProduct(TestCommSchedules):
+  def setUp(self):
+    super().setUp()
+    self.Schedules.set_optimizations(('no-lazy-evaluation',))
+
+class TestCommSchedulesWithoutSkipping(TestCommSchedules):
+  def setUp(self):
+    super().setUp()
+    self.Schedules.set_optimizations(('no-skip-with-partial-cost',))
+
+class TestCommSchedulesWithoutReorderingExploration(TestCommSchedules):
+  def setUp(self):
+    super().setUp()
+    self.Schedules.set_optimizations(('no-reorder-exploration',))
+
+class TestCommSchedulesWithoutCaching(TestCommSchedules):
+  def setUp(self):
+    super().setUp()
+    self.caching = False
+
+class TestGreedySchedules(TestCommSchedules):
+  def setUp(self):
+    super().setUp()
+    self.Schedules = temporal_cse.GreedySchedules
+
+  def test_5x5_temporal_cse(self):
+    """Test a 5x5 temporal CSE case."""
+    m, n = 5, 5
+    rattr = tuple(map(tuple, map(reversed,
+                                 itertools.product(range(m), range(n)))))
+    rattr = [i * (n * 2 + 1) + j for i in range(m) for j in range(n)]
+    schedule = self.Schedules(rattr, cache=self.cache).best
+    self.assertEqual(6, schedule.cost)
+
   def test_more_temporal_cse(self):
     """Test a more complicated temporal CSE case.
 
@@ -193,63 +235,4 @@ class TestCommSchedules(unittest.TestCase):
     aattr = tuple(range(1, n + 1)) * m
     schedule = self.Schedules(rattr, aattr, cache=self.cache).best
     self.assertEqual(5, schedule.cost)
-
-  def test_3x3_temporal_cse(self):
-    """Test a 3x3 temporal CSE case."""
-    rattr = (0, 1, 2, 10, 11, 12)
-    aattr = (1, 1, 1, 1, 3, 1)
-    schedules = self.Schedules(rattr, aattr, cache=self.cache)
-    schedule = schedules.best
-    schedules.print_stats()
-    self.assertEqual(4, schedule.cost)
-
-  @unittest.skip
-  def test_5x5_temporal_cse(self):
-    """Test a 5x5 temporal CSE case."""
-    m, n = 5, 5
-    rattr = tuple(map(tuple, map(reversed,
-                                 itertools.product(range(m), range(n)))))
-    rattrs = [i * (n * 2 + 1) + j for i in range(m) for j in range(n)]
-    schedule = self.Schedules(rattr, cache=self.cache).best
-    self.assertEqual(6, schedule.cost)
-
-class TestCommSchedulesWithoutLazyCartesianProduct(TestCommSchedules):
-  def setUp(self):
-    super().setUp()
-    self.Schedules.set_optimizations(('no-lazy-evaluation',))
-
-class TestCommSchedulesWithoutSkipping(TestCommSchedules):
-  def setUp(self):
-    super().setUp()
-    self.Schedules.set_optimizations(('no-skip-with-partial-cost',))
-
-  @unittest.skip
-  def test_more_temporal_cse(self):
-    pass
-
-  @unittest.skip
-  def test_5x5_temporal_cse(self):
-    pass
-
-class TestCommSchedulesWithoutReorderingExploration(TestCommSchedules):
-  def setUp(self):
-    super().setUp()
-    self.Schedules.set_optimizations(('no-reorder-exploration',))
-
-class TestCommSchedulesWithoutCaching(TestCommSchedules):
-  def setUp(self):
-    super().setUp()
-    self.caching = False
-
-  @unittest.skip
-  def test_more_temporal_cse(self):
-    pass
-
-  @unittest.skip
-  def test_5x5_temporal_cse(self):
-    pass
-
-class TestGreedySchedules(TestCommSchedules):
-  def setUp(self):
-    super().setUp()
-    self.Schedules = temporal_cse.GreedySchedules
+    
