@@ -170,19 +170,35 @@ class TestCommSchedules(unittest.TestCase):
     Expression: x[0] + 2 * x[1] + x[2] + 2 * x[3]
     Expected result: y[0] = x[0] + 2 * x[1]; y[0] + y[2]
     """
-    aattr = (1, 2, 1, 2)
-    rattr = (0, 1, 2, 3)
-    schedule = self.Schedules(rattr, aattr, cache=self.cache).best
+    aattrs = (1, 2, 1, 2)
+    rattrs = (0, 1, 2, 3)
+    schedule = self.Schedules(rattrs, aattrs, cache=self.cache).best
     self.assertEqual(2, schedule.cost)
 
-  def test_3x3_temporal_cse(self):
-    """Test a 3x3 temporal CSE case."""
-    rattr = (0, 1, 2, 10, 11, 12)
-    aattr = (1, 1, 1, 1, 3, 1)
-    schedules = self.Schedules(rattr, aattr, cache=self.cache)
+  def test_3x2_temporal_cse(self):
+    """Test a 3x2 temporal CSE case."""
+    rattrs = (0, 1, 2, 10, 11, 12)
+    schedules = self.Schedules(rattrs, None, cache=self.cache)
+    schedule = schedules.best
+    schedules.print_stats()
+    self.assertEqual(3, schedule.cost)
+    aattrs = (1, 1, 1, 1, 3, 1)
+    schedules = self.Schedules(rattrs, aattrs, cache=self.cache)
     schedule = schedules.best
     schedules.print_stats()
     self.assertEqual(4, schedule.cost)
+
+  def test_jacobi2d_temporal_cse(self):
+    rattrs = (1, 10, 11, 12, 21)
+    schedules = self.Schedules(rattrs, None, cache=self.cache)
+    schedule = schedules.best
+    schedules.print_stats()
+    self.assertEqual(3, schedule.cost)
+    aattrs = (0, 0, 1, 0, 0)
+    schedules = self.Schedules(rattrs, aattrs, cache=self.cache)
+    schedule = schedules.best
+    schedules.print_stats()
+    self.assertEqual(3, schedule.cost)
 
 class TestCommSchedulesWithoutLazyCartesianProduct(TestCommSchedules):
   def setUp(self):
@@ -208,6 +224,19 @@ class TestGreedySchedules(TestCommSchedules):
   def setUp(self):
     super().setUp()
     self.Schedules = temporal_cse.GreedySchedules
+
+  def test_3x3_temporal_cse(self):
+    """Test a 3x3 temporal CSE case."""
+    rattrs = (0, 1, 2, 10, 11, 12, 20, 21, 22)
+    schedules = self.Schedules(rattrs, None, cache=self.cache)
+    schedule = schedules.best
+    schedules.print_stats()
+    self.assertEqual(4, schedule.cost)
+    aattrs = (1, 1, 1, 1, 3, 1, 1, 1, 1)
+    schedules = self.Schedules(rattrs, aattrs, cache=self.cache)
+    schedule = schedules.best
+    schedules.print_stats()
+    self.assertEqual(5, schedule.cost)
 
   def test_5x5_temporal_cse(self):
     """Test a 5x5 temporal CSE case."""
@@ -235,4 +264,23 @@ class TestGreedySchedules(TestCommSchedules):
     aattr = tuple(range(1, n + 1)) * m
     schedule = self.Schedules(rattr, aattr, cache=self.cache).best
     self.assertEqual(5, schedule.cost)
-    
+
+  def test_11x11_temporal_cse(self):
+    m, n = 11, 11
+    rattrs = [0] * m * n
+    aattrs = [0] * m * n
+    for y in range(n):
+      for x in range(m):
+        rattrs[y * m + x] = y * (m * 2 - 1) + x
+        aattrs[y * m + x] = (x - m // 2) ** 2 + (y - n // 2) ** 2
+    schedule = self.Schedules(rattrs, aattrs, cache=self.cache).best
+    self.assertEqual(70, schedule.cost)
+
+  def test_16x16_temporal_cse(self):
+    m, n = 16, 16
+    rattrs = [0] * m * n
+    for y in range(n):
+      for x in range(m):
+        rattrs[y * m + x] = y * (m * 2 - 1) + x
+    schedule = self.Schedules(rattrs, cache=self.cache).best
+    self.assertEqual(8, schedule.cost)

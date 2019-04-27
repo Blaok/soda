@@ -200,6 +200,16 @@ class ScheduleBase:
     self.rattrs = rattrs
     self.aattrs = aattrs
 
+  def __getitem__(self, key: int) -> Tuple[RelativeAttr,
+                                           Optional[AbsoluteAttr]]:
+    return self.rattrs[key], None if self.aattrs is None else self.aattrs[key]
+
+  def __len__(self) -> int:
+    return len(self.rattrs)
+
+  def __iter__(self) -> Iterator[Tuple[RelativeAttr, Optional[AbsoluteAttr]]]:
+    yield from zip(self.rattrs, self.aattrs or itertools.repeat(None))
+
 class CommSchedule(ScheduleBase):
   """A schedule of an expression.
 
@@ -492,7 +502,7 @@ class CommSchedules(ScheduleBase):
     if timeout is not None:
       self.timeout = timeout
 
-  def __iter__(self) -> Iterator[CommSchedule]:
+  def __iter__(self) -> Iterator[CommSchedule]:   # type: ignore
     if hasattr(self, 'schedules'):
       return iter(getattr(self, 'schedules'))
     return self.generator
@@ -656,9 +666,6 @@ class GreedySchedules(ScheduleBase):
                cache: Optional[Dict] = None) -> None:
     super().__init__(rattrs, aattrs)  # type: ignore
 
-  def __iter__(self) -> Iterator[CommSchedule]:
-    return self.generator
-
   @property
   def attrs(self) -> Iterator[Tuple[RelativeAttr, Optional[AbsoluteAttr]]]:
     """Pack attributes.
@@ -693,59 +700,66 @@ class GreedySchedules(ScheduleBase):
 
   @property
   def generator(self) -> Iterator[CommSchedule]:
-    count = {}  # type: Dict[CommSchedule, int]
-    attr_set = set(self.attrs)
-    best_reuse = 1
-    best_operation = None
-    _logger.debug('old attrs: %s', util.lst2str('%s:%s' % attr  # type: ignore
-                                                for attr in self.attrs))
-    for left, right in itertools.combinations(self.attrs, 2):
+    attr_map = {attr: idx for idx, attr in enumerate(self)}
+    reuses = {}   # type: Dict[CommSchedule, List[Tuple[int, int]]]
+    for left, right in itertools.combinations(self, 2):
       left_rattr, left_aattr = left
       right_rattr, right_aattr = right
       operation = CommSchedule(
         left_aattr, right_aattr, right_rattr - left_rattr,
         self.rattrs, self.aattrs)
-      if operation in count:
+      if operation in reuses:
         continue
-      _logger.debug('look for operation: %s', operation)
-      used = set()  # type: Set[Tuple[RelativeAttr, Optional[AbsoluteAttr]]]
-      reuse = 0
-      rattrs = []   # type: List[RelativeAttr]
-      aattrs = []   # type: List[Union[AbsoluteAttr, CommSchedule, None]]
-      for rattr_l, aattr_l in self.attrs:
-        rattr_r, aattr_r = rattr_l + right_rattr - left_rattr, right_aattr
-        if (rattr_l, aattr_l) in used or (rattr_r, aattr_r) in used:
+      #_logger.debug('look for operation: %s', operation)
+      # look for reuse of this operation over all operands
+      used = set()  # type: Set[int]
+      reuses[operation] = []
+      for idx_l, (rattr_l, aattr_l) in enumerate(self):
+        if aattr_l != left_aattr or idx_l in used:
           continue
-        if aattr_l == left_aattr and \
-            (rattr_r, aattr_r) in attr_set:
-          _logger.debug('  found: %s:%s <=> %s:%s',
-                        rattr_l, aattr_l, rattr_r, aattr_r)
-          reuse += 1
-          rattrs.append(rattr_l)
-          aattrs.append(operation)
-          used.add((rattr_l, aattr_l))
-          used.add((rattr_r, aattr_r))
-        else:
-          rattrs.append(rattr_l)
-          aattrs.append(aattr_l)
-      count[operation] = reuse
-      # compare by the count first, then the relative distance
-      if best_operation is None or \
-          reuse > best_reuse or \
-          reuse == best_reuse and operation.distance < best_operation.distance:
-        best_reuse = reuse
-        best_operation = operation
-        best_rattrs, best_aattrs = rattrs, aattrs
-    if best_reuse == 1:
+        rattr_r, aattr_r = rattr_l + right_rattr - left_rattr, right_aattr
+        idx_r = attr_map.get((rattr_r, aattr_r))
+        if idx_r is None or idx_r in used:
+          continue
+
+        reuses[operation].append((attr_map[(rattr_l, aattr_l)],
+                                  attr_map[(rattr_r, aattr_r)]))
+        used |= {idx_l, idx_r}
+
+    # filter out operations that cannot be reused
+    # they may not all be useful because they overlap
+    reuses = {k: v for k, v in reuses.items() if len(v) > 1}
+    if not reuses:
       yield self.linear_schedule(range(len(self.rattrs)))
       return
-    assert best_operation is not None
-    _logger.debug('best operation: %s x%d',
-                  best_operation, count[best_operation])
-    _logger.debug('new attrs: %s',
+
+    new_attrs = OrderedDict(enumerate(self))
+    used = set()
+    # only activate reused operations with the maximum reuse
+    # this avoids some of the sub-optimalities
+    max_reuse = max(map(len, reuses.values()))
+    _logger.debug('max reuse: %d', max_reuse)
+
+    for operation, reused_indices in sorted(
+        reuses.items(), key=lambda item: (-len(item[1]), item[0].distance)):
+      # filter out indices that have been used by previous reuse operations
+      reused_indices = [(idx_l, idx_r) for idx_l, idx_r in reused_indices
+                        if idx_l not in used and idx_r not in used]
+      if len(reused_indices) < max_reuse:
+        continue
+      for idx_l, idx_r in reused_indices:
+        _logger.debug('reusing %s for %s + %s', operation,
+                      '%s:%s' % self[idx_l], '%s:%s' % self[idx_r])
+        new_attrs[idx_l] = new_attrs[idx_l][0], operation   # type: ignore
+        del new_attrs[idx_r]
+        used |= {idx_l, idx_r}
+
+    new_rattrs, new_aattrs = zip(*new_attrs.values())
+    _logger.debug('new attrs: %s (%d)',
                   util.lst2str('%s:%s' % attr
-                               for attr in zip(best_rattrs, best_aattrs)))
-    yield from GreedySchedules(tuple(best_rattrs), tuple(best_aattrs)).generator
+                              for attr in zip(new_rattrs, new_aattrs)),
+                  len(new_rattrs))
+    yield from GreedySchedules(tuple(new_rattrs), tuple(new_aattrs)).generator
 
   @cached_property.cached_property
   def best(self) -> CommSchedule:
