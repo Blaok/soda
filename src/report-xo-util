@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+
+import logging
+import os
+import sys
+
+from haoda.report.xilinx import rtl
+
+logging.basicConfig(level=logging.WARNING,
+                    format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
+_logger = logging.getLogger().getChild(os.path.basename(__file__))
+
+if __name__ == '__main__':
+  with rtl.ReportXoUtil(sys.stdin.buffer, sys.stdout) as proc:
+    stdout, stderr = proc.communicate()
+  log_func = _logger.error if proc.returncode != 0 else _logger.debug
+  log_func(stdout.decode())
+  log_func(stderr.decode())
