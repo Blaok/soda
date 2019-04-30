@@ -1,80 +1,94 @@
+from typing import (
+  List,
+  Dict,
+  Iterable,
+  Tuple,
+  Union,
+)
+
 import collections
 
 from haoda import ir
-from soda import core
+from soda import tensor
 
-def get_load_tuple(obj):
+def get_load_tuple(obj: Union[ir.Node, tensor.Tensor]) -> Tuple[ir.Ref, ...]:
   """Get all load references as a tuple.
 
   Args:
-    obj: A haoda.ir.Node object or a soda.core.Tensor object.
+    obj: A ir.Node object or a tensor.Tensor object.
 
   Returns:
     A tuple of all the load references.
 
   Raises:
-    TypeError: If obj is not an IR node or a Tensor.
+    TypeError: If obj is not an IR node or a tensor.Tensor.
   """
-  def visitor(obj, loads):
+  def visitor(obj: ir.Node, loads: List[ir.Ref]) -> ir.Node:
     if isinstance(obj, ir.Ref):
       loads.append(obj)
     return obj
-  loads = []
+  loads = []  # type: List[ir.Ref]
   if isinstance(obj, ir.Node):
     obj.visit(visitor, loads)
-  elif isinstance(obj, core.Tensor):
+  elif isinstance(obj, tensor.Tensor):
     obj.visit_loads(visitor, loads)
   else:
-    raise TypeError('argument is not an IR node or a Tensor')
+    raise TypeError('argument is not an IR node or a tensor.Tensor')
   return tuple(loads)
 
-def get_load_set(obj):
+def get_load_set(obj: Union[ir.Node, tensor.Tensor]) -> Tuple[ir.Ref, ...]:
   """Get all unique load references as a tuple.
 
   Args:
-    obj: A haoda.ir.Node object.
+    obj: A haoda.ir.Node object or a tensor.Tensor object.
 
   Returns:
     A tuple of all unique loads.
 
   Raises:
-    TypeError: If obj is not an IR node.
+    TypeError: If obj is not an IR node or a tensor.Tensor.
   """
-  def visitor(obj, loads):
+  def visitor(obj: ir.Node, loads: Dict[ir.Ref, None]) -> ir.Node:
     if isinstance(obj, ir.Ref):
       loads[obj] = None
     return obj
-  loads = collections.OrderedDict()
+  loads = collections.OrderedDict()   # type: Dict[ir.Ref, None]
   if isinstance(obj, ir.Node):
     obj.visit(visitor, loads)
+  elif isinstance(obj, tensor.Tensor):
+    obj.visit_loads(visitor, loads)
   else:
-    raise TypeError('argument is not an IR node or a Tensor')
+    raise TypeError('argument is not an IR node or a tensor.Tensor')
   return tuple(loads)
 
-def get_load_dict(obj):
+def get_load_dict(obj: Union[ir.Node, tensor.Tensor]) -> Dict[ir.Ref,
+                                                            List[ir.Ref]]:
   """Get all load references as a dict mapping names to lists of loads.
 
   Args:
-    obj: A soda.core.Tensor object.
+    obj: A haoda.ir.Node object or a tensor.Tensor object.
 
   Returns:
-    A dict mapping accessed tensor names to the corresponding lists of loads.
+    A dict mapping accessed ir.Ref names to the corresponding lists of loads.
 
   Raises:
-    TypeError: If obj is not a Tensor.
+    TypeError: If obj is not an IR node or a tensor.Tensor.
   """
-  def visitor(obj, loads):
+  def visitor(obj: ir.Node, loads: Dict[ir.Ref, List[ir.Ref]]) -> ir.Node:
     if isinstance(obj, ir.Ref):
-      loads.setdefault(obj.name, []).append(obj)
+      loads.setdefault(obj.name, []).append(obj)  # type: ignore
     return obj
-  loads = collections.OrderedDict()
-  if isinstance(obj, core.Tensor):
+  loads = collections.OrderedDict()   # type: Dict[ir.Ref, List[ir.Ref]]
+  if isinstance(obj, tensor.Tensor):
     obj.visit_loads(visitor, loads)
+  elif isinstance(obj, ir.Node):
+    obj.visit(visitor, loads)
   else:
-    raise TypeError('argument is not a Tensor')
+    raise TypeError('argument is not an IR node or a tensor.Tensor')
   return loads
 
-def get_normalize_index(obj) -> tuple:
+def get_normalize_index(obj: Union[ir.Node, Iterable[ir.Node]]) -> Tuple[int,
+                                                                         ...]:
   """Get the normalize index that will make the least access index 0.
 
   Args:
