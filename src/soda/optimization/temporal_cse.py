@@ -1,4 +1,5 @@
 from typing import (
+    overload,
     Callable,
     Dict,
     FrozenSet,
@@ -74,10 +75,76 @@ def assemble_attr(rattr: Tuple[int, ...], aattr: ir.Node) -> ir.Node:
   """
   return mutator.shift(aattr, rattr, op=operator.add)
 
-def linearize(rattr: Sequence[int], weights: Sequence[int]) -> int:
-  """Linearize the relative attribute.
+class Linearizer:
+  """Apply and restore linearization.
+
+  This class stores the necessory information needed to apply and restore
+  linearization. Instances of this class is callable.
+
+  Attributes:
+    num_dim: Integer, number of dimensions.
+    maxs: List of integers, maximum index in each dimension.
+    mins: List of integers, minimum index in each dimension.
+    weights: List of integers, weight of each dimension.
+
+  Properties:
+    dims: Tuple of integers, all dimension indices.
+    sizes: Tuple of integers, size of each linearized dimension.
   """
-  return sum(rval * weight for rval, weight in zip(rattr, weights))
+  def __init__(self, rattrs: Sequence[Sequence[int]]):
+    """Initialize the Linearizer with the given relative attribute tuples.
+
+    Args:
+      rattrs: Sequence of relative attributes. Each attribute is a sequence of
+        integers.
+    """
+    self.num_dim = len(rattrs[0])
+    self.maxs = [0] * self.num_dim
+    self.mins = [0] * self.num_dim
+    self.weights = [1] * self.num_dim
+    for d in self.dims:
+      self.maxs[d] = max(rattr[d] for rattr in rattrs)
+      self.mins[d] = min(rattr[d] for rattr in rattrs)
+    for d in range(1, self.num_dim):
+      self.weights[d] = self.weights[d - 1] * self.sizes[d - 1]
+
+  @property
+  def dims(self) -> Tuple[int, ...]:
+    return tuple(range(self.num_dim))
+
+  @property
+  def sizes(self) -> Tuple[int, ...]:
+    # make sure different rows do not overlap
+    return tuple((self.maxs[d] - self.mins[d] + 1) * 2 - 1 for d in self.dims)
+
+  def apply(self, rattr: Sequence[int]) -> int:
+    return sum((rval - min_val) * weight
+               for rval, weight, min_val in zip(rattr, self.weights, self.mins))
+
+  def restore(self, rattr: int) -> Tuple[int, ...]:
+    restored_attr = []  # type: List[int]
+    for d in reversed(self.dims):
+      rval = rattr // self.weights[d]
+      rattr -= rval * self.weights[d]
+      restored_attr.append(self.mins[d] + rval)
+    return tuple(reversed(restored_attr))
+
+  # pylint: disable=function-redefined
+  @overload
+  def __call__(self, rattr: Sequence[int]) -> int:
+    ...
+
+  # pylint: disable=function-redefined
+  @overload
+  def __call__(self, rattr: int) -> Tuple[int, ...]:
+    ...
+
+  def __call__(self, rattr):
+    if isinstance(rattr, int):
+      return self.restore(rattr)
+    if isinstance(rattr, Sequence) and isinstance(rattr[0], int):
+      return self.apply(rattr)
+    raise TypeError('rattr needs to be an int or a Sequence of int')
 
 def range_from_middle(n: int) -> Iterator[int]:
   """A range function that yields number from the middle to the sides.
@@ -285,12 +352,12 @@ class CommSchedule(ScheduleBase):
     """
     if expression is None:
       del self.aattrs_as_ir_nodes   # type: ignore
-      del self.rattr_table  # type: ignore
+      del self.linearizer   # type: ignore
       del self.aattr_table  # type: ignore
       del self.operator   # type: ignore
     else:
       self.aattrs_as_ir_nodes = expression.aattrs_as_ir_nodes
-      self.rattr_table = expression.rattr_table
+      self.linearizer = expression.linearizer
       self.aattr_table = expression.aattr_table
       self.operator = expression.operator
     for child in self.left, self.right:
@@ -402,7 +469,7 @@ class CommSchedule(ScheduleBase):
     if isinstance(self.left, CommSchedule):   # Left child is not a leaf.
       left_child = self.left.get_ir_node_with_offset(offset)  # type: ir.Node
     else:                                     # Left child is a leaf.
-      left_child = assemble_attr(self.rattr_table[offset],
+      left_child = assemble_attr(self.linearizer(offset),
                                  self.aattr_table[self.left])
 
     offset += self.distance
@@ -410,7 +477,7 @@ class CommSchedule(ScheduleBase):
     if isinstance(self.right, CommSchedule):  # Right child is not a leaf.
       right_child = self.right.get_ir_node_with_offset(offset)  # type: ir.Node
     else:                                     # Right child is a leaf.
-      right_child = assemble_attr(self.rattr_table[offset],
+      right_child = assemble_attr(self.linearizer(offset),
                                   self.aattr_table[self.right])
 
     return self.op_type(operator=(self.operator,),
@@ -768,7 +835,7 @@ class Expression:
     rattrs: Tuple of relative attributes as integer offsets.
     aattrs: Tuple of absolute attributes as integer tags, or None.
     aattrs_as_ir_nodes: Tuple of absolute attributes as IR nodes.
-    rattr_table: A dict mapping relative attributes to tuples.
+    linearizer: A linearizer mapping relative attributes to tuples.
     aattr_table: A dict mapping absolute attributes to IR nodes.
   """
   @staticmethod
@@ -813,21 +880,10 @@ class Expression:
       rattrs, aattrs = zip(*map(extract_attr, self.operands))
       self.aattrs_as_ir_nodes = aattrs
 
-      # compute the weights
-      num_dim = len(rattrs[0])
-      maxs = [0] * num_dim
-      mins = [0] * num_dim
-      weights = [1] * num_dim
-      for d in range(num_dim - 1):
-        maxs[d] = max(rattr[d] for rattr in rattrs)
-        mins[d] = min(rattr[d] for rattr in rattrs)
-      for d in range(1, num_dim):
-        # make sure different rows do not overlap
-        weights[d] = weights[d - 1] * ((maxs[d - 1] - mins[d - 1] + 1) * 2 - 1)
+      self.linearizer = Linearizer(rattrs)
 
       # linearize the relative attribtues and memorize the mapping
-      self.rattrs = tuple(linearize(rattr, weights) for rattr in rattrs)
-      self.rattr_table = {linearize(rattr, weights): rattr for rattr in rattrs}
+      self.rattrs = tuple(map(self.linearizer, rattrs))
 
       # linearize the absolute attributes
       if len(set(aattrs)) == 1:

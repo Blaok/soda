@@ -33,6 +33,20 @@ class TestHelpers(unittest.TestCase):
     for n in range(100):
       self.assertCountEqual(range(n), temporal_cse.range_from_middle(n))
 
+class TestLinearizer(unittest.TestCase):
+  def test_3x3_linearizer(self):
+    rattrs = ((-1, -1), (-1, 0), (-1, 1),
+              (-1, 0), (0, 0), (1, 0),
+              (-1, 1), (0, 1), (1, 1))
+    linearizer = temporal_cse.Linearizer(rattrs)
+    self.assertEqual(linearizer.num_dim, 2)
+    self.assertSequenceEqual(linearizer.maxs, (1, 1))
+    self.assertSequenceEqual(linearizer.mins, (-1, -1))
+    self.assertSequenceEqual(linearizer.weights, (1, 5))
+    self.assertSequenceEqual(
+      rattrs,
+      [tuple(linearizer(linearizer(rattr))) for rattr in rattrs])
+
 class TestCommSchedule(unittest.TestCase):
   def get_int_attrs(self, idx: int) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
     return self.rattrs['int'][idx], self.aattrs[idx]
