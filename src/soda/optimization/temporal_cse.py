@@ -666,16 +666,6 @@ class GreedySchedules(ScheduleBase):
                cache: Optional[Dict] = None) -> None:
     super().__init__(rattrs, aattrs)  # type: ignore
 
-  @property
-  def attrs(self) -> Iterator[Tuple[RelativeAttr, Optional[AbsoluteAttr]]]:
-    """Pack attributes.
-
-    Yields:
-      Each relative and absolute attribute pair.
-    """
-    return zip(self.rattrs,
-               self.aattrs or itertools.repeat(None, len(self.rattrs)))
-
   def linear_schedule(self, indices: Iterable[int]) -> CommSchedule:
     """Schedule the attributes linearily.
 
@@ -722,8 +712,7 @@ class GreedySchedules(ScheduleBase):
         if idx_r is None or idx_r in used:
           continue
 
-        reuses[operation].append((attr_map[(rattr_l, aattr_l)],
-                                  attr_map[(rattr_r, aattr_r)]))
+        reuses[operation].append((idx_l, idx_r))
         used |= {idx_l, idx_r}
 
     # filter out operations that cannot be reused
@@ -754,12 +743,11 @@ class GreedySchedules(ScheduleBase):
         del new_attrs[idx_r]
         used |= {idx_l, idx_r}
 
-    new_rattrs, new_aattrs = zip(*new_attrs.values())
     _logger.debug('new attrs: %s (%d)',
-                  util.lst2str('%s:%s' % attr
-                              for attr in zip(new_rattrs, new_aattrs)),
-                  len(new_rattrs))
-    yield from GreedySchedules(tuple(new_rattrs), tuple(new_aattrs)).generator
+                  util.lst2str('%s:%s' % attr for attr in new_attrs.values()),
+                  len(new_attrs))
+    new_rattrs, new_aattrs = zip(*new_attrs.values())
+    yield from GreedySchedules(new_rattrs, new_aattrs).generator
 
   @cached_property.cached_property
   def best(self) -> CommSchedule:
