@@ -10,8 +10,8 @@ import operator
 import types
 
 from haoda import ir
-from soda import core
-from soda import visitor as soda_visitor
+from soda import tensor
+import soda.visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -23,7 +23,7 @@ def shift(obj, offset, excluded=(), op=operator.sub, verbose=False):
   on the original index and the given offset.
 
   Args:
-    obj: A haoda.ir.Node or a soda.core.Tensor object.
+    obj: A haoda.ir.Node or a tensor.Tensor object.
     offset: Second operand given to the operator.
     excluded: Sequence of names to be excluded from the mutation. Default to ().
     op: Shifting operator. Should be either add or sub. Default to sub.
@@ -46,7 +46,7 @@ def shift(obj, offset, excluded=(), op=operator.sub, verbose=False):
         obj.idx = new_idx
   if isinstance(obj, ir.Node):
     return obj.visit(visitor)
-  if isinstance(obj, core.Tensor):
+  if isinstance(obj, tensor.Tensor):
     obj.mutate(visitor)
   else:
     raise TypeError('argument is not an IR node or a tensor')
@@ -67,7 +67,7 @@ def normalize(obj):
   """
   if isinstance(obj, types.GeneratorType):
     return normalize(tuple(obj))
-  norm_idx = soda_visitor.get_normalize_index(obj)
+  norm_idx = soda.visitor.get_normalize_index(obj)
   shifter = lambda x: shift(x, norm_idx) if any(norm_idx) else x
   if isinstance(obj, collections.Iterable):
     return type(obj)(map(shifter, obj))
@@ -93,7 +93,7 @@ def replace_expressions(
   def visitor(obj: ir.Node, args: Tuple[
       Dict[ir.Node, str], Optional[Dict[ir.Node, ir.Node]]]) -> ir.Node:
     cses, used = args
-    norm_idx = soda_visitor.get_normalize_index(obj)
+    norm_idx = soda.visitor.get_normalize_index(obj)
     normalized = shift(obj, norm_idx) if any(norm_idx) else obj
     if normalized in cses:
       if used is not None:

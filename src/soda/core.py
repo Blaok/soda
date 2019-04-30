@@ -4,7 +4,6 @@ from typing import (
 )
 
 import collections
-import copy
 import itertools
 import logging
 import operator
@@ -16,150 +15,13 @@ from haoda import util
 from haoda.ir import arithmetic
 from soda import dataflow
 from soda import grammar
-from soda import util as soda_util
 from soda import visitor
 from soda import mutator
 from soda.optimization import temporal_cse
+import soda.util
+import soda.tensor
 
 _logger = logging.getLogger().getChild(__name__)
-
-class Tensor():
-  """A tensor that corresponse to an input, local, or output.
-
-  This class is used in the high-level DAG for stencil dependency analysis.
-  Each tensor either is an input tensor, or has at least 1 parent tensor, which
-  will be used to generate this tensor. Meanwhile, each tensor either is an
-  output tensor, or has at least 1 child tensor, which will be computed using
-  this tensor.
-
-  Attributes:
-    haoda_type: str, type of the tensor element.
-    parents: Dict from str of name of Tensor to Tensor.
-    children: Dict from str of name of Tensor to Tensor.
-    st_ref: Ref, name, index, and latency stored.
-    offset: int, shift offset in terms of data elements
-    lets: Lets of computation.
-    expr: Expr of computation.
-    ld_refs: Dict from str of name to dict of Ref loaded.
-    ld_delays: Dict from str of name to extra delay of the input.
-
-  Property:
-    name: str, unique in each SODA program.
-    st_offset: int, stencil offset in terms of data elements.
-    st_idx, Tuple of int, the index referenced by its parent stage.
-    ld_indices: Dict from str of name to dict of accessed indices of the input.
-    ld_offsets: Dict from str of name to dict of offsets of the input.
-  """
-  def __init__(self, stmt, tile_size):
-    self.haoda_type = stmt.haoda_type
-    self._tile_size = tile_size
-    if isinstance(stmt, grammar.LocalStmtOrOutputStmt):
-      self.st_ref = copy.copy(stmt.ref)
-      self.st_ref.parent = self
-      self.lets = stmt.let
-      self.expr = stmt.expr
-    elif isinstance(stmt, grammar.InputStmt):
-      self._name = stmt.name
-      self.st_ref = None
-      self.lets = []
-      self.expr = None
-    else:
-      raise util.InternalError('cannot initialize a Tensor from %s' %
-                               type(stmt))
-    _logger.debug('tensor initialized from stmt `%s`', stmt)
-    # pylint: disable=protected-access
-    _logger.debug('                   at tx position %d', stmt._tx_position)
-
-    # these fields are to be set externally
-    self.st_delay = 0
-    self.parents = collections.OrderedDict()
-    self.children = collections.OrderedDict()
-    self.ld_refs = collections.OrderedDict()
-    self.ld_delays = collections.OrderedDict()
-
-  @property
-  def name(self):
-    if self.st_ref is not None:
-      return self.st_ref.name
-    return self._name
-
-  @property
-  def st_idx(self):
-    if self.st_ref is not None:
-      return self.st_ref.idx
-    return (0,)*len(self._tile_size)
-
-  @property
-  def st_offset(self):
-    return soda_util.serialize(self.st_idx, self._tile_size) + self.st_delay
-
-  @cached_property.cached_property
-  def ld_indices(self):
-    return collections.OrderedDict(
-        (name, collections.OrderedDict((ref.idx, ref) for ref in refs))
-        for name, refs in self.ld_refs.items())
-
-  @cached_property.cached_property
-  def ld_offsets(self):
-    return collections.OrderedDict(
-      (name, collections.OrderedDict(
-        (soda_util.serialize(ref.idx, self._tile_size), ref) for ref in refs))
-      for name, refs in self.ld_refs.items())
-
-  @property
-  def c_type(self):
-    return util.get_c_type(self.haoda_type)
-
-  def propagate_type(self):
-    if self.expr is None:
-      return
-
-    var_types = {}
-    # pylint: disable=access-member-before-definition
-    for let in self.lets:
-      var_types[let.name] = let.haoda_type
-
-    def visit_haoda_type(obj, args):
-      if obj.haoda_type is None:
-        if isinstance(obj, ir.Var):
-          obj.haoda_type = var_types[obj.name]
-      return obj
-
-    self.lets = tuple(_.visit(visit_haoda_type) for _ in self.lets)
-    self.expr = self.expr.visit(visit_haoda_type)
-    self.st_ref = self.st_ref.visit(visit_haoda_type)
-
-  def mutate(self, callback, args=None):
-    self.lets = tuple(_.visit(callback, args) for _ in self.lets)
-    self.expr = self.expr.visit(callback, args)
-    self.st_ref = self.st_ref.visit(callback, args)
-
-  def visit_loads(self, callback, args=None):
-    for let in self.lets:
-      let.visit(callback, args)
-    self.expr.visit(callback, args)
-
-  def __str__(self):
-    return '''Tensor
-  {haoda_type}: {name} = {expr}
-  store: {st_ref} with delay {st_delay}
-  parents: {parents}
-  children: {children}'''.format(
-      name=self.name, haoda_type=self.haoda_type, expr=self.expr,
-      parents=util.idx2str(self.parents), children=util.idx2str(self.children),
-      st_ref=str(self.st_ref), st_delay=self.st_delay)
-
-  def is_output(self):
-    return len(self.children) == 0
-
-  def is_input(self):
-    return len(self.parents) == 0
-
-  def is_producer(self):
-    return not self.is_output()
-
-  def is_consumer(self):
-    return not self.is_input()
 
 class Stencil():
   """
@@ -357,7 +219,7 @@ class Stencil():
     # TODO: check for name conflicts
     tensor_map = collections.OrderedDict()
     for stmt in self.input_stmts:
-      tensor = Tensor(stmt, self.tile_size)
+      tensor = soda.tensor.Tensor(stmt, self.tile_size)
       tensor_map[stmt.name] = tensor
 
     def name_in_iter(name, iteration):
@@ -389,7 +251,8 @@ class Stencil():
         return obj
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
-        tensor = Tensor(stmt.visit(mutate_name_callback), self.tile_size)
+        tensor = soda.tensor.Tensor(stmt.visit(mutate_name_callback),
+                                    self.tile_size)
         loads = visitor.get_load_tuple(tensor)
         norm_idx = tuple(min(load.idx[d] for load in loads
                              if load.name not in self.param_names)
@@ -408,7 +271,7 @@ class Stencil():
         tensor.propagate_type()
         loads = visitor.get_load_dict(tensor)
         for parent_name, ld_refs in loads.items():
-          ld_refs = sorted(ld_refs, key=lambda ref: soda_util.serialize(
+          ld_refs = sorted(ld_refs, key=lambda ref: soda.util.serialize(
               ref.idx, self.tile_size))
           parent_tensor = tensor_map[parent_name]
           parent_tensor.children[tensor.name] = tensor
@@ -455,7 +318,7 @@ class Stencil():
               child.name,
               ', '.join([x.name for x in child.parents.values()]),
               'is' if len(child.parents) == 1 else 'are')
-          stage_offset = soda_util.serialize(child.st_idx, self.tile_size)
+          stage_offset = soda.util.serialize(child.st_idx, self.tile_size)
 
           # synchronization check
           def sync(tensor, offset):
@@ -463,7 +326,7 @@ class Stencil():
               return offset
             _logger.debug('index of tensor <%s>: %s',
                           tensor.name, tensor.st_idx)
-            stage_offset = soda_util.serialize(tensor.st_idx, self.tile_size)
+            stage_offset = soda.util.serialize(tensor.st_idx, self.tile_size)
             _logger.debug('offset of tensor <%s>: %d',
                           tensor.name, stage_offset)
             loads = visitor.get_load_dict(tensor)
@@ -473,7 +336,7 @@ class Stencil():
                 '%s@%s' % (name, util.lst2str(map(util.idx2str, indices)))
                 for name, indices in loads.items()))
             for n in loads:
-              loads[n] = soda_util.serialize_iter(loads[n], self.tile_size)
+              loads[n] = soda.util.serialize_iter(loads[n], self.tile_size)
             for l in loads.values():
               l[0], l[-1] = (stage_offset - max(l), stage_offset - min(l))
               del l[1:-1]
@@ -564,8 +427,8 @@ class Stencil():
     for tensor in self.tensors.values():
       for name, offsets in tensor.ld_offsets.items():
         _logger.debug('stage offset: %s@%d <- %s@%s',
-                      tensor.name, soda_util.serialize(tensor.st_idx,
-                                                  self.tile_size),
+                      tensor.name, soda.util.serialize(tensor.st_idx,
+                                                       self.tile_size),
                       name, util.lst2str(offsets))
     for tensor in self.tensors.values():
       for name, delay in tensor.ld_delays.items():
@@ -598,11 +461,11 @@ class Stencil():
 
   @cached_property.cached_property
   def producer_tensors(self):
-    return tuple(filter(Tensor.is_producer, self.tensors.values()))
+    return tuple(filter(soda.tensor.Tensor.is_producer, self.tensors.values()))
 
   @cached_property.cached_property
   def consumer_tensors(self):
-    return tuple(filter(Tensor.is_consumer, self.tensors.values()))
+    return tuple(filter(soda.tensor.Tensor.is_consumer, self.tensors.values()))
 
   # return [Tensor, ...]
   def _get_parent_tensors_for(self, node):
@@ -616,7 +479,7 @@ class Stencil():
     load_names = {l.name for l in loads
             if l.name not in self.extra_params}
     windows = {name: sorted({l.idx for l in loads if l.name == name},
-                key=lambda x: soda_util.serialize(x, self.tile_size))
+                key=lambda x: soda.util.serialize(x, self.tile_size))
            for name in load_names}
     _logger.debug('window for %s@(%s) is %s' %
       (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
@@ -773,7 +636,7 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
   A_dag = set()
   for child in tensor.children.values():
     A_dag |= unroll_offsets(
-      soda_util.serialize_iter(child.ld_indices[tensor.name], tile_size), child)
+      soda.util.serialize_iter(child.ld_indices[tensor.name], tile_size), child)
   _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
@@ -856,7 +719,7 @@ def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
     tensor.name)
   A_dag = set()
   for stage in tensor.children:
-    offsets = soda_util.serialize_iter(stage.window[tensor.name], tile_size)
+    offsets = soda.util.serialize_iter(stage.window[tensor.name], tile_size)
     A_dag |= {max(offsets)-offset+stage.delay[tensor.name]
       for offset in offsets}
   _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
@@ -872,7 +735,7 @@ def _get_replicated_points(tile_size, tensor):
   all_points = {} # {name:{offset:point_index}}
   for stage in tensor.children:
     all_points[stage.name] = {}
-    offsets = soda_util.serialize_iter(stage.window[tensor.name], tile_size)
+    offsets = soda.util.serialize_iter(stage.window[tensor.name], tile_size)
     max_offset = max(offsets)
     for idx, offset in enumerate(offsets):
       all_points[stage.name][
@@ -904,8 +767,8 @@ def get_indices_id(indices):
   return '_'.join(str(idx).replace('-', 'm') for idx in indices)
 
 def get_stencil_distance(stencil_window, tile_size):
-  return (max(soda_util.serialize_iter(stencil_window, tile_size)) +
-          soda_util.serialize(get_stencil_window_offset(stencil_window),
+  return (max(soda.util.serialize_iter(stencil_window, tile_size)) +
+          soda.util.serialize(get_stencil_window_offset(stencil_window),
                               tile_size))
 
 def get_stencil_dim(points):
