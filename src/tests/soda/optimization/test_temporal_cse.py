@@ -275,6 +275,8 @@ class TestGreedySchedules(TestCommSchedules):
         aattrs[y * m + x] = (x - m // 2) ** 2 + (y - n // 2) ** 2
     schedule = self.Schedules(rattrs, aattrs, cache=self.cache).best
     self.assertEqual(70, schedule.cost)
+    schedule = self.Schedules(rattrs, cache=self.cache).best
+    self.assertEqual(15, schedule.cost)
 
   def test_16x16_temporal_cse(self):
     m, n = 16, 16
