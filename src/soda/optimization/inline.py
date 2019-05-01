@@ -20,18 +20,18 @@ def inline(stencil):
         visitor.get_load_dict(stmt.expr).items()):
       if var_name in stencil.input_names:
         continue
-      loads.setdefault(var_name, {}).update(zip(load_list,
-                                                itertools.repeat(stmt)))
+      loads.setdefault(var_name, set()).update(zip(load_list,
+                                               itertools.repeat(stmt)))
   _logger.debug('loads: %s', {k: util.lst2str(v) for k, v in loads.items()})
 
-  loads = {var_name: load_dict
-           for var_name, load_dict in loads.items()
-           if len(load_dict) == 1}
+  loads = {var_name: load_set
+           for var_name, load_set in loads.items()
+           if len(load_set) == 1}
   if not loads:
     return stencil
 
-  for var_name, load_dict in loads.items():
-    load, load_stmt = next(iter(load_dict.items()))
+  for var_name, load_set in loads.items():
+    load, load_stmt = next(iter(load_set))
     idx, store_stmt = 0, stencil.local_stmts[0]
     for idx, store_stmt in enumerate(stencil.local_stmts):
       if store_stmt.name == var_name:
