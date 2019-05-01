@@ -1,3 +1,4 @@
+import collections
 import itertools
 import logging
 
@@ -14,32 +15,42 @@ def inline(stencil):
   if not stencil.local_stmts:
     return stencil
 
-  loads = {}
+  refs = {}   # type: Dict[str, Set[Tuple[ir.Ref, ir.LocalOrOutputStmt]]]
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
-    for var_name, load_list in itertools.chain(
-        *(visitor.get_load_dict(let).items() for let in stmt.let),
-        visitor.get_load_dict(stmt.expr).items()):
-      if var_name in stencil.input_names:
+    for var_name, ref_list in visitor.get_load_dict(stmt).items():
+      if var_name in stencil.input_names or var_name == stmt.name:
         continue
-      loads.setdefault(var_name, set()).update(zip(load_list,
-                                               itertools.repeat(stmt)))
-  _logger.debug('loads: %s', {k: util.lst2str(v) for k, v in loads.items()})
+      refs.setdefault(var_name, set()).update(zip(ref_list,
+                                                  itertools.repeat(stmt)))
 
-  loads = {var_name: load_set
-           for var_name, load_set in loads.items()
-           if len(load_set) == 1}
-  if not loads:
+  refs = {name: next(iter(ref_set))
+          for name, ref_set in refs.items() if len(ref_set) == 1}
+  if not refs:
     return stencil
 
-  for var_name, load_set in loads.items():
-    load, load_stmt = next(iter(load_set))
-    idx, store_stmt = 0, stencil.local_stmts[0]
-    for idx, store_stmt in enumerate(stencil.local_stmts):
-      if store_stmt.name == var_name:
-        break
+  # sort loads to avoid referencing wrong stmt
+  local_stmt_table = {stmt.name: idx
+                      for idx, stmt in enumerate(stencil.local_stmts)}
+  ref_queue = collections.deque(list(refs.items()))
+  sorted_refs = []   # type: List[Tuple[ir.Ref, ir.LocalOrOutputStmt]]
+  while ref_queue:
+    var_name, (ref, load_stmt) = ref_queue.popleft()
+    store_stmt = stencil.local_stmts[local_stmt_table[ref.name]]
+    accessed_vars = {ref.name for ref in visitor.get_load_set(store_stmt)}
+    queued_vars = {var_name for var_name, _ in ref_queue}
+    _logger.debug('stmt to be removed: %s', store_stmt)
+    _logger.debug('accessed vars: %s', util.lst2str(accessed_vars))
+    _logger.debug('queued vars %s', util.lst2str(queued_vars))
+    if accessed_vars & queued_vars:
+      ref_queue.append((var_name, (ref, load_stmt)))
     else:
-      raise util.InputError('stmt %s referenced but not defined' % var_name)
-    offset = tuple(a - b for a, b in zip(store_stmt.ref.idx, load.idx))
+      sorted_refs.append((var_name, (ref, load_stmt)))
+
+  for var_name, (ref, load_stmt) in sorted_refs:
+    idx, store_stmt = {
+        stmt.name: (idx, stmt)
+        for idx, stmt in enumerate(stencil.local_stmts)}[var_name]
+    offset = tuple(a - b for a, b in zip(store_stmt.ref.idx, ref.idx))
     ref = mutator.shift(store_stmt.ref, offset)
     lets = tuple(mutator.shift(let, offset) for let in store_stmt.let)
     expr = mutator.shift(store_stmt.expr, offset)
