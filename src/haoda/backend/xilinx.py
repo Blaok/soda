@@ -25,7 +25,7 @@ class Vivado(subprocess.Popen):
     self.tcl_file.write(commands)
     self.tcl_file.flush()
     cmd_args = ['vivado', '-mode', 'batch', '-source', self.tcl_file.name,
-                '-nojournal', '-nolog', '-tclargs', *args]
+                '-nojournal', '-tclargs', *args]
     pipe_args = {'stdout' : subprocess.PIPE, 'stderr' : subprocess.PIPE}
     super().__init__(cmd_args, cwd=self.cwd.name, **pipe_args)
 
@@ -45,7 +45,7 @@ class VivadoHls(subprocess.Popen):
     self.tcl_file = open(os.path.join(self.cwd.name, 'tcl'), mode='w+')
     self.tcl_file.write(commands)
     self.tcl_file.flush()
-    cmd_args = ['vivado_hls', '-f', self.tcl_file.name, '-l', '/dev/null']
+    cmd_args = ['vivado_hls', '-f', self.tcl_file.name]
     pipe_args = {'stdout' : subprocess.PIPE, 'stderr' : subprocess.PIPE}
     super().__init__(cmd_args, cwd=self.cwd.name, **pipe_args)
 
