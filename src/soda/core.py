@@ -17,6 +17,7 @@ from soda import dataflow
 from soda import grammar
 from soda import visitor
 from soda import mutator
+from soda.optimization import inline
 from soda.optimization import temporal_cse
 import soda.util
 import soda.tensor
@@ -129,6 +130,8 @@ class Stencil():
 
     if 'temporal_cse' in self.optimizations:
       temporal_cse.temporal_cse(self)
+    if 'inline' in self.optimizations:
+      inline.inline(self)
 
     # soda frontend successfully parsed
     # triggers cached property
