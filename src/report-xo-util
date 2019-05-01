@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 
+from haoda import util
 from haoda.report.xilinx import rtl
 
 logging.basicConfig(level=logging.WARNING,
@@ -11,8 +12,13 @@ logging.basicConfig(level=logging.WARNING,
 _logger = logging.getLogger().getChild(os.path.basename(__file__))
 
 if __name__ == '__main__':
-  with rtl.ReportXoUtil(sys.stdin.buffer, sys.stdout) as proc:
-    stdout, stderr = proc.communicate()
-  log_func = _logger.error if proc.returncode != 0 else _logger.debug
-  log_func(stdout.decode())
-  log_func(stderr.decode())
+  try:
+    with rtl.ReportXoUtil(sys.stdin.buffer, sys.stdout) as proc:
+      stdout, stderr = proc.communicate()
+  except util.InternalError:
+    _logger.error(stdout.decode())
+    _logger.error(stderr.decode())
+  else:
+    log_func = _logger.error if proc.returncode != 0 else _logger.debug
+    log_func(stdout.decode())
+    log_func(stderr.decode())
