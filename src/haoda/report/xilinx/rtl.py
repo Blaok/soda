@@ -17,10 +17,8 @@ from haoda.backend import xilinx as backend
 
 REPORT_UTIL_COMMANDS = r'''
 read_verilog [ glob {hdl_dir}/*.v ]
-foreach tcl_file [ glob -nocomplain {hdl_dir}/*.tcl ] {{
-  source ${{tcl_file}}
-}}
-
+read_ip [ glob {hdl_dir}/*/*.xci ]
+generate_target synthesis [ get_files *.xci ]
 synth_design {synth_args}
 report_utilization {report_util_args}
 '''
