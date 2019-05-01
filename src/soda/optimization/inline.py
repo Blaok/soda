@@ -51,7 +51,7 @@ def inline(stencil):
     del stencil.local_stmts[idx]
 
   # invalidate cached_property
-  del stencil.__dict__['symbol_table']
-  del stencil.__dict__['local_names']
-  del stencil.__dict__['local_types']
+  stencil.__dict__.pop('symbol_table', None)
+  stencil.__dict__.pop('local_names', None)
+  stencil.__dict__.pop('local_types', None)
   return inline(stencil)
