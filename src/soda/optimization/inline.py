@@ -2,6 +2,7 @@ import itertools
 import logging
 
 from haoda import util
+from haoda.ir import arithmetic
 from soda import mutator
 from soda import visitor
 
@@ -54,4 +55,10 @@ def inline(stencil):
   stencil.__dict__.pop('symbol_table', None)
   stencil.__dict__.pop('local_names', None)
   stencil.__dict__.pop('local_types', None)
+
+  for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
+    _logger.debug('simplify  : %s', stmt)
+    stmt.expr = arithmetic.simplify(stmt.expr)
+    stmt.let = arithmetic.simplify(stmt.let)
+    _logger.debug('simplified:  %s', stmt)
   return inline(stencil)

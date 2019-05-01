@@ -250,9 +250,10 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
   stencil.__dict__.pop('local_types', None)
 
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
-    _logger.debug('simplify %s', stmt.name)
+    _logger.debug('simplify:   %s', stmt)
     stmt.expr = arithmetic.simplify(stmt.expr)
     stmt.let = arithmetic.simplify(stmt.let)
+    _logger.debug('simplified: %s', stmt)
   return stencil
 
 class ScheduleBase:
