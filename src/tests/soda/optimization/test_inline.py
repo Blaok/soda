@@ -88,5 +88,27 @@ r'''output float:
   float l = t0(3, 6)
   t2(4, 2) = l''')
 
+  def test_access_in_different_stmts(self):
+    program = self.soda_mm.model_from_str(
+r'''
+kernel: blur
+burst width: 512
+unroll factor: 16
+input float: t0(233, *)
+local float: t1(-1, -2) = t0(0, 1)
+local float: t2(0, 0) = t1(0, 0)
+output float: t3(4, 2) = t2(0, 0) + t1(0, 0) + t2(0, 1)
+iterate: 1
+border: preserve
+cluster: none
+''')
+    args = {**program.__dict__, **{'replication_factor': 1}}
+    stencil = core.Stencil(**args)
+    inline.inline(stencil)
+    self.assertEqual(len(stencil.local_stmts), 2)
+    self.assertEqual(len(stencil.output_stmts), 1)
+    self.assertEqual(str(stencil.output_stmts[0]),
+                     'output float: t3(4, 2) = t2(0, 0) + t1(0, 0) + t2(0, 1)')
+
 if __name__ == '__main__':
   unittest.main()
