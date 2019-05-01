@@ -245,9 +245,9 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
   stencil.local_stmts.extend(new_local_stmts)
 
   # invalidate cached_property
-  del stencil.__dict__['symbol_table']
-  del stencil.__dict__['local_names']
-  del stencil.__dict__['local_types']
+  stencil.__dict__.pop('symbol_table', None)
+  stencil.__dict__.pop('local_names', None)
+  stencil.__dict__.pop('local_types', None)
 
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     _logger.debug('simplify %s', stmt.name)
