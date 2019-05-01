@@ -27,7 +27,7 @@ from haoda.ir import arithmetic
 from haoda.ir.arithmetic import base
 from soda import grammar
 from soda import mutator
-from soda import visitor as soda_visitor
+import soda.visitor
 
 RelativeAttr = int
 AbsoluteAttr = int
@@ -57,7 +57,7 @@ def extract_attr(node: ir.Node) -> Tuple[Tuple[int, ...], ir.Node]:
   Returns:
     Tuple of rattr and aattr.
   """
-  load = soda_visitor.get_load_set(node)[0]
+  load = soda.visitor.get_load_set(node)[0]
   return load.idx, mutator.shift(node, load.idx)
 
 def assemble_attr(rattr: Tuple[int, ...], aattr: ir.Node) -> ir.Node:
@@ -872,11 +872,11 @@ class Expression:
       if self.operator not in ('+', '*'):
         raise Expression.CannotHandle('%s operator' % self.operator)
       for operand in polynomial.operand:  # type: ignore
-        if len(soda_visitor.get_load_set(operand)) > 1:
+        if len(soda.visitor.get_load_set(operand)) > 1:
           raise Expression.CannotHandle('multi-index operands', operand)
       self.operands = tuple(sorted(
           polynomial.operand,   # type: ignore
-          key=lambda x: tuple(reversed(soda_visitor.get_load_set(x)[0].idx))))
+          key=lambda x: tuple(reversed(soda.visitor.get_load_set(x)[0].idx))))
       rattrs, aattrs = zip(*map(extract_attr, self.operands))
       self.aattrs_as_ir_nodes = aattrs
 
