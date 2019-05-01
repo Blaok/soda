@@ -1,11 +1,26 @@
-import collections
-import logging
+from typing import (
+  overload,
+  Callable,
+  Iterable,
+)
 
+import collections
+
+from haoda import ir
 from haoda.ir.arithmetic import base
 
-_logger = logging.getLogger().getChild(__name__)
+# pylint: disable=function-redefined
+@overload
+def simplify(expr: ir.Node, logger: Callable[..., None] = None) -> ir.Node:
+  ...
 
-def simplify(expr):
+# pylint: disable=function-redefined
+@overload
+def simplify(expr: Iterable[ir.Node], logger: Callable[..., None] = None) \
+    -> Iterable[ir.Node]:
+  ...
+
+def simplify(expr, logger=None):
   """Simplifies expressions.
 
   Args:
@@ -16,12 +31,15 @@ def simplify(expr):
   """
 
   if expr is None:
-    _logger.debug('None expr, no simplification.')
+    if logger is not None:
+      logger.debug('None expr, no simplification.')
     return expr
 
-  passes = base.compose(
-      base.flatten,
-      base.print_tree)
+  passes = base.flatten
+  if logger is not None:
+    passes = base.compose(
+        passes,
+        lambda node: base.print_tree(node, logger))
 
   if isinstance(expr, collections.Iterable):
     return type(expr)(map(passes, expr))
