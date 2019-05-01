@@ -227,12 +227,12 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
     return node
 
   new_local_stmts = []
-  cses = {}   # type: Dict[ir.BinaryOp, str]
-  used = {}   # type: Dict[ir.BinaryOp, ir.BinaryOp]
+  cses = OrderedDict()   # type: Dict[ir.BinaryOp, str]
+  used = OrderedDict()   # type: Dict[ir.BinaryOp, ir.BinaryOp]
   transform = lambda node: propagate_type(node).visit(visitor, (cses, used))
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
-    cses = {}
-    used = {}
+    cses.clear()
+    used.clear()
     stmt.expr = transform(stmt.expr)
     stmt.let = tuple(map(transform, stmt.let))
     # used points to old exprs so here it has to propagate type again
