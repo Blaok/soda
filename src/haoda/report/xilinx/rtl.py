@@ -94,8 +94,11 @@ class ReportXoUtil(backend.Vivado):
 
   def __exit__(self, *args):
     super().__exit__(*args)
-    with open(self.rpt_file_name) as src_rpt_file:
-      shutil.copyfileobj(src_rpt_file, self.rpt_file)
+    try:
+      with open(self.rpt_file_name) as src_rpt_file:
+        shutil.copyfileobj(src_rpt_file, self.rpt_file)
+    except FileNotFoundError:
+      raise util.InternalError('failed to generated report file')
     self.tmpdir.cleanup()
 
 RTL_HLS_INFO_REGEX = r'\(\* CORE_GENERATION_INFO=".*,\{(.*)\}" \*\)'
