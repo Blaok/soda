@@ -125,6 +125,66 @@ class HlsResources:
   def __hash__(self) -> int:
     return hash(tuple(self[r] for r in HlsResources.RESOURCES))
 
+class HlsPerformance:
+  """An object representing the HLS performance estimation.
+
+  Attributes:
+    name: Optional name of the module.
+    ii: Integer of pipeline II.
+    depth: Integer of pipeline depth.
+  """
+  def __init__(self, obj: Union['HlsPerformance', ET.Element, TextIO,
+                                None] = None) -> None:
+    """Initialize an HlsPerformance from another HlsPerformance, a report, or
+    None.
+
+    If obj is another HlsPerformance, it will be copied.
+    If obj is an xml.etree.ElementTree.Element, it has to be pointing to a
+      valid HLS report XML tree.
+    If obj is an io.TextIOBase, it will be parsed as a valid HLS report XML.
+    If obj is None, the ii and depth will be 0.
+
+    Args:
+      obj: Object used for initialization.
+
+    Raises:
+      TypeError: If obj is not of a correct type.
+    """
+    self.name, self.ii, self.depth = None, 0, 0
+    if isinstance(obj, HlsPerformance):
+      self.name, self.ii, self.depth = obj.name, obj.ii, obj.depth
+      return
+    if isinstance(obj, ET.Element):
+      self.init_from_xml_element(obj)
+      return
+    if isinstance(obj, io.TextIOBase):
+      self.init_from_xml_element(ET.parse(obj).getroot())
+      return
+    if obj is None:
+      return
+    raise TypeError('obj must be '
+                    'an xml.etree.ElementTree.Element object or '
+                    'another HlsPerformances object or '
+                    'an io.TextIOBase object or '
+                    'None')
+
+  def init_from_xml_element(self, elem: ET.Element) -> 'HlsPerformance':
+    """Initialize self from an xml.etree.ElementTree.Element.
+
+    Initialize self from an xml.etree.ElementTree.Element.
+
+    Args:
+      elem: Must be an xml.etree.ElementTree.Element pointing to a valid HLS
+      report XML tree.
+
+    Returns:
+      Updated self.
+    """
+    for item in elem.findall('PerformanceEstimates/SummaryOfLoopLatency/*'):
+      self.ii = int(item.findtext('PipelineII'))
+      self.depth = int(item.findtext('PipelineDepth'))
+    return self
+
 def resources(obj: Union[TextIO, str]) -> HlsResources:
   """Read HLS resource estimation from HLS report XML.
 
@@ -143,6 +203,27 @@ def resources(obj: Union[TextIO, str]) -> HlsResources:
   if isinstance(obj, str):
     with open(obj, 'r') as fd:
       result = resources(fd)
+    return result
+  raise TypeError('obj must be a text file-like object or a path as str')
+
+def performance(obj: Union[TextIO, str]) -> HlsPerformance:
+  """Read HLS performance estimation from HLS report XML.
+
+  Args:
+    obj: A file-like object or a file path of HLS report XML file, which is used
+      to parse the performance estimation.
+
+  Returns:
+    The HLS performance estimation.
+
+  Raises:
+    TypeError: If obj is not a text file-like object nor a path as str.
+  """
+  if isinstance(obj, io.TextIOBase):
+    return HlsPerformance(obj)
+  if isinstance(obj, str):
+    with open(obj, 'r') as fd:
+      result = performance(fd)
     return result
   raise TypeError('obj must be a text file-like object or a path as str')
 
