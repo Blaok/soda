@@ -1,9 +1,10 @@
 from typing import (
+    BinaryIO,
+    Dict,
     Optional,
-    TextIO
 )
 import collections
-import concurrent
+import concurrent.futures
 import json
 import logging
 import os
@@ -20,8 +21,9 @@ from soda.codegen.xilinx import hls_kernel
 
 _logger = logging.getLogger().getChild(__name__)
 
-def print_code(stencil: core.Stencil, xo_file: TextIO,
-               platform: Optional[str] = None, jobs: int = os.cpu_count(),
+def print_code(stencil: core.Stencil, xo_file: BinaryIO,
+               platform: Optional[str] = None,
+               jobs: Optional[int] = os.cpu_count(),
                rpt_file: Optional[str] = None) -> None:
   """Generate hardware object file for the given Stencil.
 

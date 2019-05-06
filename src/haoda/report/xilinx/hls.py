@@ -1,10 +1,12 @@
 #!/usr/bin/python3
 from typing import (
-    Iterable,
+    Iterator,
+    Optional,
     TextIO,
     Tuple,
     Union
 )
+
 import io
 import sys
 import xml.etree.ElementTree as ET
@@ -36,7 +38,7 @@ class HlsResources:
     Raises:
       TypeError: If obj is not of a correct type.
     """
-    self.name = None
+    self.name = None  # type: Optional[str]
     if isinstance(obj, HlsResources):
       self.name = obj.name
       for resource in HlsResources.RESOURCES:
@@ -75,10 +77,10 @@ class HlsResources:
       Updated self.
     """
     if item == 'Resources':
-      self.name = elem.find('UserAssignments').find('TopModelName').text
-    items = elem.find('AreaEstimates').find(item)
+      self.name = elem.findtext('UserAssignments/TopModelName')
     for resource in HlsResources.RESOURCES:
-      self[resource] = int(items.find(resource).text)
+      self[resource] = int(elem.findtext(
+          '/'.join(('AreaEstimates', item, resource))))
     return self
 
   def __getitem__(self, key: str) -> int:
@@ -88,10 +90,11 @@ class HlsResources:
 
   def __setitem__(self, key: str, value: int) -> int:
     if key in HlsResources.RESOURCES:
-      return setattr(self, key, value)
+      setattr(self, key, value)
+      return value
     raise ValueError('invalid key: %s' % key)
 
-  def __iter__(self) -> Iterable[Tuple[str, int]]:
+  def __iter__(self) -> Iterator[Tuple[str, int]]:
     return ((r, self[r]) for r in HlsResources.RESOURCES)
 
   def __str__(self) -> str:
@@ -113,10 +116,12 @@ class HlsResources:
   def __mul__(self, other: float) -> 'HlsResources':
     result = HlsResources(self)
     for resource in HlsResources.RESOURCES:
-      result[resource] *= other
+      result[resource] = int(result[resource] * other)
     return result
 
-  def __eq__(self, other: 'HlsResources') -> bool:
+  def __eq__(self, other) -> bool:
+    if not isinstance(other, HlsResources):
+      raise NotImplementedError
     for resource in HlsResources.RESOURCES:
       if self[resource] != other[resource]:
         return False
