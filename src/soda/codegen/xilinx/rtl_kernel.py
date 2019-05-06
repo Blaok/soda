@@ -107,6 +107,7 @@ def print_code(stencil: core.Stencil, xo_file: TextIO,
           sys.exit(returncode)
 
     # generate HLS report
+    depths = {}   # type: Dict[int, int]
     hls_resources = hls_report.resources(
         os.path.join(tmpdir, 'report', top_name + '_csynth.xml'))
     hls_resources -= hls_report.resources(
@@ -117,8 +118,11 @@ def print_code(stencil: core.Stencil, xo_file: TextIO,
       report_file = os.path.join(tmpdir, 'report', module_name + '_csynth.xml')
       hls_resource = hls_report.resources(report_file)
       use_count = len(nodes)
-      _logger.info('%s, usage: %5d times', hls_resource, use_count)
+      perf = hls_report.performance(report_file)
+      _logger.info('%s, usage: %5d times, II: %3d, Depth: %3d', hls_resource,
+                   use_count, perf.ii, perf.depth)
       hls_resources += hls_resource * use_count
+      depths[module_id] = perf.depth
     _logger.info('total usage:')
     _logger.info(hls_resources)
     if rpt_file:
@@ -126,6 +130,9 @@ def print_code(stencil: core.Stencil, xo_file: TextIO,
                                          list(hls_resources))
       with open(rpt_file, mode='w') as rpt_fileobj:
         json.dump(rpt_json, rpt_fileobj, indent=2)
+
+    # update the module pipeline depths
+    stencil.dataflow_super_source.update_module_depths(depths)
 
     hdl_dir = os.path.join(tmpdir, 'hdl')
     with open(os.path.join(hdl_dir, 'Dataflow.v'), mode='w') as dataflow_v:

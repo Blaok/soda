@@ -51,6 +51,28 @@ class SuperSourceNode(ir.Module):
                           extra_depth, (parent, node))
     return self._extra_depths.get(edge, 0)
 
+  def update_module_depths(self, depths: Dict[str, int]):
+    for src_node in self.tpo_node_gen():
+      for dst_node in src_node.children:
+        module_id = self.module_table[src_node][1]
+        if module_id in depths:
+          fifo = src_node.fifo(dst_node)
+          if fifo.write_lat != depths[module_id]:
+            _logger.debug('%s write latency changed %s -> %d', fifo,
+                          fifo.write_lat, depths[module_id])
+            fifo.write_lat = depths[module_id]
+
+    if hasattr(self, '_extra_depths'):
+      del self._extra_depths
+    for src_node in self.tpo_node_gen():
+      for dst_node in src_node.children:
+        new_depth = self.get_extra_depth((src_node, dst_node))
+        fifo = src_node.fifo(dst_node)
+        if fifo.depth != new_depth:
+          _logger.debug('%s depth changed %d -> %d',
+                        fifo, fifo.depth, new_depth)
+          fifo.depth = new_depth
+
   @property
   def name(self):
     return 'super_source'
@@ -370,9 +392,9 @@ def create_dataflow_graph(stencil):
         def replace_refs_callback(obj, args):
           if isinstance(obj, ir.Ref):
             _logger.debug('replace %s with %s', obj,
-                          # pylint: disable=cell-var-from-loop
+            # pylint: disable=cell-var-from-loop,undefined-loop-variable
                           src_node.fifo_map[obj.name][obj.idx])
-            # pylint: disable=cell-var-from-loop
+            # pylint: disable=cell-var-from-loop,undefined-loop-variable
             return src_node.fifo_map[obj.name][obj.idx]
           return obj
         _logger.debug('lets: %s', src_node.tensor.lets)
@@ -404,10 +426,7 @@ def create_dataflow_graph(stencil):
                     '' if fifo.write_lat is None else ' ~%d' % fifo.write_lat,
                     color_id(dst_node))
 
-  for src_node in super_source.tpo_node_gen():
-    for dst_node in src_node.children:
-      src_node.fifo(dst_node).depth += super_source.get_extra_depth(
-          (src_node, dst_node))
+  super_source.update_module_depths({})
 
   for src_node, dst_node in super_source.bfs_edge_gen():
     fifo = src_node.fifo(dst_node)
