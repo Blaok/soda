@@ -1,5 +1,5 @@
 from typing import (
-    overload,
+    Any,
     Callable,
     Dict,
     FrozenSet,
@@ -12,12 +12,17 @@ from typing import (
     Tuple,
     Type,
     Union,
+    overload,
 )
+
 import collections
 import itertools
+import json
 import logging
 import operator
+import os
 import random
+import subprocess
 
 import cached_property
 
@@ -823,6 +828,37 @@ class GreedySchedules(ScheduleBase):
 
   def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
     return
+
+class ExternalSchedules(ScheduleBase):
+  """Schedules of an Expression, found externally.
+  """
+  def __init__(self, rattrs: Tuple[RelativeAttr, ...],
+               aattrs: Optional[Tuple[
+                   Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               cache: Optional[Dict] = None) -> None:
+    super().__init__(rattrs, aattrs)  # type: ignore
+
+  def from_json(self, j: Dict[str, Any]) -> CommSchedule:
+    left, right = j['left'], j['right']
+    if isinstance(left, dict):
+      left = self.from_json(left)
+    if isinstance(right, dict):
+      right = self.from_json(right)
+    return CommSchedule(left, right, j['distance'], self.rattrs, self.aattrs)
+
+  @cached_property.cached_property
+  def best(self) -> CommSchedule:
+    attrs = {'rattrs': self.rattrs,
+              'aattrs': self.aattrs or [1] * len(self.rattrs)}
+    result = json.loads(subprocess.run(
+      [os.path.join(os.path.dirname(__file__), '..', '..', '..', 'tcse',
+                    'tcse')],
+      input=json.dumps(attrs), stdout=subprocess.PIPE,
+      universal_newlines=True).stdout)
+    return self.from_json(result)
+
+  def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
+    pass
 
 Schedule = CommSchedule
 Schedules = GreedySchedules
