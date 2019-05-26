@@ -241,16 +241,21 @@ class TestGreedySchedules(TestCommSchedules):
 
   def test_3x3_tcse(self):
     """Test a 3x3 temporal CSE case."""
-    rattrs = (0, 1, 2, 10, 11, 12, 20, 21, 22)
-    schedules = self.Schedules(rattrs, None, cache=self.cache)
-    schedule = schedules.best
-    schedules.print_stats()
-    self.assertEqual(4, schedule.cost)
-    aattrs = (1, 1, 1, 1, 3, 1, 1, 1, 1)
-    schedules = self.Schedules(rattrs, aattrs, cache=self.cache)
-    schedule = schedules.best
-    schedules.print_stats()
-    self.assertEqual(5, schedule.cost)
+    rattrs = 0, 1, 2, 5, 6, 7, 10, 11, 12
+    def test(aattrs, cost=None, total_distance=None):
+      schedules = self.Schedules(rattrs, aattrs)
+      schedule = schedules.best
+      schedules.print_stats()
+      _logger.debug('schedule: %s', schedule)
+      if cost is not None:
+        self.assertEqual(cost, schedule.cost)
+      if total_distance is not None:
+        self.assertEqual(total_distance, schedule.total_distance)
+    test(None, cost=4, total_distance=12)
+    test((1, 1, 1, 1, 3, 1, 1, 1, 1), cost=5, total_distance=13)
+    test((1, 1, 2, 3, 3, 1, 4, 4, 1), cost=6, total_distance=22)
+    test((4, 1, 3, 0, 2, 3, 5, 6, 2), cost=8, total_distance=12)
+    test((7, 6, 7, 2, 1, 7, 2, 1, 7), cost=6, total_distance=12)
 
   def test_5x5_tcse(self):
     """Test a 5x5 temporal CSE case."""

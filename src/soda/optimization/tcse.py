@@ -20,7 +20,6 @@ import itertools
 import json
 import logging
 import operator
-import os
 import random
 import subprocess
 
@@ -392,6 +391,10 @@ class CommSchedule(ScheduleBase):
   def cost(self) -> int:
     return len(set(self.children))
 
+  @cached_property.cached_property
+  def total_distance(self) -> int:
+    return sum(child.distance for child in set(self.children))
+
   def get_attrs_with_offset(self, offset: int = 0) -> Iterator[Attr]:
     """Generate all attributes with the given offset.
 
@@ -749,23 +752,23 @@ class GreedySchedules(ScheduleBase):
       CommSchedule of the attributes, scheduled as a linear tree.
     """
     indices = tuple(indices)
-    distance = self.rattrs[indices[-1]] - self.rattrs[indices[0]]
+    distance = self.rattrs[indices[1]] - self.rattrs[indices[0]]
     other_args = distance, self.rattrs, self.aattrs
     if len(indices) == 2:
       if self.aattrs is None:
         return CommSchedule(None, None, *other_args)
-      return CommSchedule(self.aattrs[indices[0]], self.aattrs[indices[-1]],
+      return CommSchedule(self.aattrs[indices[0]], self.aattrs[indices[1]],
                           *other_args)
     if self.aattrs is None:
-      return CommSchedule(self.linear_schedule(indices[:-1]), None, *other_args)
-    return CommSchedule(self.linear_schedule(indices[:-1]),
-                        self.aattrs[indices[-1]], *other_args)
+      return CommSchedule(None, self.linear_schedule(indices[1:]), *other_args)
+    return CommSchedule(self.aattrs[indices[0]],
+                        self.linear_schedule(indices[1:]), *other_args)
 
   @property
   def generator(self) -> Iterator[CommSchedule]:
     attr_map = {attr: idx for idx, attr in enumerate(self)}
-    reuses = {}   # type: Dict[CommSchedule, List[Tuple[int, int]]]
-    for left, right in itertools.combinations(self, 2):
+    reuses = OrderedDict()  # type: Dict[CommSchedule, List[Tuple[int, int]]]
+    for left, right in reversed(list(itertools.combinations(self, 2))):
       left_rattr, left_aattr = left
       right_rattr, right_aattr = right
       operation = CommSchedule(
@@ -777,7 +780,7 @@ class GreedySchedules(ScheduleBase):
       # look for reuse of this operation over all operands
       used = set()  # type: Set[int]
       reuses[operation] = []
-      for idx_l, (rattr_l, aattr_l) in enumerate(self):
+      for idx_l, (rattr_l, aattr_l) in reversed(list(enumerate(self))):
         if aattr_l != left_aattr or idx_l in used:
           continue
         rattr_r, aattr_r = rattr_l + right_rattr - left_rattr, right_aattr
@@ -851,9 +854,7 @@ class ExternalSchedules(ScheduleBase):
     attrs = {'rattrs': self.rattrs,
               'aattrs': self.aattrs or [1] * len(self.rattrs)}
     result = json.loads(subprocess.run(
-      [os.path.join(os.path.dirname(__file__), '..', '..', '..', 'tcse',
-                    'tcse')],
-      input=json.dumps(attrs), stdout=subprocess.PIPE,
+      ['tcse'], input=json.dumps(attrs), stdout=subprocess.PIPE, shell=True,
       universal_newlines=True).stdout)
     return self.from_json(result)
 
