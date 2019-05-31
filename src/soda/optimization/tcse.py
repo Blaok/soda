@@ -24,6 +24,7 @@ import random
 import subprocess
 
 import cached_property
+import pulp
 
 from haoda import ir
 from haoda import util
@@ -393,7 +394,151 @@ class CommSchedule(ScheduleBase):
 
   @cached_property.cached_property
   def total_distance(self) -> int:
-    return sum(child.distance for child in set(self.children))
+    """Calculate the total reuse distance.
+
+    The total reuse distance is a measure of hardware resource cost in terms of
+    required reuse buffer size. It is calculated by summing up the reuse
+    distance of all reused variables. The reused distance is determined by the
+    offset when a variable is first produced and last consumed. The latter is
+    static and the former is calculated via solving an ILP.
+
+    Returns:
+      The total reuse distance.
+    """
+    def get_attrs(schedule: CommSchedule, reuses: Dict[Schedule, int],
+                  offset: Optional[int] = None) -> Iterator[Tuple[int, int]]:
+      """Get all accesses of variables in a schedule.
+
+      Args:
+        schedule: The CommSchedule to work on.
+        reuses: Dict mapping a reused CommSchedule to the variable id.
+        offset: The global offset of the input schedule.
+
+      Yields:
+        Tuple of the offset and the variable id.
+      """
+      reused_vid = reuses.get(schedule)
+      if reused_vid is not None and offset is not None:
+        yield offset, reused_vid
+      else:
+        if offset is None:
+          offset = 0
+        if isinstance(schedule.left, CommSchedule):
+          yield from get_attrs(schedule.left, reuses, offset)
+        else:
+          yield offset, 0
+        offset += schedule.distance
+        if isinstance(schedule.right, CommSchedule):
+          yield from get_attrs(schedule.right, reuses, offset)
+        else:
+          yield offset, 0
+
+    tcse_vars = OrderedDict([(self, 1)])
+    tcse_vars_table = {1: self}
+    # var_0 is input, var_1 is output
+    for child, count in OrderedCounter(self.children).items():
+      if count > 1:
+        tcse_vars[child] = len(tcse_vars) + 1
+        tcse_vars_table[len(tcse_vars)] = child
+    for schedule, vid in tcse_vars.items():
+      _logger.debug('var_%d: %s', vid, schedule)
+
+    vars_to_process = collections.deque([self])
+    vars_processed = {0}
+    dependers = OrderedDict()   # type: Dict[int, Dict[int, None]]
+    dependees = OrderedDict()   # type: Dict[int, Dict[int, Tuple[int, int]]]
+    while vars_to_process:
+      schedule = vars_to_process.popleft()
+      dst_vid = tcse_vars[schedule]
+      vars_processed.add(dst_vid)
+      for offset, src_vid in get_attrs(schedule, tcse_vars):
+        _logger.debug('var_%d accesses var_%d @ %d', dst_vid, src_vid, offset)
+        dependers.setdefault(src_vid, OrderedDict()).setdefault(dst_vid, None)
+        dependees.setdefault(
+            dst_vid, OrderedDict()).setdefault(src_vid, (offset, offset))
+        min_offset, max_offset = dependees[dst_vid][src_vid]
+        dependees[dst_vid][src_vid] = (min(offset, min_offset),
+                                       max(offset, max_offset))
+        if (src_vid not in vars_processed and
+            tcse_vars_table[src_vid] not in vars_to_process):
+          vars_to_process.append(tcse_vars_table[src_vid])
+    def inline() -> Iterator[Tuple[int, int]]:
+      """Inline a variable if it is only accessed once by another variable.
+
+      Yields:
+        Tuple of variable ids of inlined source and destination variables.
+      """
+      for src_vid, dst_vids in dependers.items():
+        for dst_vid in dst_vids:
+          _logger.debug('var_%d accesses var_%d', dst_vid, src_vid)
+        if len(dst_vids) == 1:
+          dst_vid = tuple(dst_vids)[0]
+          min_offset, max_offset = dependees[dst_vid][src_vid]
+          if min_offset == max_offset:
+            _logger.debug('var_%d is only accessed by var_%d @ %d, '
+                          'it should be inlined', src_vid, dst_vid, min_offset)
+            yield src_vid, dst_vid
+            yield from inline()
+            break
+
+    for src_vid, dst_vid in inline():
+      _logger.debug('trying to inline var_%d', src_vid)
+      offset = dependees[dst_vid][src_vid][0]
+      for src_src_vid, (min_offset, max_offset) in dependees[src_vid].items():
+        new_min_offset = min_offset + offset
+        new_max_offset = max_offset + offset
+        _logger.debug('var_%d accesses var_%d @ %d', dst_vid, src_vid, offset)
+        _logger.debug('var_%d accesses var_%d @ [%d, %d]', src_vid, src_src_vid,
+                      min_offset, max_offset)
+        _logger.debug('therefore var_%d accesses var_%d @ [%d, %d] via var_%d',
+                      dst_vid, src_src_vid, new_min_offset, new_max_offset,
+                      src_vid)
+        if src_src_vid in dependees[dst_vid]:
+          _logger.debug('var_%d used to access var_%d @ [%d, %d]', dst_vid,
+                        src_src_vid, *dependees[dst_vid][src_src_vid])
+        old_min_offset, old_max_offset = dependees[dst_vid].get(
+          src_src_vid, (new_min_offset, new_max_offset))
+        dependees[dst_vid][src_src_vid] = (min(old_min_offset, new_min_offset),
+                                           max(old_max_offset, new_max_offset))
+        _logger.debug('after inlining, var_%d accesses var_%d @ [%d, %d]',
+                      dst_vid, src_src_vid, *dependees[dst_vid][src_src_vid])
+      src_src_vids = list(dependees[src_vid])
+      for src_src_vid in src_src_vids:
+        del dependers[src_src_vid][src_vid]
+      del dependers[src_vid]
+      del dependees[dst_vid][src_vid]
+      del dependees[src_vid]
+
+    # solve ILP for optimal offsets
+    lp_problem = pulp.LpProblem("optimal_offsets", pulp.LpMinimize)
+    lp_vars = {0: 0, 1: 0}
+    lp_helper_vars = {}
+    objectives = []
+    for src_vid in dependers:
+      lp_var = pulp.LpVariable('produced_offset_%d' % src_vid, lowBound=0,
+                               cat='Integer')
+      lp_helper_var = pulp.LpVariable('consumed_offset_%d' % src_vid,
+                                      lowBound=0, cat='Integer')
+      lp_vars.setdefault(src_vid, lp_var)
+      lp_helper_vars[src_vid] = lp_helper_var
+      objectives.append(lp_helper_var - lp_vars[src_vid])
+    lp_problem += sum(objectives)
+    for src_vid, dst_vids in dependers.items():
+      for dst_vid in dst_vids:
+        min_offset, max_offset = dependees[dst_vid][src_vid]
+        lp_problem += lp_vars[src_vid] <= min_offset + lp_vars[dst_vid]
+        lp_problem += lp_helper_vars[src_vid] >= max_offset + lp_vars[dst_vid]
+    lp_status = pulp.LpStatus[lp_problem.solve()]
+    _logger.info('ILP problem: %s', lp_problem)
+    _logger.info('ILP status: %s', lp_status)
+    for vid, lp_var in lp_vars.items():
+      if vid in (0, 1):
+        continue
+      _logger.debug('var_%d should be produced @ %d', vid,
+                    int(pulp.value(lp_var)))
+    total_distance = int(pulp.value(lp_problem.objective))
+    _logger.debug('total distance: %s', total_distance)
+    return total_distance
 
   def get_attrs_with_offset(self, offset: int = 0) -> Iterator[Attr]:
     """Generate all attributes with the given offset.
@@ -515,6 +660,16 @@ class CommSchedule(ScheduleBase):
     for relative_cse in relative_cses:
       _logger.debug('relative cse: %s', relative_cse)
     return absolute_cses + relative_cses
+
+def make_schedule_from_json(
+  j: Dict[str, Any], rattrs: Tuple[RelativeAttr, ...],
+  aattrs: Optional[Tuple[AbsoluteAttr, ...]] = None) -> CommSchedule:
+  left, right = j['left'], j['right']
+  if isinstance(left, dict):
+    left = make_schedule_from_json(left, rattrs, aattrs)
+  if isinstance(right, dict):
+    right = make_schedule_from_json(right, rattrs, aattrs)
+  return CommSchedule(left, right, j['distance'], rattrs, aattrs)
 
 class CommSchedules(ScheduleBase):
   """Schedules of an Expression.
@@ -842,12 +997,7 @@ class ExternalSchedules(ScheduleBase):
     super().__init__(rattrs, aattrs)  # type: ignore
 
   def from_json(self, j: Dict[str, Any]) -> CommSchedule:
-    left, right = j['left'], j['right']
-    if isinstance(left, dict):
-      left = self.from_json(left)
-    if isinstance(right, dict):
-      right = self.from_json(right)
-    return CommSchedule(left, right, j['distance'], self.rattrs, self.aattrs)
+    return make_schedule_from_json(j, self.rattrs, self.aattrs,)
 
   @cached_property.cached_property
   def best(self) -> CommSchedule:

@@ -252,8 +252,8 @@ class TestGreedySchedules(TestCommSchedules):
       if total_distance is not None:
         self.assertEqual(total_distance, schedule.total_distance)
     test(None, cost=4, total_distance=12)
-    test((1, 1, 1, 1, 3, 1, 1, 1, 1), cost=5, total_distance=13)
-    test((1, 1, 2, 3, 3, 1, 4, 4, 1), cost=6, total_distance=22)
+    test((1, 1, 1, 1, 3, 1, 1, 1, 1), cost=5, total_distance=21)
+    test((1, 1, 2, 3, 3, 1, 4, 4, 1), cost=6, total_distance=13)
     test((4, 1, 3, 0, 2, 3, 5, 6, 2), cost=8, total_distance=12)
     test((7, 6, 7, 2, 1, 7, 2, 1, 7), cost=6, total_distance=12)
 
