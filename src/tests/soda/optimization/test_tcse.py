@@ -187,7 +187,7 @@ class TestCommSchedules(unittest.TestCase):
     aattrs = (1, 2, 1, 2)
     rattrs = (0, 1, 2, 3)
     schedule = self.Schedules(rattrs, aattrs, cache=self.cache).best
-    self.assertEqual(2, schedule.cost)
+    self.assertEqual(2, schedule.num_ops)
 
   def test_3x2_tcse(self):
     """Test a 3x2 temporal CSE case."""
@@ -195,24 +195,24 @@ class TestCommSchedules(unittest.TestCase):
     schedules = self.Schedules(rattrs, None, cache=self.cache)
     schedule = schedules.best
     schedules.print_stats()
-    self.assertEqual(3, schedule.cost)
+    self.assertEqual(3, schedule.num_ops)
     aattrs = (1, 1, 1, 1, 3, 1)
     schedules = self.Schedules(rattrs, aattrs, cache=self.cache)
     schedule = schedules.best
     schedules.print_stats()
-    self.assertEqual(4, schedule.cost)
+    self.assertEqual(4, schedule.num_ops)
 
   def test_jacobi2d_tcse(self):
     rattrs = (1, 10, 11, 12, 21)
     schedules = self.Schedules(rattrs, None, cache=self.cache)
     schedule = schedules.best
     schedules.print_stats()
-    self.assertEqual(3, schedule.cost)
+    self.assertEqual(3, schedule.num_ops)
     aattrs = (0, 0, 1, 0, 0)
     schedules = self.Schedules(rattrs, aattrs, cache=self.cache)
     schedule = schedules.best
     schedules.print_stats()
-    self.assertEqual(3, schedule.cost)
+    self.assertEqual(3, schedule.num_ops)
 
 class TestCommSchedulesWithoutLazyCartesianProduct(TestCommSchedules):
   def setUp(self):
@@ -242,20 +242,20 @@ class TestGreedySchedules(TestCommSchedules):
   def test_3x3_tcse(self):
     """Test a 3x3 temporal CSE case."""
     rattrs = 0, 1, 2, 5, 6, 7, 10, 11, 12
-    def test(aattrs, cost=None, total_distance=None):
+    def test(aattrs, num_ops=None, total_distance=None):
       schedules = self.Schedules(rattrs, aattrs)
       schedule = schedules.best
       schedules.print_stats()
       _logger.debug('schedule: %s', schedule)
-      if cost is not None:
-        self.assertEqual(cost, schedule.cost)
+      if num_ops is not None:
+        self.assertEqual(num_ops, schedule.num_ops)
       if total_distance is not None:
         self.assertEqual(total_distance, schedule.total_distance)
-    test(None, cost=4, total_distance=12)
-    test((1, 1, 1, 1, 3, 1, 1, 1, 1), cost=5, total_distance=21)
-    test((1, 1, 2, 3, 3, 1, 4, 4, 1), cost=6, total_distance=13)
-    test((4, 1, 3, 0, 2, 3, 5, 6, 2), cost=8, total_distance=12)
-    test((7, 6, 7, 2, 1, 7, 2, 1, 7), cost=6, total_distance=12)
+    test(None, num_ops=4, total_distance=12)
+    test((1, 1, 1, 1, 2, 1, 1, 1, 1), num_ops=5, total_distance=21)
+    test((1, 1, 2, 3, 3, 1, 4, 4, 1), num_ops=6, total_distance=13)
+    test((4, 1, 3, 0, 2, 3, 5, 6, 2), num_ops=8, total_distance=12)
+    test((7, 6, 7, 2, 1, 7, 2, 1, 7), num_ops=6, total_distance=12)
 
   def test_5x5_tcse(self):
     """Test a 5x5 temporal CSE case."""
@@ -264,7 +264,7 @@ class TestGreedySchedules(TestCommSchedules):
                                  itertools.product(range(m), range(n)))))
     rattr = [i * (n * 2 + 1) + j for i in range(m) for j in range(n)]
     schedule = self.Schedules(rattr, cache=self.cache).best
-    self.assertEqual(6, schedule.cost)
+    self.assertEqual(6, schedule.num_ops)
 
   def test_more_tcse(self):
     """Test a more complicated temporal CSE case.
@@ -282,7 +282,7 @@ class TestGreedySchedules(TestCommSchedules):
     rattr = tuple(m * j + i for i in range(m) for j in range(n))
     aattr = tuple(range(1, n + 1)) * m
     schedule = self.Schedules(rattr, aattr, cache=self.cache).best
-    self.assertEqual(5, schedule.cost)
+    self.assertEqual(5, schedule.num_ops)
 
   def test_11x11_tcse(self):
     m, n = 11, 11
@@ -293,9 +293,9 @@ class TestGreedySchedules(TestCommSchedules):
         rattrs[y * m + x] = y * (m * 2 - 1) + x
         aattrs[y * m + x] = (x - m // 2) ** 2 + (y - n // 2) ** 2
     schedule = self.Schedules(rattrs, aattrs, cache=self.cache).best
-    self.assertEqual(70, schedule.cost)
+    self.assertEqual(70, schedule.num_ops)
     schedule = self.Schedules(rattrs, cache=self.cache).best
-    self.assertEqual(15, schedule.cost)
+    self.assertEqual(15, schedule.num_ops)
 
   def test_16x16_tcse(self):
     m, n = 16, 16
@@ -304,7 +304,7 @@ class TestGreedySchedules(TestCommSchedules):
       for x in range(m):
         rattrs[y * m + x] = y * (m * 2 - 1) + x
     schedule = self.Schedules(rattrs, cache=self.cache).best
-    self.assertEqual(8, schedule.cost)
+    self.assertEqual(8, schedule.num_ops)
 
 class TestExternalSchedules(TestCommSchedules):
   def setUp(self):
@@ -318,4 +318,4 @@ class TestExternalSchedules(TestCommSchedules):
     schedules = self.Schedules(rattrs, aattrs, cache=self.cache)
     schedule = schedules.best
     schedules.print_stats()
-    self.assertEqual(5, schedule.cost)
+    self.assertEqual(5, schedule.num_ops)
