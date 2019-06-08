@@ -389,7 +389,11 @@ class CommSchedule(ScheduleBase):
           yield schedule
 
   @cached_property.cached_property
-  def cost(self) -> int:
+  def cost(self) -> Tuple[int, int]:
+    return self.num_ops, self.total_distance
+
+  @cached_property.cached_property
+  def num_ops(self) -> int:
     return len(set(self.children))
 
   @cached_property.cached_property
@@ -794,7 +798,7 @@ class CommSchedules(ScheduleBase):
           self.stat[3] += 1
           left_cost = 1
           if isinstance(left, CommSchedule):
-            left_cost += left.cost
+            left_cost += left.num_ops
           if self.skip and left_cost > self.max_cost:
             skipped = True
             continue
@@ -802,7 +806,7 @@ class CommSchedules(ScheduleBase):
             self.stat[4] += 1
             right_cost = 1
             if isinstance(right, CommSchedule):
-              right_cost += right.cost
+              right_cost += right.num_ops
             if self.skip and right_cost > self.max_cost:
               skipped = True
               continue
@@ -810,9 +814,9 @@ class CommSchedules(ScheduleBase):
             distance -= self.rattrs[left_indices[0]]
             schedule = CommSchedule(left, right, distance,  # type: ignore
                                     self.rattrs, self.aattrs)
-            cost = schedule.cost  # type: ignore
-            if cost < self.max_cost:
-              self.max_cost = cost
+            num_ops = schedule.num_ops  # type: ignore
+            if num_ops < self.max_cost:
+              self.max_cost = num_ops
             schedules.append(schedule)
             yield schedule  # type: ignore
     self.schedules = schedules
@@ -896,6 +900,13 @@ class GreedySchedules(ScheduleBase):
                    Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
                cache: Optional[Dict] = None) -> None:
     super().__init__(rattrs, aattrs)  # type: ignore
+
+  def __lt__(self, other: 'GreedySchedules') -> bool:
+    return self.comparison_key.cost < other.comparison_key.cost
+
+  @cached_property.cached_property
+  def comparison_key(self) -> CommSchedule:
+    return self.linear_schedule(range(len(self.rattrs)))
 
   def linear_schedule(self, indices: Iterable[int]) -> CommSchedule:
     """Schedule the attributes linearily.
