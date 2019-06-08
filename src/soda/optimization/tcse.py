@@ -396,18 +396,10 @@ class CommSchedule(ScheduleBase):
   def num_ops(self) -> int:
     return len(set(self.children))
 
-  @cached_property.cached_property
-  def total_distance(self) -> int:
-    """Calculate the total reuse distance.
+  def _calc_dependency(self) -> None:
+    """Calculate the dependency between reused variables.
 
-    The total reuse distance is a measure of hardware resource cost in terms of
-    required reuse buffer size. It is calculated by summing up the reuse
-    distance of all reused variables. The reused distance is determined by the
-    offset when a variable is first produced and last consumed. The latter is
-    static and the former is calculated via solving an ILP.
-
-    Returns:
-      The total reuse distance.
+    This function creates two dependency tables, i.e. dependers and dependees.
     """
     def get_attrs(schedule: CommSchedule, reuses: Dict[Schedule, int],
                   offset: Optional[int] = None) -> Iterator[Tuple[int, int]]:
@@ -472,9 +464,19 @@ class CommSchedule(ScheduleBase):
       Yields:
         Tuple of variable ids of inlined source and destination variables.
       """
+      if _logger.isEnabledFor(logging.DEBUG):
+        _logger.debug('looking for inline')
+        _logger.debug('  dependers:')
+        for src_vid, dst_vids in dependers.items():
+          _logger.debug('    var_%d is accessed by %s', src_vid,
+                        ', '.join(map('var_{}'.format, dst_vids)))
+        _logger.debug('  dependees:')
+        for dst_vid in dependees:
+          for src_vid, (min_offset, max_offset) in dependees[dst_vid].items():
+            _logger.debug('    var_%d accesses var_%d @ [%d, %d]', dst_vid,
+                          src_vid, min_offset, max_offset)
+
       for src_vid, dst_vids in dependers.items():
-        for dst_vid in dst_vids:
-          _logger.debug('var_%d accesses var_%d', dst_vid, src_vid)
         if len(dst_vids) == 1:
           dst_vid = tuple(dst_vids)[0]
           min_offset, max_offset = dependees[dst_vid][src_vid]
@@ -484,9 +486,11 @@ class CommSchedule(ScheduleBase):
             yield src_vid, dst_vid
             yield from inline()
             break
+      else:
+        _logger.debug('  cannot find inline oppotunities')
 
     for src_vid, dst_vid in inline():
-      _logger.debug('trying to inline var_%d', src_vid)
+      _logger.debug('inlining var_%d', src_vid)
       offset = dependees[dst_vid][src_vid][0]
       for src_src_vid, (min_offset, max_offset) in dependees[src_vid].items():
         new_min_offset = min_offset + offset
@@ -512,13 +516,52 @@ class CommSchedule(ScheduleBase):
       del dependers[src_vid]
       del dependees[dst_vid][src_vid]
       del dependees[src_vid]
+    self._dependers, self._dependees = dependers, dependees
+
+  @property
+  def dependers(self) -> Dict[int, Dict[int, None]]:
+    """The dependers table.
+
+    Returns:
+      A dict mapping variable ids to its dependers set, which is an ordered dict
+      mapping dependers to None.
+    """
+    if not hasattr(self, '_dependers'):
+      self._calc_dependency()
+    return self._dependers
+
+  @property
+  def dependees(self) -> Dict[int, Dict[int, Tuple[int, int]]]:
+    """The dependees table.
+
+    Returns:
+      A dict mapping variable ids to its dependees dict, which maps dependees to
+      a tuple of the first and last accessed offset.
+    """
+    if not hasattr(self, '_dependees'):
+      self._calc_dependency()
+    return self._dependees
+
+  @cached_property.cached_property
+  def total_distance(self) -> int:
+    """Calculate the total reuse distance.
+
+    The total reuse distance is a measure of hardware resource cost in terms of
+    required reuse buffer size. It is calculated by summing up the reuse
+    distance of all reused variables. The reused distance is determined by the
+    offset when a variable is first produced and last consumed. The latter is
+    static and the former is calculated via solving an ILP.
+
+    Returns:
+      The total reuse distance.
+    """
 
     # solve ILP for optimal offsets
     lp_problem = pulp.LpProblem("optimal_offsets", pulp.LpMinimize)
     lp_vars = {0: 0, 1: 0}
     lp_helper_vars = {}
     objectives = []
-    for src_vid in dependers:
+    for src_vid in self.dependers:
       lp_var = pulp.LpVariable('produced_offset_%d' % src_vid, lowBound=0,
                                cat='Integer')
       lp_helper_var = pulp.LpVariable('consumed_offset_%d' % src_vid,
@@ -527,21 +570,26 @@ class CommSchedule(ScheduleBase):
       lp_helper_vars[src_vid] = lp_helper_var
       objectives.append(lp_helper_var - lp_vars[src_vid])
     lp_problem += sum(objectives)
-    for src_vid, dst_vids in dependers.items():
+    for src_vid, dst_vids in self.dependers.items():
       for dst_vid in dst_vids:
-        min_offset, max_offset = dependees[dst_vid][src_vid]
+        min_offset, max_offset = self.dependees[dst_vid][src_vid]
         lp_problem += lp_vars[src_vid] <= min_offset + lp_vars[dst_vid]
         lp_problem += lp_helper_vars[src_vid] >= max_offset + lp_vars[dst_vid]
     lp_status = pulp.LpStatus[lp_problem.solve()]
-    _logger.info('ILP problem: %s', lp_problem)
     _logger.info('ILP status: %s', lp_status)
+    _logger.debug('var_0 should be produced @ 0 and kept until %d',
+                  int(pulp.value(lp_helper_vars[0])))
     for vid, lp_var in lp_vars.items():
-      if vid in (0, 1):
+      if vid == 1:
         continue
-      _logger.debug('var_%d should be produced @ %d', vid,
-                    int(pulp.value(lp_var)))
+      produce_offset = 0 if vid == 0 else int(pulp.value(lp_var))
+      consume_offset = int(pulp.value(lp_helper_vars[vid]))
+      _logger.debug('var_%d should be produced @ %d and kept until %d', vid,
+                    produce_offset, consume_offset)
     total_distance = int(pulp.value(lp_problem.objective))
-    _logger.debug('total distance: %s', total_distance)
+    max_rattr = max(attr if isinstance(attr, int) else attr[0]
+                    for attr in self.norm_attrs)
+    assert max_rattr <= total_distance, '%s < %s' % (total_distance, max_rattr)
     return total_distance
 
   def get_attrs_with_offset(self, offset: int = 0) -> Iterator[Attr]:
