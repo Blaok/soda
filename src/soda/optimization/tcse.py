@@ -512,6 +512,7 @@ class CommSchedule(ScheduleBase):
                       dst_vid, src_src_vid, *dependees[dst_vid][src_src_vid])
       src_src_vids = list(dependees[src_vid])
       for src_src_vid in src_src_vids:
+        dependers[src_src_vid][dst_vid] = None
         del dependers[src_src_vid][src_vid]
       del dependers[src_vid]
       del dependees[dst_vid][src_vid]
