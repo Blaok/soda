@@ -404,6 +404,14 @@ class CommSchedule(ScheduleBase):
   def num_ops(self) -> int:
     return len(set(self.children))
 
+  def to_json(self):
+    j = {'distance': self.distance}
+    for child in 'left', 'right':
+      j[child] = getattr(self, child)
+      if isinstance(j[child], CommSchedule):
+        j[child] = j[child].to_json()
+    return j
+
   def _calc_dependency(self) -> None:
     """Calculate the dependency between reused variables.
 
