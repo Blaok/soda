@@ -106,6 +106,7 @@ unittest:
 	python3 -m unittest discover --start-directory src
 
 pylint:
-	@+exec src/pylint.sh src src/sodac
+	@+exec src/pylint.sh $$(find src -type f -exec file -i {} \; | \
+	  grep 'text/x-python;' | awk -F ':' '{print $$1}' | tr '\n' ' ')
 
 pre-commit: unittest pylint
