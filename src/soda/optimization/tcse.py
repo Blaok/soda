@@ -87,12 +87,12 @@ class Linearizer:
   linearization. Instances of this class is callable.
 
   Attributes:
-    num_dim: Integer, number of dimensions.
     maxs: List of integers, maximum index in each dimension.
     mins: List of integers, minimum index in each dimension.
-    weights: List of integers, weight of each dimension.
 
   Properties:
+    num_dim: Integer, number of dimensions.
+    weights: List of integers, weight of each dimension.
     dims: Tuple of integers, all dimension indices.
     sizes: Tuple of integers, size of each linearized dimension.
   """
@@ -103,15 +103,23 @@ class Linearizer:
       rattrs: Sequence of relative attributes. Each attribute is a sequence of
         integers.
     """
-    self.num_dim = len(rattrs[0])
-    self.maxs = [0] * self.num_dim
-    self.mins = [0] * self.num_dim
-    self.weights = [1] * self.num_dim
+    num_dim = len(rattrs[0])
+    self.maxs = [0] * num_dim
+    self.mins = [0] * num_dim
     for d in self.dims:
       self.maxs[d] = max(rattr[d] for rattr in rattrs)
       self.mins[d] = min(rattr[d] for rattr in rattrs)
-    for d in range(1, self.num_dim):
-      self.weights[d] = self.weights[d - 1] * self.sizes[d - 1]
+
+  @property
+  def num_dim(self) -> int:
+    return len(self.maxs)
+
+  @property
+  def weights(self) -> List[int]:
+    weights = [1] * self.num_dim
+    for d in self.dims[1:]:
+      weights[d] = weights[d - 1] * self.sizes[d - 1]
+    return weights
 
   @property
   def dims(self) -> Tuple[int, ...]:
