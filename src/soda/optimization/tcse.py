@@ -16,6 +16,7 @@ from typing import (
 )
 
 import collections
+import heapq
 import itertools
 import json
 import logging
@@ -960,10 +961,14 @@ class CommSchedules(ScheduleBase):
 class GreedySchedules(ScheduleBase):
   """Schedules of an Expression, found greedily.
   """
+  timeout = 1
+  num_pruned = 1
   def __init__(self, rattrs: Tuple[RelativeAttr, ...],
                aattrs: Optional[Tuple[
                    Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
+    self.linearizer = linearizer
     super().__init__(rattrs, aattrs)  # type: ignore
 
   def __lt__(self, other: 'GreedySchedules') -> bool:
@@ -1029,36 +1034,75 @@ class GreedySchedules(ScheduleBase):
       yield self.linear_schedule(range(len(self.rattrs)))
       return
 
-    new_attrs = OrderedDict(enumerate(self))
-    used = set()
-    # only activate reused operations with the maximum reuse
-    # this avoids some of the sub-optimalities
-    max_reuse = max(map(len, reuses.values()))
-    _logger.debug('max reuse: %d', max_reuse)
+    def aligns(dis: int, dim: int) -> bool:
+      """Returns whether dis aligns with dim.
 
-    for operation, reused_indices in sorted(
-        reuses.items(), key=lambda item: (-len(item[1]), item[0].distance)):
-      # filter out indices that have been used by previous reuse operations
-      reused_indices = [(idx_l, idx_r) for idx_l, idx_r in reused_indices
-                        if idx_l not in used and idx_r not in used]
-      if len(reused_indices) < max_reuse:
-        continue
-      for idx_l, idx_r in reused_indices:
-        _logger.debug('reusing %s for %s + %s', operation,
-                      '%s:%s' % self[idx_l], '%s:%s' % self[idx_r])
-        new_attrs[idx_l] = new_attrs[idx_l][0], operation   # type: ignore
-        del new_attrs[idx_r]
-        used |= {idx_l, idx_r}
+      A distance aligns with a dimension if the indices of two points with that
+      distance differ and only differ in that dimension.
+      """
+      assert self.linearizer is not None
+      idx = list(self.linearizer(dis))
+      if idx[dim] != 0:
+        del idx[dim]
+        return not any(idx)
+      return False
 
-    _logger.debug('new attrs: %s (%d)',
-                  util.lst2str('%s:%s' % attr for attr in new_attrs.values()),
-                  len(new_attrs))
-    new_rattrs, new_aattrs = zip(*new_attrs.values())
-    yield from GreedySchedules(new_rattrs, new_aattrs).generator
+    if self.linearizer is not None:
+      for dim in reversed(self.linearizer.dims):
+        if any(aligns(op.distance, dim) for op in reuses):
+          # only consider reuse with a single dimension, if possible
+          reuses = {k: [(idx_l, idx_r) for idx_l, idx_r in v
+                        if aligns(self.rattrs[idx_r] - self.rattrs[idx_l], dim)]
+                    for k, v in reuses.items() if aligns(k.distance, dim)}
+          break
+
+    candidates = []
+    for op in reuses:
+      # find all compatible reuses that include op
+      _logger.debug('find all compatible reuses that include %s', op)
+      new_attrs = OrderedDict(enumerate(self))
+      used = set()
+      def do_reuse_for(schedule: CommSchedule) -> None:
+        reused_indices = [(idx_l, idx_r) for idx_l, idx_r in reuses[schedule]
+                          if idx_l not in used and idx_r not in used]
+        if len(reused_indices) > 1:
+          for idx_l, idx_r in reused_indices:
+            _logger.debug('reusing %s for %s + %s', schedule,
+                          '%s:%s' % self[idx_l], '%s:%s' % self[idx_r])
+            # pylint: disable=cell-var-from-loop
+            new_attrs[idx_l] = new_attrs[idx_l][0], schedule   # type: ignore
+            del new_attrs[idx_r]
+            used.update({idx_l, idx_r})
+      do_reuse_for(op)
+      for operation in sorted(reuses,
+                              key=lambda s: (-len(reuses[s]), s.distance)):
+        do_reuse_for(operation)
+
+      new_rattrs, new_aattrs = zip(*new_attrs.values())
+      candidates.append(GreedySchedules(new_rattrs, new_aattrs,
+                                        self.linearizer))
+
+    for schedule in heapq.nsmallest(GreedySchedules.num_pruned, candidates):
+      yield from schedule.generator
 
   @cached_property.cached_property
   def best(self) -> CommSchedule:
-    return next(self.generator)
+    generator = self.generator
+    best = next(generator)
+    try:
+      with util.timeout(GreedySchedules.timeout):
+        for schedule in generator:
+          _logger.debug('schedule: %s', schedule)
+          if schedule.cost < best.cost:
+            best = schedule
+            _logger.info('schedule: %s num ops: %d total distance: %d', best,
+                         *best.cost)
+    except TimeoutError:
+      _logger.warning('timeout after %s sec', self.timeout)
+    self.print_stats()
+    _logger.info('schedule: %s num ops: %d total distance: %d', best,
+                 *best.cost)
+    return best
 
   def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
     return
@@ -1069,7 +1113,9 @@ class ExternalSchedules(ScheduleBase):
   def __init__(self, rattrs: Tuple[RelativeAttr, ...],
                aattrs: Optional[Tuple[
                    Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
+    self.linearizer = linearizer
     super().__init__(rattrs, aattrs)  # type: ignore
 
   def from_json(self, j: Dict[str, Any]) -> CommSchedule:
@@ -1078,7 +1124,11 @@ class ExternalSchedules(ScheduleBase):
   @cached_property.cached_property
   def best(self) -> CommSchedule:
     attrs = {'rattrs': self.rattrs,
-              'aattrs': self.aattrs or [1] * len(self.rattrs)}
+             'aattrs': self.aattrs or [1] * len(self.rattrs),
+             'linearizer': None}  # type: Dict[str, Any]
+    if self.linearizer is not None:
+      attrs['linearizer'] = {'maxs': self.linearizer.maxs,
+                             'mins': self.linearizer.mins}
     result = json.loads(subprocess.run(
       ['tcse'], input=json.dumps(attrs), stdout=subprocess.PIPE, shell=True,
       universal_newlines=True).stdout)
@@ -1176,7 +1226,7 @@ class Expression:
 
   @cached_property.cached_property
   def schedules(self) -> Schedules:
-    return Schedules(self.rattrs, self.aattrs, cache={})
+    return Schedules(self.rattrs, self.aattrs, self.linearizer, cache={})
 
   @cached_property.cached_property
   def best_schedule(self) -> Schedule:
