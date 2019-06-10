@@ -241,9 +241,12 @@ class TestGreedySchedules(TestCommSchedules):
 
   def test_3x3_tcse(self):
     """Test a 3x3 temporal CSE case."""
-    rattrs = 0, 1, 2, 5, 6, 7, 10, 11, 12
+    rattrs = [(x, y) for y in range(3) for x in range(3)]
+    linearizer = tcse.Linearizer(rattrs)
+    rattrs = tuple(map(linearizer, rattrs))
+    _logger.debug('rattrs: %s', rattrs)
     def test(aattrs, num_ops=None, total_distance=None):
-      schedules = self.Schedules(rattrs, aattrs)
+      schedules = self.Schedules(rattrs, aattrs, linearizer)
       schedule = schedules.best
       schedules.print_stats()
       _logger.debug('schedule: %s', schedule)
@@ -252,18 +255,21 @@ class TestGreedySchedules(TestCommSchedules):
       if total_distance is not None:
         self.assertEqual(total_distance, schedule.total_distance)
     test(None, num_ops=4, total_distance=12)
-    test((1, 1, 1, 1, 2, 1, 1, 1, 1), num_ops=5, total_distance=21)
+    test((1, 1, 1, 1, 2, 1, 1, 1, 1), num_ops=5, total_distance=13)
     test((1, 1, 2, 3, 3, 1, 4, 4, 1), num_ops=6, total_distance=13)
     test((4, 1, 3, 0, 2, 3, 5, 6, 2), num_ops=8, total_distance=12)
     test((7, 6, 7, 2, 1, 7, 2, 1, 7), num_ops=6, total_distance=12)
+    test((2, 3, 6, 4, 3, 3, 4, 4, 3), num_ops=6, total_distance=16)
+    test((4, 4, 0, 7, 4, 0, 7, 3, 1), num_ops=6, total_distance=17)
 
   def test_5x5_tcse(self):
     """Test a 5x5 temporal CSE case."""
     m, n = 5, 5
-    rattr = tuple(map(tuple, map(reversed,
-                                 itertools.product(range(m), range(n)))))
-    rattr = [i * (n * 2 + 1) + j for i in range(m) for j in range(n)]
-    schedule = self.Schedules(rattr, cache=self.cache).best
+    rattrs = [(x, y) for y in range(n) for x in range(m)]
+    linearizer = tcse.Linearizer(rattrs)
+    schedule = self.Schedules(
+      tuple(map(linearizer, rattrs)), linearizer=linearizer,
+      cache=self.cache).best
     self.assertEqual(6, schedule.num_ops)
 
   def test_more_tcse(self):
@@ -290,20 +296,25 @@ class TestGreedySchedules(TestCommSchedules):
     aattrs = [0] * m * n
     for y in range(n):
       for x in range(m):
-        rattrs[y * m + x] = y * (m * 2 - 1) + x
+        rattrs[y * m + x] = (x, y)
         aattrs[y * m + x] = (x - m // 2) ** 2 + (y - n // 2) ** 2
-    schedule = self.Schedules(rattrs, aattrs, cache=self.cache).best
+    linearizer = tcse.Linearizer(rattrs)
+    rattrs = tuple(map(linearizer, rattrs))
+    schedule = self.Schedules(rattrs, aattrs,
+                              linearizer=linearizer).best
     self.assertEqual(70, schedule.num_ops)
-    schedule = self.Schedules(rattrs, cache=self.cache).best
-    self.assertEqual(15, schedule.num_ops)
+    schedule = self.Schedules(rattrs, linearizer=linearizer).best
+    self.assertEqual(10, schedule.num_ops)
 
   def test_16x16_tcse(self):
     m, n = 16, 16
     rattrs = [0] * m * n
     for y in range(n):
       for x in range(m):
-        rattrs[y * m + x] = y * (m * 2 - 1) + x
-    schedule = self.Schedules(rattrs, cache=self.cache).best
+        rattrs[y * m + x] = x, y
+    linearizer = tcse.Linearizer(rattrs)
+    rattrs = tuple(map(linearizer, rattrs))
+    schedule = self.Schedules(rattrs, linearizer=linearizer).best
     self.assertEqual(8, schedule.num_ops)
 
 class TestExternalSchedules(TestCommSchedules):
