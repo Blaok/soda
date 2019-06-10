@@ -40,16 +40,17 @@ AbsoluteAttr = int
 Attr = Union[RelativeAttr, Tuple[RelativeAttr, Optional[AbsoluteAttr]]]
 
 OrderedDict = collections.OrderedDict
-class OrderedCounter(collections.Counter,   # type: ignore
-                     collections.OrderedDict):
+
+
+class OrderedCounter(  # type: ignore
+    collections.Counter, collections.OrderedDict):
   pass
+
 
 _logger = logging.getLogger().getChild(__name__)
 
-REDUCTION_OPS = {
-  '+': ir.AddSub,
-  '*': ir.MulDiv
-}
+REDUCTION_OPS = {'+': ir.AddSub, '*': ir.MulDiv}
+
 
 def extract_attr(node: ir.Node) -> Tuple[Tuple[int, ...], ir.Node]:
   """Extract attributes from a node.
@@ -66,6 +67,7 @@ def extract_attr(node: ir.Node) -> Tuple[Tuple[int, ...], ir.Node]:
   load = soda.visitor.get_load_set(node)[0]
   return load.idx, mutator.shift(node, load.idx)
 
+
 def assemble_attr(rattr: Tuple[int, ...], aattr: ir.Node) -> ir.Node:
   """Assemble a node from attributes.
 
@@ -80,6 +82,7 @@ def assemble_attr(rattr: Tuple[int, ...], aattr: ir.Node) -> ir.Node:
     ir.Node assembled from the attributes.
   """
   return mutator.shift(aattr, rattr, op=operator.add)
+
 
 class Linearizer:
   """Apply and restore linearization.
@@ -97,6 +100,7 @@ class Linearizer:
     dims: Tuple of integers, all dimension indices.
     sizes: Tuple of integers, size of each linearized dimension.
   """
+
   def __init__(self, rattrs: Sequence[Sequence[int]]):
     """Initialize the Linearizer with the given relative attribute tuples.
 
@@ -160,6 +164,7 @@ class Linearizer:
       return self.apply(rattr)
     raise TypeError('rattr needs to be an int or a Sequence of int')
 
+
 def range_from_middle(n: int) -> Iterator[int]:
   """A range function that yields number from the middle to the sides.
 
@@ -179,17 +184,22 @@ def range_from_middle(n: int) -> Iterator[int]:
       yield middle - shift
       yield middle + shift
 
+
 def shuffle_range(n: int) -> Iterator[int]:
   lst = list(range(n))
   random.shuffle(lst)
   return iter(lst)
 
+
 def set_optimizations(optimizations: Sequence[str]) -> None:
   Expression.set_optimizations(optimizations)
 
+
 _temporal_cse_counter = 0
-def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
-                 ) -> 'soda.core.Stencil':  # type: ignore
+
+
+def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
+                ) -> 'soda.core.Stencil':  # type: ignore
   """Eliminate temporal common subexpressions.
 
   Eliminate temporal common subexpressions. The stencil object will be modified.
@@ -204,8 +214,8 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
   propagate_type = lambda node: base.propagate_type(node, stencil.symbol_table)
 
   # pylint: disable=unsubscriptable-object
-  def visitor(node: ir.Node, args: Tuple[Dict[ir.BinaryOp, str],
-                                         Set[ir.BinaryOp]]) -> ir.Node:
+  def visitor(node: ir.Node,
+              args: Tuple[Dict[ir.BinaryOp, str], Set[ir.BinaryOp]]) -> ir.Node:
     """Visitor for temporal common subexpression elimination.
 
     Args:
@@ -232,8 +242,8 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
           global _temporal_cse_counter
           cses[expr] = 'tcse_var_%d' % _temporal_cse_counter
           stencil.symbol_table[cses[expr]] = expr.haoda_type
-          _logger.debug('common subexpression: %s <= %s',
-                        cses[expr], ir.unparenthesize(expr))
+          _logger.debug('common subexpression: %s <= %s', cses[expr],
+                        ir.unparenthesize(expr))
           _temporal_cse_counter += 1
         return expression.best_schedule.get_ir_node_with_cse(cses, used)
     except Expression.CannotHandle:
@@ -241,8 +251,8 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
     return node
 
   new_local_stmts = []
-  cses = OrderedDict()   # type: Dict[ir.BinaryOp, str]
-  used = OrderedDict()   # type: Dict[ir.BinaryOp, ir.BinaryOp]
+  cses = OrderedDict()  # type: Dict[ir.BinaryOp, str]
+  used = OrderedDict()  # type: Dict[ir.BinaryOp, ir.BinaryOp]
   transform = lambda node: propagate_type(node).visit(visitor, (cses, used))
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     cses.clear()
@@ -252,9 +262,13 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
     # used points to old exprs so here it has to propagate type again
     cses = {propagate_type(used[k]): v for k, v in cses.items() if k in used}
     for expr, var in cses.items():
-      new_local_stmts.append(grammar.LocalStmt(
-          ref=ir.Ref(name=var, lat=None, idx=(0,) * stencil.dim),
-          haoda_type=expr.haoda_type, expr=expr, let=stmt.let))
+      new_local_stmts.append(
+          grammar.LocalStmt(ref=ir.Ref(name=var,
+                                       lat=None,
+                                       idx=(0,) * stencil.dim),
+                            haoda_type=expr.haoda_type,
+                            expr=expr,
+                            let=stmt.let))
       _logger.debug('temporal cse stmt: %s', new_local_stmts[-1])
   stencil.local_stmts.extend(new_local_stmts)
 
@@ -270,6 +284,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'   # type: ignore
     _logger.debug('simplified: %s', stmt)
   return stencil
 
+
 class ScheduleBase:
   """Base class of Schedule and Schedules.
 
@@ -277,13 +292,14 @@ class ScheduleBase:
     rattrs: Tuple of relative attributes.
     aattrs: Tuple of absolute attributes or None.
   """
+
   def __init__(self, rattrs: Tuple[RelativeAttr, ...],
                aattrs: Optional[Tuple[AbsoluteAttr, ...]]) -> None:
     self.rattrs = rattrs
     self.aattrs = aattrs
 
-  def __getitem__(self, key: int) -> Tuple[RelativeAttr,
-                                           Optional[AbsoluteAttr]]:
+  def __getitem__(self,
+                  key: int) -> Tuple[RelativeAttr, Optional[AbsoluteAttr]]:
     return self.rattrs[key], None if self.aattrs is None else self.aattrs[key]
 
   def __len__(self) -> int:
@@ -291,6 +307,7 @@ class ScheduleBase:
 
   def __iter__(self) -> Iterator[Tuple[RelativeAttr, Optional[AbsoluteAttr]]]:
     yield from zip(self.rattrs, self.aattrs or itertools.repeat(None))
+
 
 class CommSchedule(ScheduleBase):
   """A schedule of an expression.
@@ -314,14 +331,16 @@ class CommSchedule(ScheduleBase):
     common_subexpressions: Tuple of ir.BinaryOp, normalized.
     op_type: Class of self.operator, only works if self.operator is not None.
   """
-  def __init__(self, left: Union['CommSchedule', int, None],
+
+  def __init__(self,
+               left: Union['CommSchedule', int, None],
                right: Union['CommSchedule', int, None],
                distance: RelativeAttr,
                rattrs: Tuple[RelativeAttr, ...],
                aattrs: Optional[Tuple[AbsoluteAttr, ...]] = None) -> None:
     self.left, self.right, self.distance = left, right, distance
     super().__init__(rattrs, aattrs)
-    self._len = 1   # number of operations
+    self._len = 1  # number of operations
     for child in left, right:
       if isinstance(child, CommSchedule):
         self._len += len(child)
@@ -366,10 +385,10 @@ class CommSchedule(ScheduleBase):
     """Bind an Expression to the schedule.
     """
     if expression is None:
-      del self.aattrs_as_ir_nodes   # type: ignore
-      del self.linearizer   # type: ignore
+      del self.aattrs_as_ir_nodes  # type: ignore
+      del self.linearizer  # type: ignore
       del self.aattr_table  # type: ignore
-      del self.operator   # type: ignore
+      del self.operator  # type: ignore
     else:
       self.aattrs_as_ir_nodes = expression.aattrs_as_ir_nodes
       self.linearizer = expression.linearizer
@@ -418,7 +437,9 @@ class CommSchedule(ScheduleBase):
 
     This function creates two dependency tables, i.e. dependers and dependees.
     """
-    def get_attrs(schedule: CommSchedule, reuses: Dict[Schedule, int],
+
+    def get_attrs(schedule: CommSchedule,
+                  reuses: Dict[Schedule, int],
                   offset: Optional[int] = None) -> Iterator[Tuple[int, int]]:
       """Get all accesses of variables in a schedule.
 
@@ -458,8 +479,8 @@ class CommSchedule(ScheduleBase):
 
     vars_to_process = collections.deque([self])
     vars_processed = {0}
-    dependers = OrderedDict()   # type: Dict[int, Dict[int, None]]
-    dependees = OrderedDict()   # type: Dict[int, Dict[int, Tuple[int, int]]]
+    dependers = OrderedDict()  # type: Dict[int, Dict[int, None]]
+    dependees = OrderedDict()  # type: Dict[int, Dict[int, Tuple[int, int]]]
     while vars_to_process:
       schedule = vars_to_process.popleft()
       dst_vid = tcse_vars[schedule]
@@ -467,14 +488,16 @@ class CommSchedule(ScheduleBase):
       for offset, src_vid in get_attrs(schedule, tcse_vars):
         _logger.debug('var_%d accesses var_%d @ %d', dst_vid, src_vid, offset)
         dependers.setdefault(src_vid, OrderedDict()).setdefault(dst_vid, None)
-        dependees.setdefault(
-            dst_vid, OrderedDict()).setdefault(src_vid, (offset, offset))
+        dependees.setdefault(dst_vid,
+                             OrderedDict()).setdefault(src_vid,
+                                                       (offset, offset))
         min_offset, max_offset = dependees[dst_vid][src_vid]
-        dependees[dst_vid][src_vid] = (min(offset, min_offset),
-                                       max(offset, max_offset))
+        dependees[dst_vid][src_vid] = (min(offset,
+                                           min_offset), max(offset, max_offset))
         if (src_vid not in vars_processed and
             tcse_vars_table[src_vid] not in vars_to_process):
           vars_to_process.append(tcse_vars_table[src_vid])
+
     def inline() -> Iterator[Tuple[int, int]]:
       """Inline a variable if it is only accessed once by another variable.
 
@@ -498,8 +521,9 @@ class CommSchedule(ScheduleBase):
           dst_vid = tuple(dst_vids)[0]
           min_offset, max_offset = dependees[dst_vid][src_vid]
           if min_offset == max_offset:
-            _logger.debug('var_%d is only accessed by var_%d @ %d, '
-                          'it should be inlined', src_vid, dst_vid, min_offset)
+            _logger.debug(
+                'var_%d is only accessed by var_%d @ %d, '
+                'it should be inlined', src_vid, dst_vid, min_offset)
             yield src_vid, dst_vid
             yield from inline()
             break
@@ -522,7 +546,7 @@ class CommSchedule(ScheduleBase):
           _logger.debug('var_%d used to access var_%d @ [%d, %d]', dst_vid,
                         src_src_vid, *dependees[dst_vid][src_src_vid])
         old_min_offset, old_max_offset = dependees[dst_vid].get(
-          src_src_vid, (new_min_offset, new_max_offset))
+            src_src_vid, (new_min_offset, new_max_offset))
         dependees[dst_vid][src_src_vid] = (min(old_min_offset, new_min_offset),
                                            max(old_max_offset, new_max_offset))
         _logger.debug('after inlining, var_%d accesses var_%d @ [%d, %d]',
@@ -580,10 +604,12 @@ class CommSchedule(ScheduleBase):
     lp_helper_vars = {}
     objectives = []
     for src_vid in self.dependers:
-      lp_var = pulp.LpVariable('produced_offset_%d' % src_vid, lowBound=0,
+      lp_var = pulp.LpVariable('produced_offset_%d' % src_vid,
+                               lowBound=0,
                                cat='Integer')
       lp_helper_var = pulp.LpVariable('consumed_offset_%d' % src_vid,
-                                      lowBound=0, cat='Integer')
+                                      lowBound=0,
+                                      cat='Integer')
       lp_vars.setdefault(src_vid, lp_var)
       lp_helper_vars[src_vid] = lp_helper_var
       objectives.append(lp_helper_var - lp_vars[src_vid])
@@ -605,8 +631,8 @@ class CommSchedule(ScheduleBase):
       _logger.debug('var_%d should be produced @ %d and kept until %d', vid,
                     produce_offset, consume_offset)
     total_distance = int(pulp.value(lp_problem.objective))
-    max_rattr = max(attr if isinstance(attr, int) else attr[0]
-                    for attr in self.norm_attrs)
+    max_rattr = max(
+        attr if isinstance(attr, int) else attr[0] for attr in self.norm_attrs)
     assert max_rattr <= total_distance, '%s < %s' % (total_distance, max_rattr)
     return total_distance
 
@@ -620,22 +646,22 @@ class CommSchedule(ScheduleBase):
       Attributes in this schedule, NOT necessarily sorted by their relative
       attributes.
     """
-    if isinstance(self.left, CommSchedule):   # Left child is not a leaf.
+    if isinstance(self.left, CommSchedule):  # Left child is not a leaf.
       yield from self.left.get_attrs_with_offset(offset)
-    else:                                     # Left child is a leaf.
+    else:  # Left child is a leaf.
       if self.aattrs is None:  # Null absolute attributes.
         yield offset
-      else:                   # Non-null absolute attributes.
+      else:  # Non-null absolute attributes.
         yield offset, self.left
 
     offset += self.distance
 
     if isinstance(self.right, CommSchedule):  # Right child is not a leaf.
       yield from self.right.get_attrs_with_offset(offset)
-    else:                                     # Right child is a leaf.
+    else:  # Right child is a leaf.
       if self.aattrs is None:  # Null absolute attributes.
         yield offset
-      else:                   # Non-null absolute attributes.
+      else:  # Non-null absolute attributes.
         yield offset, self.right
 
   @property
@@ -669,7 +695,7 @@ class CommSchedule(ScheduleBase):
       A dict mapping norm_attr_sets to a list of schedules whose normalized
       attributes equals the keys.
     """
-    exprs = OrderedDict()   # type: Dict[FrozenSet[Attr], List[CommSchedule]]
+    exprs = OrderedDict()  # type: Dict[FrozenSet[Attr], List[CommSchedule]]
     exprs[self.norm_attr_set] = [self]
     for child in self.left, self.right:
       if isinstance(child, CommSchedule):
@@ -690,9 +716,9 @@ class CommSchedule(ScheduleBase):
     Returns:
       An ir.BinaryOp as the root of the IR.
     """
-    if isinstance(self.left, CommSchedule):   # Left child is not a leaf.
+    if isinstance(self.left, CommSchedule):  # Left child is not a leaf.
       left_child = self.left.get_ir_node_with_offset(offset)  # type: ir.Node
-    else:                                     # Left child is a leaf.
+    else:  # Left child is a leaf.
       left_child = assemble_attr(self.linearizer(offset),
                                  self.aattr_table[self.left])
 
@@ -700,7 +726,7 @@ class CommSchedule(ScheduleBase):
 
     if isinstance(self.right, CommSchedule):  # Right child is not a leaf.
       right_child = self.right.get_ir_node_with_offset(offset)  # type: ir.Node
-    else:                                     # Right child is a leaf.
+    else:  # Right child is a leaf.
       right_child = assemble_attr(self.linearizer(offset),
                                   self.aattr_table[self.right])
 
@@ -711,9 +737,10 @@ class CommSchedule(ScheduleBase):
   def ir_node(self) -> ir.BinaryOp:
     return self.get_ir_node_with_offset(self.rattrs[0])
 
-  def get_ir_node_with_cse(
-      self, cses: Dict[ir.Node, str],
-      used: Optional[Dict[ir.Node, ir.Node]] = None) -> ir.Node:
+  def get_ir_node_with_cse(self,
+                           cses: Dict[ir.Node, str],
+                           used: Optional[Dict[ir.Node, ir.Node]] = None
+                          ) -> ir.Node:
     return mutator.replace_expressions(self.ir_node, cses, used)
 
   @cached_property.cached_property
@@ -724,22 +751,26 @@ class CommSchedule(ScheduleBase):
         aattr for aattr, count in OrderedCounter(exprs).items() if count > 1)
     for child in self.children:
       base.print_tree(mutator.normalize(child.ir_node))
-    relative_cses = tuple(mutator.normalize(schedules[0].ir_node)
-                          for schedules in self.uniq_expr_dict.values()
-                          if len(schedules) > 1)
+    relative_cses = tuple(
+        mutator.normalize(schedules[0].ir_node)
+        for schedules in self.uniq_expr_dict.values()
+        if len(schedules) > 1)
     for relative_cse in relative_cses:
       _logger.debug('relative cse: %s', relative_cse)
     return absolute_cses + relative_cses
 
-def make_schedule_from_json(
-  j: Dict[str, Any], rattrs: Tuple[RelativeAttr, ...],
-  aattrs: Optional[Tuple[AbsoluteAttr, ...]] = None) -> CommSchedule:
+
+def make_schedule_from_json(j: Dict[str, Any],
+                            rattrs: Tuple[RelativeAttr, ...],
+                            aattrs: Optional[Tuple[AbsoluteAttr, ...]] = None
+                           ) -> CommSchedule:
   left, right = j['left'], j['right']
   if isinstance(left, dict):
     left = make_schedule_from_json(left, rattrs, aattrs)
   if isinstance(right, dict):
     right = make_schedule_from_json(right, rattrs, aattrs)
   return CommSchedule(left, right, j['distance'], rattrs, aattrs)
+
 
 class CommSchedules(ScheduleBase):
   """Schedules of an Expression.
@@ -760,6 +791,7 @@ class CommSchedules(ScheduleBase):
   range_func = range_from_middle
   skip = True
   lazy = True
+
   @staticmethod
   def set_optimizations(optimizations: Sequence[str]) -> None:
     if 'reorder-exploration' in optimizations:
@@ -775,14 +807,16 @@ class CommSchedules(ScheduleBase):
     if 'no-lazy-evaluation' in optimizations:
       CommSchedules.lazy = False
 
-  def __init__(self, rattrs: Tuple[RelativeAttr, ...],
-               aattrs: Optional[Tuple[AbsoluteAttr, ...]] = None,
-               operands: Optional[str] = None,
-               # pylint: disable=unsubscriptable-object
-               cache: Optional[Dict[Tuple[int, ...], 'CommSchedules']] = None,
-               stat: Optional[List[int]] = None,
-               max_cost: Optional[int] = None,
-               timeout: Optional[int] = None) -> None:
+  def __init__(
+      self,
+      rattrs: Tuple[RelativeAttr, ...],
+      aattrs: Optional[Tuple[AbsoluteAttr, ...]] = None,
+      operands: Optional[str] = None,
+      # pylint: disable=unsubscriptable-object
+      cache: Optional[Dict[Tuple[int, ...], 'CommSchedules']] = None,
+      stat: Optional[List[int]] = None,
+      max_cost: Optional[int] = None,
+      timeout: Optional[int] = None) -> None:
     super().__init__(rattrs, aattrs)
     if operands is None:
       self.operands = '1' * len(self.rattrs)
@@ -803,19 +837,22 @@ class CommSchedules(ScheduleBase):
     if timeout is not None:
       self.timeout = timeout
 
-  def __iter__(self) -> Iterator[CommSchedule]:   # type: ignore
+  def __iter__(self) -> Iterator[CommSchedule]:  # type: ignore
     if hasattr(self, 'schedules'):
       return iter(getattr(self, 'schedules'))
     return self.generator
 
   def key(self, operands) -> Tuple[int, ...]:
-    offset = self.rattrs[next(idx for idx, bit in enumerate(operands)
-                              if bit == '1')]
-    key = [self.rattrs[idx] - offset for idx, bit in enumerate(operands)
-           if bit == '1']
+    offset = self.rattrs[next(
+        idx for idx, bit in enumerate(operands) if bit == '1')]
+    key = [
+        self.rattrs[idx] - offset
+        for idx, bit in enumerate(operands)
+        if bit == '1'
+    ]
     if self.aattrs is not None:
-      key.extend(self.aattrs[idx] for idx, bit in enumerate(operands)
-                 if bit == '1')
+      key.extend(
+          self.aattrs[idx] for idx, bit in enumerate(operands) if bit == '1')
     return tuple(key)
 
   @property
@@ -856,10 +893,10 @@ class CommSchedules(ScheduleBase):
         self.stat[2] += 1
         left_indices = (indices[0],) + selection
         right_indices = [i for i in indices if i not in left_indices]
-        left_operands = ''.join('1' if i in left_indices else '0'
-                                for i in range(num_operands))
-        right_operands = ''.join('1' if i in right_indices else '0'
-                                 for i in range(num_operands))
+        left_operands = ''.join(
+            '1' if i in left_indices else '0' for i in range(num_operands))
+        right_operands = ''.join(
+            '1' if i in right_indices else '0' for i in range(num_operands))
         for left in self.get_schedules(left_operands):
           self.stat[3] += 1
           left_cost = 1
@@ -878,8 +915,8 @@ class CommSchedules(ScheduleBase):
               continue
             distance = self.rattrs[right_indices[0]]
             distance -= self.rattrs[left_indices[0]]
-            schedule = CommSchedule(left, right, distance,  # type: ignore
-                                    self.rattrs, self.aattrs)
+            schedule = CommSchedule(  # type: ignore
+                left, right, distance, self.rattrs, self.aattrs)
             num_ops = schedule.num_ops  # type: ignore
             if num_ops < self.max_cost:
               self.max_cost = num_ops
@@ -887,7 +924,8 @@ class CommSchedules(ScheduleBase):
             yield schedule  # type: ignore
     self.schedules = schedules
 
-  schedule_cache = {}   # type: Dict[CommSchedule, CommSchedule]
+  schedule_cache = {}  # type: Dict[CommSchedule, CommSchedule]
+
   def make_schedule(self, left, right, distance):
     new_schedule = CommSchedule(left, right, distance, self.rattrs, self.aattrs)
     schedule = CommSchedules.schedule_cache.get(new_schedule)
@@ -947,25 +985,31 @@ class CommSchedules(ScheduleBase):
           return iter(schedules.schedules)  # type: ignore
         return schedules.generator
     self.stat[1] += 1
-    return CommSchedules(
-        self.rattrs, self.aattrs, operands=operands, cache=self.cache,
-        stat=self.stat, max_cost=min(
-            self.max_cost, collections.Counter(operands)['1'])).generator
+    return CommSchedules(self.rattrs,
+                         self.aattrs,
+                         operands=operands,
+                         cache=self.cache,
+                         stat=self.stat,
+                         max_cost=min(
+                             self.max_cost,
+                             collections.Counter(operands)['1'])).generator
 
-  def print_stats(self,
-                  logger: Callable[..., None] = _logger.info) -> None:
+  def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
     logger('loops: | L1: %d | L2: %d | L3: %d |', *self.stat[2:])
-    logger('cache: | hit: %d | miss: %d | hit rate: %2.3f %% |',
-           self.cache_hit, self.cache_miss, self.cache_hit_rate * 100)
+    logger('cache: | hit: %d | miss: %d | hit rate: %2.3f %% |', self.cache_hit,
+           self.cache_miss, self.cache_hit_rate * 100)
+
 
 class GreedySchedules(ScheduleBase):
   """Schedules of an Expression, found greedily.
   """
   timeout = 1
   num_pruned = 1
-  def __init__(self, rattrs: Tuple[RelativeAttr, ...],
-               aattrs: Optional[Tuple[
-                   Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+
+  def __init__(self,
+               rattrs: Tuple[RelativeAttr, ...],
+               aattrs: Optional[
+                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
                linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
     self.linearizer = linearizer
@@ -1007,9 +1051,9 @@ class GreedySchedules(ScheduleBase):
     for left, right in reversed(list(itertools.combinations(self, 2))):
       left_rattr, left_aattr = left
       right_rattr, right_aattr = right
-      operation = CommSchedule(
-        left_aattr, right_aattr, right_rattr - left_rattr,
-        self.rattrs, self.aattrs)
+      operation = CommSchedule(left_aattr, right_aattr,
+                               right_rattr - left_rattr, self.rattrs,
+                               self.aattrs)
       if operation in reuses:
         continue
       #_logger.debug('look for operation: %s', operation)
@@ -1051,9 +1095,12 @@ class GreedySchedules(ScheduleBase):
       for dim in reversed(self.linearizer.dims):
         if any(aligns(op.distance, dim) for op in reuses):
           # only consider reuse with a single dimension, if possible
-          reuses = {k: [(idx_l, idx_r) for idx_l, idx_r in v
-                        if aligns(self.rattrs[idx_r] - self.rattrs[idx_l], dim)]
-                    for k, v in reuses.items() if aligns(k.distance, dim)}
+          reuses = {
+              k: [(idx_l, idx_r)
+                  for idx_l, idx_r in v
+                  if aligns(self.rattrs[idx_r] - self.rattrs[idx_l], dim)
+                 ] for k, v in reuses.items() if aligns(k.distance, dim)
+          }
           break
 
     candidates = []
@@ -1062,17 +1109,20 @@ class GreedySchedules(ScheduleBase):
       _logger.debug('find all compatible reuses that include %s', op)
       new_attrs = OrderedDict(enumerate(self))
       used = set()
+
       def do_reuse_for(schedule: CommSchedule) -> None:
-        reused_indices = [(idx_l, idx_r) for idx_l, idx_r in reuses[schedule]
+        reused_indices = [(idx_l, idx_r)
+                          for idx_l, idx_r in reuses[schedule]
                           if idx_l not in used and idx_r not in used]
         if len(reused_indices) > 1:
           for idx_l, idx_r in reused_indices:
             _logger.debug('reusing %s for %s + %s', schedule,
                           '%s:%s' % self[idx_l], '%s:%s' % self[idx_r])
             # pylint: disable=cell-var-from-loop
-            new_attrs[idx_l] = new_attrs[idx_l][0], schedule   # type: ignore
+            new_attrs[idx_l] = new_attrs[idx_l][0], schedule  # type: ignore
             del new_attrs[idx_r]
             used.update({idx_l, idx_r})
+
       do_reuse_for(op)
       for operation in sorted(reuses,
                               key=lambda s: (-len(reuses[s]), s.distance)):
@@ -1107,38 +1157,54 @@ class GreedySchedules(ScheduleBase):
   def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
     return
 
+
 class ExternalSchedules(ScheduleBase):
   """Schedules of an Expression, found externally.
   """
-  def __init__(self, rattrs: Tuple[RelativeAttr, ...],
-               aattrs: Optional[Tuple[
-                   Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+
+  def __init__(self,
+               rattrs: Tuple[RelativeAttr, ...],
+               aattrs: Optional[
+                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
                linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
     self.linearizer = linearizer
     super().__init__(rattrs, aattrs)  # type: ignore
 
   def from_json(self, j: Dict[str, Any]) -> CommSchedule:
-    return make_schedule_from_json(j, self.rattrs, self.aattrs,)
+    return make_schedule_from_json(
+        j,
+        self.rattrs,
+        self.aattrs,
+    )
 
   @cached_property.cached_property
   def best(self) -> CommSchedule:
-    attrs = {'rattrs': self.rattrs,
-             'aattrs': self.aattrs or [1] * len(self.rattrs),
-             'linearizer': None}  # type: Dict[str, Any]
+    attrs = {
+        'rattrs': self.rattrs,
+        'aattrs': self.aattrs or [1] * len(self.rattrs),
+        'linearizer': None
+    }  # type: Dict[str, Any]
     if self.linearizer is not None:
-      attrs['linearizer'] = {'maxs': self.linearizer.maxs,
-                             'mins': self.linearizer.mins}
-    result = json.loads(subprocess.run(
-      ['tcse'], input=json.dumps(attrs), stdout=subprocess.PIPE, shell=True,
-      universal_newlines=True).stdout)
+      attrs['linearizer'] = {
+          'maxs': self.linearizer.maxs,
+          'mins': self.linearizer.mins
+      }
+    result = json.loads(
+        subprocess.run(['tcse'],
+                       input=json.dumps(attrs),
+                       stdout=subprocess.PIPE,
+                       shell=True,
+                       universal_newlines=True).stdout)
     return self.from_json(result)
 
   def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
     pass
 
+
 Schedule = CommSchedule
 Schedules = GreedySchedules
+
 
 class Expression:
   """An expression suitable for temporal CSE.
@@ -1152,13 +1218,16 @@ class Expression:
     linearizer: A linearizer mapping relative attributes to tuples.
     aattr_table: A dict mapping absolute attributes to IR nodes.
   """
+
   @staticmethod
-  def set_optimizations(optimizations: Sequence[str] = (
-      'reorder-exploration', 'skip-with-partial-cost',
-      'lazy-evaluation')) -> None:
+  def set_optimizations(
+      optimizations: Sequence[str] = ('reorder-exploration',
+                                      'skip-with-partial-cost',
+                                      'lazy-evaluation')) -> None:
     CommSchedules.set_optimizations(optimizations)
 
   class CannotHandle(Exception):
+
     def __init__(self, msg, details: str = '') -> None:
       details = details or (': ' + str(details))
       super().__init__('cannot handle ' + str(msg) + ' yet' + str(details))
@@ -1178,7 +1247,7 @@ class Expression:
       TypeError: If the input is not an instance of ir.Node.
     """
     if isinstance(polynomial, ir.BinaryOp):
-      if any(op != polynomial.operator[0]   # type: ignore
+      if any(op != polynomial.operator[0]  # type: ignore
              for op in polynomial.operator):  # type: ignore
         raise Expression.CannotHandle('mixed operators',
                                       polynomial.operator)  # type: ignore
@@ -1188,9 +1257,11 @@ class Expression:
       for operand in polynomial.operand:  # type: ignore
         if len(soda.visitor.get_load_set(operand)) > 1:
           raise Expression.CannotHandle('multi-index operands', operand)
-      self.operands = tuple(sorted(
-          polynomial.operand,   # type: ignore
-          key=lambda x: tuple(reversed(soda.visitor.get_load_set(x)[0].idx))))
+      self.operands = tuple(
+          sorted(
+              polynomial.operand,  # type: ignore
+              key=lambda x: tuple(reversed(soda.visitor.get_load_set(x)[0].idx))
+          ))
       rattrs, aattrs = zip(*map(extract_attr, self.operands))
       self.aattrs_as_ir_nodes = aattrs
 
@@ -1204,9 +1275,10 @@ class Expression:
         self.aattrs = None  # type: Optional[Tuple[int, ...]]
         self.aattr_table = {None: aattrs[0]} \
             # type: Dict[Optional[int], ir.Node]
+
       else:
         tag = 0
-        operand_table = {}      # type: Dict[ir.Node, int]
+        operand_table = {}  # type: Dict[ir.Node, int]
         self.aattr_table = {}
         for aattr in aattrs:
           if aattr not in operand_table:
@@ -1215,8 +1287,8 @@ class Expression:
             tag += 1
         self.aattrs = tuple(operand_table[aattr] for aattr in aattrs)
 
-      _logger.debug(
-          'polynomial: %s%s', self.operator, util.idx2str(self.operands))
+      _logger.debug('polynomial: %s%s', self.operator,
+                    util.idx2str(self.operands))
       _logger.debug('rattrs: %s', util.idx2str(self.rattrs))
       _logger.debug('aattrs: %s', util.idx2str(self.aattrs_as_ir_nodes))
     elif isinstance(polynomial, ir.Node):
