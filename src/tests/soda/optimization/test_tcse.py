@@ -261,7 +261,7 @@ class TestGreedySchedules(TestCommSchedules):
       if num_ops is not None:
         self.assertEqual(num_ops, schedule.num_ops)
       if total_distance is not None:
-        self.assertEqual(total_distance, schedule.total_distance)
+        self.assertGreaterEqual(total_distance, schedule.total_distance)
 
     test(None, num_ops=4, total_distance=12)
     test((1, 1, 1, 1, 2, 1, 1, 1, 1), num_ops=5, total_distance=13)
@@ -270,6 +270,8 @@ class TestGreedySchedules(TestCommSchedules):
     test((7, 6, 7, 2, 1, 7, 2, 1, 7), num_ops=6, total_distance=12)
     test((2, 3, 6, 4, 3, 3, 4, 4, 3), num_ops=6, total_distance=16)
     test((4, 4, 0, 7, 4, 0, 7, 3, 1), num_ops=6, total_distance=17)
+    test((5, 1, 7, 1, 1, 7, 1, 1, 1), num_ops=6, total_distance=17)
+    test((1, 6, 5, 5, 4, 1, 1, 6, 5), num_ops=6, total_distance=17)
 
   def test_5x5_tcse(self):
     """Test a 5x5 temporal CSE case."""
@@ -311,8 +313,10 @@ class TestGreedySchedules(TestCommSchedules):
     rattrs = tuple(map(linearizer, rattrs))
     schedule = self.Schedules(rattrs, aattrs, linearizer=linearizer).best
     self.assertEqual(70, schedule.num_ops)
+    self.assertGreaterEqual(245, schedule.total_distance)
     schedule = self.Schedules(rattrs, linearizer=linearizer).best
     self.assertEqual(10, schedule.num_ops)
+    self.assertGreaterEqual(220, schedule.total_distance)
 
   def test_16x16_tcse(self):
     m, n = 16, 16
