@@ -1182,8 +1182,7 @@ class ExternalSchedules(ScheduleBase):
   def best(self) -> CommSchedule:
     attrs = {
         'rattrs': self.rattrs,
-        'aattrs': self.aattrs or [1] * len(self.rattrs),
-        'linearizer': None
+        'aattrs': self.aattrs or [1] * len(self.rattrs)
     }  # type: Dict[str, Any]
     if self.linearizer is not None:
       attrs['linearizer'] = {
