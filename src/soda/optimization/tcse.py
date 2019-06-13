@@ -1004,7 +1004,7 @@ class GreedySchedules(ScheduleBase):
   """Schedules of an Expression, found greedily.
   """
   timeout = 1
-  num_pruned = 1
+  num_pruned = 3
 
   def __init__(self,
                rattrs: Tuple[RelativeAttr, ...],
@@ -1048,7 +1048,7 @@ class GreedySchedules(ScheduleBase):
   def generator(self) -> Iterator[CommSchedule]:
     attr_map = {attr: idx for idx, attr in enumerate(self)}
     reuses = OrderedDict()  # type: Dict[CommSchedule, List[Tuple[int, int]]]
-    for left, right in reversed(list(itertools.combinations(self, 2))):
+    for left, right in itertools.combinations(self, 2):
       left_rattr, left_aattr = left
       right_rattr, right_aattr = right
       operation = CommSchedule(left_aattr, right_aattr,
@@ -1060,7 +1060,7 @@ class GreedySchedules(ScheduleBase):
       # look for reuse of this operation over all operands
       used = set()  # type: Set[int]
       reuses[operation] = []
-      for idx_l, (rattr_l, aattr_l) in reversed(list(enumerate(self))):
+      for idx_l, (rattr_l, aattr_l) in enumerate(self):
         if aattr_l != left_aattr or idx_l in used:
           continue
         rattr_r, aattr_r = rattr_l + right_rattr - left_rattr, right_aattr
@@ -1091,7 +1091,7 @@ class GreedySchedules(ScheduleBase):
         return not any(idx)
       return False
 
-    if self.linearizer is not None:
+    if self.linearizer is not None and len(reuses) > len(self):
       for dim in reversed(self.linearizer.dims):
         if any(aligns(op.distance, dim) for op in reuses):
           # only consider reuse with a single dimension, if possible
