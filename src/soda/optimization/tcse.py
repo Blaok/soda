@@ -1048,6 +1048,8 @@ class GreedySchedules(ScheduleBase):
   def generator(self) -> Iterator[CommSchedule]:
     attr_map = {attr: idx for idx, attr in enumerate(self)}
     reuses = OrderedDict()  # type: Dict[CommSchedule, List[Tuple[int, int]]]
+    has_conflict = collections.defaultdict(lambda: False
+                                          )  # type: Dict[CommSchedule, bool]
     for left, right in itertools.combinations(self, 2):
       left_rattr, left_aattr = left
       right_rattr, right_aattr = right
@@ -1083,8 +1085,10 @@ class GreedySchedules(ScheduleBase):
         group_table[idx_l] = group_id
         group_table[idx_r] = group_id
 
-      if len(group_lists) > 1:
-        _logger.debug('group list: %s', group_lists)
+      for group_list in group_lists:
+        if len(group_list) > 1:
+          _logger.debug('conflict group of %s: %s', operation, group_list)
+          has_conflict[operation] = True
 
       for group_list in group_lists:
         if len(group_list) % 2 != 0:
@@ -1163,17 +1167,18 @@ class GreedySchedules(ScheduleBase):
         do_reuse_for(operation)
 
       new_rattrs, new_aattrs = zip(*new_attrs.values())
-      candidates.append(GreedySchedules(new_rattrs, new_aattrs,
-                                        self.linearizer))
+      candidates.append((has_conflict[op],
+                         GreedySchedules(new_rattrs, new_aattrs,
+                                         self.linearizer)))
 
     nsmallest = heapq.nsmallest(GreedySchedules.num_pruned, candidates)
 
     if _logger.isEnabledFor(logging.DEBUG):
-      for schedule in nsmallest:
+      for conflict, schedule in nsmallest:
         _logger.debug('candidate: %s cost: %s', schedule.comparison_key,
-                      schedule.comparison_key.cost)
+                      (conflict, *schedule.comparison_key.cost))
 
-    for schedule in nsmallest:
+    for _, schedule in nsmallest:
       yield from schedule.generator
 
   @cached_property.cached_property
