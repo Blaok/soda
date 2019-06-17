@@ -255,6 +255,7 @@ class TestGreedySchedules(TestCommSchedules):
 
     def test(aattrs, num_ops=None, total_distance=None):
       schedules = self.Schedules(rattrs, aattrs, linearizer)
+      _logger.debug('aattrs: %s', aattrs)
       schedule = schedules.best
       schedules.print_stats()
       _logger.debug('schedule: %s', schedule)
@@ -272,6 +273,7 @@ class TestGreedySchedules(TestCommSchedules):
     test((4, 4, 0, 7, 4, 0, 7, 3, 1), num_ops=6, total_distance=17)
     test((5, 1, 7, 1, 1, 7, 1, 1, 1), num_ops=6, total_distance=17)
     test((1, 6, 5, 5, 4, 1, 1, 6, 5), num_ops=6, total_distance=17)
+    test((4, 3, 0, 2, 0, 0, 6, 0, 0), num_ops=7, total_distance=12)
 
   def test_5x5_tcse(self):
     """Test a 5x5 temporal CSE case."""
