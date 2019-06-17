@@ -1058,18 +1058,52 @@ class GreedySchedules(ScheduleBase):
         continue
       #_logger.debug('look for operation: %s', operation)
       # look for reuse of this operation over all operands
-      used = set()  # type: Set[int]
       reuses[operation] = []
+      # conflict groups
+      # group_lists maps group id to a list of (idx_l, idx_r) tuple, in order
+      # group_table maps attr idx to group id
+      group_lists = []  # type: List[List[Tuple[int, int]]]
+      group_table = {}  # type: Dict[int, int]
       for idx_l, (rattr_l, aattr_l) in enumerate(self):
-        if aattr_l != left_aattr or idx_l in used:
+        if aattr_l != left_aattr:
           continue
         rattr_r, aattr_r = rattr_l + right_rattr - left_rattr, right_aattr
         idx_r = attr_map.get((rattr_r, aattr_r))
-        if idx_r is None or idx_r in used:
+        if idx_r is None:
           continue
+        # (idx_l, idx_r) is compatible with `operation`
+        group_id = group_table.get(idx_l)
+        if group_id is None:
+          group_id = group_table.get(idx_r)
+        if group_id is None:
+          # new conflict group
+          group_id = len(group_lists)
+          group_lists.append([])
+        group_lists[group_id].append((idx_l, idx_r))
+        group_table[idx_l] = group_id
+        group_table[idx_r] = group_id
 
-        reuses[operation].append((idx_l, idx_r))
-        used |= {idx_l, idx_r}
+      if len(group_lists) > 1:
+        _logger.debug('group list: %s', group_lists)
+
+      for group_list in group_lists:
+        if len(group_list) % 2 != 0:
+          reuses[operation].extend(group_list[::2])
+
+      min_idx_l = min((x[0] for x in reuses[operation]), default=0)
+      max_idx_l = max((x[0] for x in reuses[operation]), default=-1)
+
+      for group_list in group_lists:
+        if len(group_list) % 2 == 0:
+          span_0 = (self.rattrs[max(group_list[-2][0], max_idx_l)] -
+                    self.rattrs[min(group_list[0][0], min_idx_l)])
+          span_1 = (self.rattrs[max(group_list[-1][0], max_idx_l)] -
+                    self.rattrs[min(group_list[1][0], min_idx_l)])
+          _logger.debug('span 0: %d, span 1: %d', span_0, span_1)
+          reuses[operation].extend(group_list[1 if span_1 < span_0 else 0::2])
+      if len(reuses[operation]) > 1:
+        _logger.debug('reuses[%s]: %s', operation, reuses[operation])
+      reuses[operation].sort()  # ?
 
     # filter out operations that cannot be reused
     # they may not all be useful because they overlap
@@ -1108,7 +1142,7 @@ class GreedySchedules(ScheduleBase):
       # find all compatible reuses that include op
       _logger.debug('find all compatible reuses that include %s', op)
       new_attrs = OrderedDict(enumerate(self))
-      used = set()
+      used = set()  # type: Set[int]
 
       def do_reuse_for(schedule: CommSchedule) -> None:
         reused_indices = [(idx_l, idx_r)
@@ -1132,7 +1166,14 @@ class GreedySchedules(ScheduleBase):
       candidates.append(GreedySchedules(new_rattrs, new_aattrs,
                                         self.linearizer))
 
-    for schedule in heapq.nsmallest(GreedySchedules.num_pruned, candidates):
+    nsmallest = heapq.nsmallest(GreedySchedules.num_pruned, candidates)
+
+    if _logger.isEnabledFor(logging.DEBUG):
+      for schedule in nsmallest:
+        _logger.debug('candidate: %s cost: %s', schedule.comparison_key,
+                      schedule.comparison_key.cost)
+
+    for schedule in nsmallest:
       yield from schedule.generator
 
   @cached_property.cached_property
