@@ -1,5 +1,6 @@
 from typing import (
     Dict,
+    List,
     Tuple,
 )
 
@@ -23,6 +24,7 @@ import soda.util
 import soda.tensor
 
 _logger = logging.getLogger().getChild(__name__)
+
 
 class Stencil():
   """
@@ -50,6 +52,7 @@ class Stencil():
     local_names: Tuple of str, names of local tensors.
     output_names: Tuple of str, names of output tensors.
   """
+
   def __init__(self, **kwargs):
     self.iterate = kwargs.pop('iterate')
     if self.iterate < 1:
@@ -80,7 +83,7 @@ class Stencil():
       dram_in = kwargs.pop('dram_in')
       if dram_in is not None:
         if ':' in dram_in:
-          input_stmt_map = {_.name : _ for _ in self.input_stmts}
+          input_stmt_map = {_.name: _ for _ in self.input_stmts}
           for dram_map in dram_in.split('^'):
             var_name, bank_list = dram_map.split(':')
             if var_name not in input_stmt_map:
@@ -95,13 +98,13 @@ class Stencil():
       dram_out = kwargs.pop('dram_out')
       if dram_out is not None:
         if ':' in dram_out:
-          output_stmt_map = {_.name : _ for _ in self.output_stmts}
+          output_stmt_map = {_.name: _ for _ in self.output_stmts}
           for dram_map in dram_out.split(','):
             var_name, bank_list = dram_map.split(':')
             if var_name not in output_stmt_map:
               raise util.SemanticError('no output named `{}`'.format(var_name))
-            output_stmt_map[var_name].dram = tuple(map(int,
-                                                       bank_list.split('.')))
+            output_stmt_map[var_name].dram = tuple(
+                map(int, bank_list.split('.')))
         else:
           for output_stmt in self.output_stmts:
             output_stmt.dram = tuple(map(int, dram_out.split('.')))
@@ -109,19 +112,20 @@ class Stencil():
     if self.iterate > 1:
       if len(self.input_stmts) != len(self.output_stmts):
         raise util.SemanticError(
-          'number of input tensors must be the same as output if iterate > 1 '
-          'times, currently there are %d input(s) but %d output(s)' %
-          (len(self.input_stmts), len(self.output_stmts)))
+            'number of input tensors must be the same as output if iterate > 1 '
+            'times, currently there are %d input(s) but %d output(s)' %
+            (len(self.input_stmts), len(self.output_stmts)))
       if self.input_types != self.output_types:
         raise util.SemanticError(
-          'input must have the same type(s) as output if iterate > 1 '
-          'times, current input has type %s but output has type %s' %
-          (util.lst2str(self.input_types), util.lst2str(self.output_types)))
-      _logger.debug('pipeline %d iterations of [%s] -> [%s]' % (self.iterate,
-        ', '.join('%s: %s' % (stmt.haoda_type, stmt.name)
-                  for stmt in self.input_stmts),
-        ', '.join('%s: %s' % (stmt.haoda_type, stmt.name)
-                  for stmt in self.output_stmts)))
+            'input must have the same type(s) as output if iterate > 1 '
+            'times, current input has type %s but output has type %s' %
+            (util.lst2str(self.input_types), util.lst2str(self.output_types)))
+      _logger.debug(
+          'pipeline %d iterations of [%s] -> [%s]' %
+          (self.iterate, ', '.join('%s: %s' % (stmt.haoda_type, stmt.name)
+                                   for stmt in self.input_stmts), ', '.join(
+                                       '%s: %s' % (stmt.haoda_type, stmt.name)
+                                       for stmt in self.output_stmts)))
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
       _logger.debug('simplify %s', stmt.name)
@@ -228,16 +232,16 @@ class Stencil():
     def name_in_iter(name, iteration):
       if name in self.input_names:
         if iteration > 0:
-          return name+'_iter%d' % iteration
+          return name + '_iter%d' % iteration
         return name
       if name in self.output_names:
-        if iteration < self.iterate-1:
-          return (self.input_names[self.output_names.index(name)]+
-                  '_iter%d' % (iteration+1))
+        if iteration < self.iterate - 1:
+          return (self.input_names[self.output_names.index(name)] + '_iter%d' %
+                  (iteration + 1))
         return name
       if name in self.local_names:
         if iteration > 0:
-          return name+'_iter%d' % iteration
+          return name + '_iter%d' % iteration
         return name
       if name in self.param_names:
         return name
@@ -246,23 +250,27 @@ class Stencil():
     for iteration in range(self.iterate):
       _logger.debug('iterate %s', iteration)
       _logger.debug('map: %s', self.symbol_table)
+
       def mutate_name_callback(obj, mutated):
         if isinstance(obj, ir.Ref):
           obj.haoda_type = self.symbol_table[obj.name]
           # pylint: disable=cell-var-from-loop
           obj.name = name_in_iter(obj.name, iteration)
         return obj
+
       tensors = []
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
         tensor = soda.tensor.Tensor(stmt.visit(mutate_name_callback),
                                     self.tile_size)
         loads = visitor.get_load_tuple(tensor)
-        norm_idx = tuple(min(load.idx[d] for load in loads
-                             if load.name not in self.param_names)
-                         for d in range(self.dim))
+        norm_idx = tuple(
+            min(load.idx[d]
+                for load in loads
+                if load.name not in self.param_names)
+            for d in range(self.dim))
         if any(norm_idx):
-          _logger.debug('normalize index of %s: (%s)',
-                        tensor.name, ', '.join(map(str, norm_idx)))
+          _logger.debug('normalize index of %s: (%s)', tensor.name,
+                        ', '.join(map(str, norm_idx)))
           mutator.shift(tensor, norm_idx, excluded=self.param_names)
         tensor_map[tensor.name] = tensor
         tensors.append(tensor)
@@ -274,8 +282,9 @@ class Stencil():
         tensor.propagate_type()
         loads = visitor.get_load_dict(tensor)
         for parent_name, ld_refs in loads.items():
-          ld_refs = sorted(ld_refs, key=lambda ref: soda.util.serialize(
-              ref.idx, self.tile_size))
+          ld_refs = sorted(
+              ld_refs,
+              key=lambda ref: soda.util.serialize(ref.idx, self.tile_size))
           parent_tensor = tensor_map[parent_name]
           parent_tensor.children[tensor.name] = tensor
           tensor.parents[parent_name] = parent_tensor
@@ -292,7 +301,7 @@ class Stencil():
     return tensor_map
 
   @cached_property.cached_property
-  def chronological_tensors(self):
+  def chronological_tensors(self) -> List[soda.tensor.Tensor]:
     """Computes the offsets of tensors.
 
     Returns:
@@ -311,33 +320,32 @@ class Stencil():
       tensor = self.tensors[processing_queue.popleft()]
       _logger.debug('inspecting tensor %s\'s children' % tensor.name)
       for child in tensor.children.values():
-        if ({x.name for x in child.parents.values()} <= processed_tensors
-          and child.name not in processed_tensors):
+        if ({x.name for x in child.parents.values()} <= processed_tensors and
+            child.name not in processed_tensors):
           # good, all inputs are processed
           # can determine offset of current tensor
-          _logger.debug(
-            'input%s for tensor <%s> (i.e. %s) %s processed',
-              '' if len(child.parents) == 1 else 's',
-              child.name,
-              ', '.join([x.name for x in child.parents.values()]),
-              'is' if len(child.parents) == 1 else 'are')
+          _logger.debug('input%s for tensor <%s> (i.e. %s) %s processed',
+                        '' if len(child.parents) == 1 else 's', child.name,
+                        ', '.join([x.name for x in child.parents.values()]),
+                        'is' if len(child.parents) == 1 else 'are')
           stage_offset = soda.util.serialize(child.st_idx, self.tile_size)
 
           # synchronization check
           def sync(tensor, offset):
             if tensor is None:
               return offset
-            _logger.debug('index of tensor <%s>: %s',
-                          tensor.name, tensor.st_idx)
+            _logger.debug('index of tensor <%s>: %s', tensor.name,
+                          tensor.st_idx)
             stage_offset = soda.util.serialize(tensor.st_idx, self.tile_size)
-            _logger.debug('offset of tensor <%s>: %d',
-                          tensor.name, stage_offset)
+            _logger.debug('offset of tensor <%s>: %d', tensor.name,
+                          stage_offset)
             loads = visitor.get_load_dict(tensor)
             for name in loads:
               loads[name] = tuple(ref.idx for ref in loads[name])
-            _logger.debug('loads: %s', ', '.join(
-                '%s@%s' % (name, util.lst2str(map(util.idx2str, indices)))
-                for name, indices in loads.items()))
+            _logger.debug(
+                'loads: %s', ', '.join(
+                    '%s@%s' % (name, util.lst2str(map(util.idx2str, indices)))
+                    for name, indices in loads.items()))
             for n in loads:
               loads[n] = soda.util.serialize_iter(loads[n], self.tile_size)
             for l in loads.values():
@@ -346,28 +354,27 @@ class Stencil():
               if len(l) == 1:
                 l.append(l[-1])
             _logger.debug(
-                'load offset range in tensor %s: %s', tensor.name, '{%s}' % (
-                    ', '.join('%s: [%d:%d]' % (n, *v)
-                              for n, v in loads.items())))
+                'load offset range in tensor %s: %s', tensor.name, '{%s}' %
+                (', '.join('%s: [%d:%d]' % (n, *v) for n, v in loads.items())))
             for parent in tensor.parents.values():
               tensor_distance = next(reversed(tensor.ld_offsets[parent.name]))
               _logger.debug('tensor distance: %s', tensor_distance)
               _logger.debug(
-                'want to access tensor <%s> at offset [%d, %d] '
-                'to generate tensor <%s> at offset %d',
-                  parent.name, offset+loads[parent.name][0],
-                  offset+loads[parent.name][-1], tensor.name, offset)
-              tensor_offset = (parent.st_delay+tensor_distance-stage_offset)
+                  'want to access tensor <%s> at offset [%d, %d] '
+                  'to generate tensor <%s> at offset %d', parent.name,
+                  offset + loads[parent.name][0],
+                  offset + loads[parent.name][-1], tensor.name, offset)
+              tensor_offset = (parent.st_delay + tensor_distance - stage_offset)
               if offset < tensor_offset:
                 _logger.debug(
-                  'but tensor <%s> won\'t be available until offset %d',
-                  parent.name, tensor_offset)
+                    'but tensor <%s> won\'t be available until offset %d',
+                    parent.name, tensor_offset)
                 offset = tensor_offset
-                _logger.debug('need to access tensor <%s> at offset [%d, %d] '
-                              'to generate tensor <%s> at offset %d',
-                              parent.name, offset+loads[parent.name][0],
-                              offset+loads[parent.name][-1], tensor.name,
-                              offset)
+                _logger.debug(
+                    'need to access tensor <%s> at offset [%d, %d] '
+                    'to generate tensor <%s> at offset %d', parent.name,
+                    offset + loads[parent.name][0],
+                    offset + loads[parent.name][-1], tensor.name, offset)
             return offset
 
           _logger.debug('intend to generate tensor <%s> at offset %d',
@@ -380,24 +387,24 @@ class Stencil():
 
           # add delay
           for sibling in child.parents.values():
-            delay = child.st_delay - (sibling.st_delay +
-                list(child.ld_offsets[sibling.name].keys())[-1] - stage_offset)
+            delay = child.st_delay - (sibling.st_delay + list(
+                child.ld_offsets[sibling.name].keys())[-1] - stage_offset)
             if delay > 0:
               _logger.debug(
-                'tensor %s arrives at tensor <%s> at offset %d < %d; '
-                'add %d delay', sibling.name, child.name,
-                sibling.st_delay+next(reversed(
-                    child.ld_offsets[sibling.name]))-stage_offset,
-                child.st_delay, delay)
+                  'tensor %s arrives at tensor <%s> at offset %d < %d; '
+                  'add %d delay', sibling.name, child.name, sibling.st_delay +
+                  next(reversed(child.ld_offsets[sibling.name])) - stage_offset,
+                  child.st_delay, delay)
             else:
               _logger.debug(
-                'tensor %s arrives at tensor <%s> at offset %d = %d; good',
-                sibling.name, child.name, sibling.st_delay+next(reversed(
-                  child.ld_offsets[sibling.name]))-stage_offset,
-                child.st_delay)
+                  'tensor %s arrives at tensor <%s> at offset %d = %d; good',
+                  sibling.name, child.name, sibling.st_delay +
+                  next(reversed(child.ld_offsets[sibling.name])) - stage_offset,
+                  child.st_delay)
             child.ld_delays[sibling.name] = max(delay, 0)
-            _logger.debug('set delay of |%s <- %s| to %d' %
-              (child.name, sibling.name, child.ld_delays[sibling.name]))
+            _logger.debug(
+                'set delay of |%s <- %s| to %d' %
+                (child.name, sibling.name, child.ld_delays[sibling.name]))
 
           processing_queue.append(child.name)
           processed_tensors.add(child.name)
@@ -407,10 +414,8 @@ class Stencil():
             if parent.name not in processed_tensors:
               _logger.debug('tensor %s requires tensor <%s> as an input',
                             tensor.name, parent.name)
-              _logger.debug('but tensor <%s> isn\'t processed yet',
-                            parent.name)
-              _logger.debug('add %s to scheduling queue',
-                            parent.name)
+              _logger.debug('but tensor <%s> isn\'t processed yet', parent.name)
+              _logger.debug('add %s to scheduling queue', parent.name)
               processing_queue.append(parent.name)
 
     _logger.debug('tensors in insertion order: [%s]',
@@ -420,39 +425,40 @@ class Stencil():
 
     for tensor in self.tensors.values():
       for name, indices in tensor.ld_indices.items():
-        _logger.debug('stage index: %s@%s <- %s@%s',
-                      tensor.name, util.idx2str(tensor.st_idx),
-                      name, util.lst2str(util.idx2str(idx) for idx in indices))
+        _logger.debug('stage index: %s@%s <- %s@%s', tensor.name,
+                      util.idx2str(tensor.st_idx), name,
+                      util.lst2str(util.idx2str(idx) for idx in indices))
     for tensor in self.tensors.values():
       if tensor.is_input():
         continue
       _logger.debug('stage expr: %s = %s', tensor.st_ref, tensor.expr)
     for tensor in self.tensors.values():
       for name, offsets in tensor.ld_offsets.items():
-        _logger.debug('stage offset: %s@%d <- %s@%s',
-                      tensor.name, soda.util.serialize(tensor.st_idx,
-                                                       self.tile_size),
-                      name, util.lst2str(offsets))
+        _logger.debug('stage offset: %s@%d <- %s@%s', tensor.name,
+                      soda.util.serialize(tensor.st_idx, self.tile_size), name,
+                      util.lst2str(offsets))
     for tensor in self.tensors.values():
       for name, delay in tensor.ld_delays.items():
         _logger.debug('stage delay: %s <- %s delayed %d' %
-                (tensor.name, name, delay))
+                      (tensor.name, name, delay))
 
     return chronological_tensors
 
   @cached_property.cached_property
   def input_partition(self):
     pixel_width_i = sum(self.pixel_width_i)
-    if self.burst_width/pixel_width_i*self.dram_bank/2 > self.unroll_factor/2:
-      return int(self.burst_width/pixel_width_i*self.dram_bank/2)
-    return int(self.unroll_factor/2)
+    if (self.burst_width / pixel_width_i * self.dram_bank / 2 >
+        self.unroll_factor / 2):
+      return int(self.burst_width / pixel_width_i * self.dram_bank / 2)
+    return int(self.unroll_factor / 2)
 
   @cached_property.cached_property
   def output_partition(self):
     pixel_width_o = sum(self.pixel_width_o)
-    if self.burst_width/pixel_width_o*self.dram_bank/2 > self.unroll_factor/2:
-      return int(self.burst_width/pixel_width_o*self.dram_bank/2)
-    return int(self.unroll_factor/2)
+    if (self.burst_width / pixel_width_o * self.dram_bank / 2 >
+        self.unroll_factor / 2):
+      return int(self.burst_width / pixel_width_o * self.dram_bank / 2)
+    return int(self.unroll_factor / 2)
 
   @cached_property.cached_property
   def pixel_width_i(self):
@@ -472,20 +478,22 @@ class Stencil():
 
   # return [Tensor, ...]
   def _get_parent_tensors_for(self, node):
-    return {x: self.tensors[x]
-        for x in {x.name for x in node.get_loads()
-              if x.name not in self.extra_params}}
+    return {
+        x: self.tensors[x] for x in
+        {x.name for x in node.get_loads() if x.name not in self.extra_params}
+    }
 
   # return {name: [(idx, ...), ...]}
   def _get_window_for(self, node):
-    loads = node.get_loads() # [Load, ...]
-    load_names = {l.name for l in loads
-            if l.name not in self.extra_params}
-    windows = {name: sorted({l.idx for l in loads if l.name == name},
-                key=lambda x: soda.util.serialize(x, self.tile_size))
-           for name in load_names}
+    loads = node.get_loads()  # [Load, ...]
+    load_names = {l.name for l in loads if l.name not in self.extra_params}
+    windows = {
+        name: sorted({l.idx for l in loads if l.name == name},
+                     key=lambda x: soda.util.serialize(x, self.tile_size))
+        for name in load_names
+    }
     _logger.debug('window for %s@(%s) is %s' %
-      (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
+                  (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
     return windows
 
   # return [StageExpr, ...]
@@ -511,14 +519,14 @@ class Stencil():
       reuse_buffer_length = {}
       reuse_buffers[tensor.name] = reuse_buffer
       self._reuse_buffer_lengths[tensor.name] = reuse_buffer_length
-      first = [True]*unroll_factor
+      first = [True] * unroll_factor
       for start, end in reuse_buffer[1:]:
-        if first[start%unroll_factor]:
-          first[start%unroll_factor] = False
+        if first[start % unroll_factor]:
+          first[start % unroll_factor] = False
           if start >= unroll_factor:
-            reuse_buffer_length[end] = end//unroll_factor
+            reuse_buffer_length[end] = end // unroll_factor
             continue
-        reuse_buffer_length[end] = (end-start)//unroll_factor
+        reuse_buffer_length[end] = (end - start) // unroll_factor
     return reuse_buffers
 
   @cached_property.cached_property
@@ -559,14 +567,12 @@ class Stencil():
   def get_replicated_next_fifo(self):
     if not hasattr(self, 'replicated_next_fifo'):
       self.replicated_next_fifo = {}
-      for name, reuse_buffer in (self.get_replicated_reuse_buffers()
-          .items()):
+      for name, reuse_buffer in self.get_replicated_reuse_buffers().items():
         self.replicated_next_fifo[name] = {}
         for start, end in reuse_buffer[1:]:
           if start < end:
             self.replicated_next_fifo[name][start] = end
-      _logger.debug('replicated_next_fifo: %s'
-        % self.replicated_next_fifo)
+      _logger.debug('replicated_next_fifo: %s' % self.replicated_next_fifo)
     return self.replicated_next_fifo
 
   def get_replicated_reuse_buffer_length(self, name, offset):
@@ -580,35 +586,35 @@ class Stencil():
       self.replicated_reuse_buffer_lengths = {}
       self.replicated_reuse_buffers = {}
       for tensor in self.producer_tensors:
-        reuse_buffer = _get_replicated_reuse_buffer(self.tile_size,
-          tensor, replication_factor)
+        reuse_buffer = _get_replicated_reuse_buffer(self.tile_size, tensor,
+                                                    replication_factor)
         self.replicated_reuse_buffers[tensor.name] = reuse_buffer
         self.replicated_reuse_buffer_lengths[tensor.name] = {}
-        first = [True]*self.replication_factor
+        first = [True] * self.replication_factor
         for start, end in reuse_buffer[1:]:
-          if first[start%replication_factor]:
-            first[start%replication_factor] = False
+          if first[start % replication_factor]:
+            first[start % replication_factor] = False
             if start >= replication_factor:
-              self.replicated_reuse_buffer_lengths[tensor.name][
-                end] = end//replication_factor
+              self.replicated_reuse_buffer_lengths[
+                  tensor.name][end] = end // replication_factor
               continue
-          self.replicated_reuse_buffer_lengths[tensor.name][end] = (
-            end-start)//replication_factor
+          self.replicated_reuse_buffer_lengths[
+              tensor.name][end] = (end - start) // replication_factor
       _logger.debug('replicated_reuse_buffers: %s' %
-        self.replicated_reuse_buffers)
+                    self.replicated_reuse_buffers)
       _logger.debug('replicated_reuse_buffer_lengths: %s' %
-        self.replicated_reuse_buffer_lengths)
+                    self.replicated_reuse_buffer_lengths)
     return self.replicated_reuse_buffers
 
   def get_replicated_all_points(self):
     if not hasattr(self, 'replicated_all_points'):
       self.replicated_all_points = {}
       for tensor in self.producer_tensors:
-        self.replicated_all_points[tensor.name
-          ] = _get_replicated_points(self.tile_size, tensor)
-      _logger.debug('replicated_all_points: %s' %
-        self.replicated_all_points)
+        self.replicated_all_points[tensor.name] = _get_replicated_points(
+            self.tile_size, tensor)
+      _logger.debug('replicated_all_points: %s' % self.replicated_all_points)
     return self.replicated_all_points
+
 
 def _get_reuse_chains(tile_size, tensor, unroll_factor):
   """Generates reuse chains for a Tensor.
@@ -632,25 +638,29 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
     unrolled_offsets = set()
     for unroll_idx in range(unroll_factor):
       for offset in offsets:
-        unrolled_offsets.add(max(offsets) + unroll_idx - offset +
-                             child.ld_delays[tensor.name])
+        unrolled_offsets.add(
+            max(offsets) + unroll_idx - offset + child.ld_delays[tensor.name])
     return unrolled_offsets
 
   A_dag = set()
   for child in tensor.children.values():
     A_dag |= unroll_offsets(
-      soda.util.serialize_iter(child.ld_indices[tensor.name], tile_size), child)
+        soda.util.serialize_iter(child.ld_indices[tensor.name], tile_size),
+        child)
   _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
   for chain_idx in reversed(range(unroll_factor)):
-    chains.append(tuple(sorted(
-      offset for offset in A_dag if offset % unroll_factor == chain_idx)))
+    chains.append(
+        tuple(
+            sorted(offset for offset in A_dag
+                   if offset % unroll_factor == chain_idx)))
   _logger.debug('reuse chains: %s', chains)
 
   for idx, chain in enumerate(chains):
     _logger.debug('reuse chain %d of tensor %s: %s', idx, tensor.name, chain)
   return chains
+
 
 def _get_points(tile_size, tensor, unroll_factor):
   """Generates offset-to-point mapping for a Tensor.
@@ -668,24 +678,26 @@ def _get_points(tile_size, tensor, unroll_factor):
     point index.
   """
 
-  all_points = {} # {name: {offset: {unroll_idx: point_idx}}}
+  all_points = {}  # {name: {offset: {unroll_idx: point_idx}}}
   for child in tensor.children.values():
     all_points[child.name] = {}
     offsets = child.ld_offsets[tensor.name]
     for unroll_idx in range(unroll_factor):
       for idx, offset in enumerate(offsets):
         all_points[child.name].setdefault(
-          max(offsets) - offset + child.ld_delays[tensor.name] + unroll_idx,
-          {})[unroll_factor-1-unroll_idx] = idx
+            max(offsets) - offset + child.ld_delays[tensor.name] + unroll_idx,
+            {})[unroll_factor - 1 - unroll_idx] = idx
   for child in tensor.children.values():
     for offset, points in all_points[child.name].items():
       for unroll_idx, point in points.items():
         _logger.debug(
-          '%s <- %s @ offset=%d <=> %s @ unroll_idx=%d',
-          child.name, tensor.name, offset,
-          util.idx2str(list(child.ld_indices[tensor.name].values())[point].idx),
-          unroll_idx)
+            '%s <- %s @ offset=%d <=> %s @ unroll_idx=%d', child.name,
+            tensor.name, offset,
+            util.idx2str(
+                list(child.ld_indices[tensor.name].values())[point].idx),
+            unroll_idx)
   return all_points
+
 
 def _get_reuse_buffer(tile_size, tensor, unroll_factor):
   """Generates reuse buffer for a Tensor.
@@ -710,117 +722,140 @@ def _get_reuse_buffer(tile_size, tensor, unroll_factor):
   for chain in _get_reuse_chains(tile_size, tensor, unroll_factor):
     reuse_buffer.append((chain[0], chain[0]))
     offsets.append(chain[0])
-    for j in range(len(chain)-1):
-      reuse_buffer.append((chain[j], chain[j+1]))
-      offsets.append(chain[j+1])
-  reuse_buffer[0] = max(offsets)+1
+    for j in range(len(chain) - 1):
+      reuse_buffer.append((chain[j], chain[j + 1]))
+      offsets.append(chain[j + 1])
+  reuse_buffer[0] = max(offsets) + 1
   _logger.debug('reuse chains of tensor %s: %s' % (tensor.name, reuse_buffer))
   return reuse_buffer
 
+
 def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
   _logger.debug('\033[1mget replicated reuse chains of tensor %s\033[0m' %
-    tensor.name)
+                tensor.name)
   A_dag = set()
   for stage in tensor.children:
     offsets = soda.util.serialize_iter(stage.window[tensor.name], tile_size)
-    A_dag |= {max(offsets)-offset+stage.delay[tensor.name]
-      for offset in offsets}
+    A_dag |= {
+        max(offsets) - offset + stage.delay[tensor.name] for offset in offsets
+    }
   _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
-  chains = sum(reversed([
-    tuple([tuple(sorted(x for x in A_dag if x%replication_factor == i))])
-    for i in range(replication_factor)]), ())
+  chains = sum(
+      reversed([
+          tuple(
+              [tuple(sorted(x
+                            for x in A_dag
+                            if x % replication_factor == i))])
+          for i in range(replication_factor)
+      ]), ())
   for idx, chain in enumerate(chains):
-    _logger.debug('reuse chain %d of tensor %s: %s' %
-      (idx, tensor.name, chain))
+    _logger.debug('reuse chain %d of tensor %s: %s' % (idx, tensor.name, chain))
   return chains
 
+
 def _get_replicated_points(tile_size, tensor):
-  all_points = {} # {name:{offset:point_index}}
+  all_points = {}  # {name:{offset:point_index}}
   for stage in tensor.children:
     all_points[stage.name] = {}
     offsets = soda.util.serialize_iter(stage.window[tensor.name], tile_size)
     max_offset = max(offsets)
     for idx, offset in enumerate(offsets):
-      all_points[stage.name][
-        max_offset-offset+stage.delay[tensor.name]] = idx
+      all_points[stage.name][max_offset - offset +
+                             stage.delay[tensor.name]] = idx
   for stage in tensor.children:
     for offset, points in all_points[stage.name].items():
-      _logger.debug('%s <- %s @ offset=%d <=> (%s)' % (
-        stage.name, tensor.name, offset,
-        ', '.join(map(str, stage.window[tensor.name][points]))))
+      _logger.debug('%s <- %s @ offset=%d <=> (%s)' %
+                    (stage.name, tensor.name, offset, ', '.join(
+                        map(str, stage.window[tensor.name][points]))))
   return all_points
 
+
 def _get_replicated_reuse_buffer(tile_size, tensor, replication_factor):
-  reuse_buffer = [None] # [length, (start, end), (start, end), ...]
+  reuse_buffer = [None]  # [length, (start, end), (start, end), ...]
   offsets = []
   for chain in _get_replicated_reuse_chains(tile_size, tensor,
-      replication_factor):
+                                            replication_factor):
     if chain:
       reuse_buffer.append((chain[0], chain[0]))
       offsets.append(chain[0])
-      for j in range(len(chain)-1):
-        reuse_buffer.append((chain[j], chain[j+1]))
-        offsets.append(chain[j+1])
-  reuse_buffer[0] = max(offsets)+1
-  _logger.debug('reuse chains of tensor %s: %s' %
-    (tensor.name, reuse_buffer))
+      for j in range(len(chain) - 1):
+        reuse_buffer.append((chain[j], chain[j + 1]))
+        offsets.append(chain[j + 1])
+  reuse_buffer[0] = max(offsets) + 1
+  _logger.debug('reuse chains of tensor %s: %s' % (tensor.name, reuse_buffer))
   return reuse_buffer
+
 
 def get_indices_id(indices):
   return '_'.join(str(idx).replace('-', 'm') for idx in indices)
 
+
 def get_stencil_distance(stencil_window, tile_size):
-  return (max(soda.util.serialize_iter(stencil_window, tile_size)) +
-          soda.util.serialize(get_stencil_window_offset(stencil_window),
-                              tile_size))
+  return (
+      max(soda.util.serialize_iter(stencil_window, tile_size)) +
+      soda.util.serialize(get_stencil_window_offset(stencil_window), tile_size))
+
 
 def get_stencil_dim(points):
   dimension = len(next(iter(points)))
-  return [max_index-min_index+1 for max_index, min_index in zip(
-    [max([point[dim] for point in points]) for dim in range(dimension)],
-    [min([point[dim] for point in points]) for dim in range(dimension)])]
+  return [
+      max_index - min_index + 1 for max_index, min_index in
+      zip([max([point[dim] for point in points]) for dim in range(dimension)],
+          [min([point[dim] for point in points]) for dim in range(dimension)])
+  ]
 
 _overall_stencil_window_cache = {} \
     # type: Dict[Tuple[int, int], Tuple[Tuple[int, ...], ...]]
+
+
 def get_overall_stencil_window(input_tensor, output_tensor):
   if isinstance(input_tensor, collections.Iterable):
-    all_points = tuple(sorted(set.union(*(
-        set(get_overall_stencil_window(_, output_tensor))
-        for _ in input_tensor))))
-    _logger.debug(
-        'overall stencil window of %s (%s) <- {%s} is %s (%d points)',
-        output_tensor.name, ', '.join(['0']*len(output_tensor.st_idx)),
-        ', '.join(_.name for _ in input_tensor), all_points, len(all_points))
+    all_points = tuple(
+        sorted(
+            set.union(*(set(get_overall_stencil_window(_, output_tensor))
+                        for _ in input_tensor))))
+    _logger.debug('overall stencil window of %s (%s) <- {%s} is %s (%d points)',
+                  output_tensor.name,
+                  ', '.join(['0'] * len(output_tensor.st_idx)),
+                  ', '.join(_.name for _ in input_tensor), all_points,
+                  len(all_points))
     return all_points
   # normalize store index to 0
   idx = (id(input_tensor), id(output_tensor))
   if idx in _overall_stencil_window_cache:
     return _overall_stencil_window_cache[idx]
-  _logger.debug('get overall stencil window of %s <- %s',
-                output_tensor.name, input_tensor.name)
+  _logger.debug('get overall stencil window of %s <- %s', output_tensor.name,
+                input_tensor.name)
   all_points = set()
   for name, points in output_tensor.ld_indices.items():
     _logger.debug('%s@%s <- %s', output_tensor.name,
                   util.idx2str(output_tensor.st_idx),
                   util.idx2str(points.values()))
     if name != input_tensor.name:
-      recursive_points = get_overall_stencil_window(
-          input_tensor, output_tensor.parents[name])
+      recursive_points = get_overall_stencil_window(input_tensor,
+                                                    output_tensor.parents[name])
       _logger.debug('recursive points: %s', util.idx2str(recursive_points))
       all_points |= set.union(*[{
           tuple(map(lambda a, b, c: a + b - c, _, point, output_tensor.st_idx))
-          for _ in recursive_points} for point in points])
+          for _ in recursive_points
+      }
+                                for point in points])
     else:
-      all_points |= {tuple(map(operator.sub, point, output_tensor.st_idx))
-                     for point in points}
+      all_points |= {
+          tuple(map(operator.sub, point, output_tensor.st_idx))
+          for point in points
+      }
   all_points = tuple(sorted(all_points))
   _logger.debug('overall stencil window of %s (%s) <- %s is %s (%d points)',
-                output_tensor.name, ', '.join(['0']*len(output_tensor.st_idx)),
-                input_tensor.name, all_points, len(all_points))
+                output_tensor.name,
+                ', '.join(['0'] * len(output_tensor.st_idx)), input_tensor.name,
+                all_points, len(all_points))
   _overall_stencil_window_cache[idx] = all_points
   return all_points
 
+
 def get_stencil_window_offset(stencil_window):
   # only works if window is normalized to store at 0
-  return tuple(-min(p[d] for p in stencil_window)
-         for d in range(len(next(iter(stencil_window)))))
+  return tuple(-min(p[d]
+                    for p in stencil_window)
+               for d in range(len(next(iter(stencil_window)))))

@@ -1,7 +1,7 @@
 from typing import (
-  overload,
-  Callable,
-  Iterable,
+    overload,
+    Callable,
+    Iterable,
 )
 
 import collections
@@ -9,16 +9,19 @@ import collections
 from haoda import ir
 from haoda.ir.arithmetic import base
 
+
 # pylint: disable=function-redefined
 @overload
 def simplify(expr: ir.Node, logger: Callable[..., None] = None) -> ir.Node:
   ...
+
 
 # pylint: disable=function-redefined
 @overload
 def simplify(expr: Iterable[ir.Node], logger: Callable[..., None] = None) \
     -> Iterable[ir.Node]:
   ...
+
 
 def simplify(expr, logger=None):
   """Simplifies expressions.
@@ -37,9 +40,7 @@ def simplify(expr, logger=None):
 
   passes = base.flatten
   if logger is not None:
-    passes = base.compose(
-        passes,
-        lambda node: base.print_tree(node, logger))
+    passes = base.compose(passes, lambda node: base.print_tree(node, logger))
 
   if isinstance(expr, collections.Iterable):
     return type(expr)(map(passes, expr))
