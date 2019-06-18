@@ -6,28 +6,30 @@ import signal
 COORDS_TILED = 'xyzw'
 COORDS_IN_TILE = 'ijkl'
 COORDS_IN_ORIG = 'pqrs'
-TYPE_WIDTH = {
-  'float': 32,
-  'double': 64,
-  'half': 16
-}
+TYPE_WIDTH = {'float': 32, 'double': 64, 'half': 16}
 MAX_DRAM_BANK = 4
 
 _logger = logging.getLogger().getChild(__name__)
 
+
 class InternalError(Exception):
   pass
+
 
 class SemanticError(Exception):
   pass
 
+
 class SemanticWarn(Exception):
   pass
+
 
 class InputError(Exception):
   pass
 
+
 class Printer():
+
   def __init__(self, out):
     self._out = out
     self._indent = 0
@@ -39,7 +41,7 @@ class Printer():
     if indent < 0:
       indent = self._indent
     if line:
-      self._out.write('%s%s\n' % (' '*indent*self._tab, line))
+      self._out.write('%s%s\n' % (' ' * indent * self._tab, line))
     else:
       self._out.write('\n')
 
@@ -70,18 +72,19 @@ class Printer():
     return self.last_var()
 
   def last_var(self, offset=-1):
-    return 'assign_%d' % (self._assign+offset)
+    return 'assign_%d' % (self._assign + offset)
 
   def print_func(self, name, params, suffix='', align=80):
-    lines = [name+'(']
+    lines = [name + '(']
     for param in params:
-      if ((self._indent + min(1, len(lines)-1))*self._tab+
-          len(lines[-1])+len(param+', ')) > align:
-        lines.append(param+', ')
+      if ((self._indent + min(1,
+                              len(lines) - 1)) * self._tab + len(lines[-1]) +
+          len(param + ', ')) > align:
+        lines.append(param + ', ')
       else:
-        lines[-1] += param+', '
+        lines[-1] += param + ', '
     if lines[-1][-2:] == ', ':
-      lines[-1] = lines[-1][:-2]+')'+suffix
+      lines[-1] = lines[-1][:-2] + ')' + suffix
     line = lines.pop(0)
     self.println(line)
     if lines:
@@ -133,10 +136,12 @@ class Printer():
     self.do_indent()
     yield
 
+
 def print_define(printer, var, val):
   printer.println('#ifndef %s' % var)
   printer.println('#define %s %d' % (var, val))
   printer.println('#endif//%s' % var)
+
 
 def print_guard(printer, var, val):
   printer.println('#ifdef %s' % var)
@@ -145,11 +150,12 @@ def print_guard(printer, var, val):
   printer.println('#endif//%s != %d' % (var, val))
   printer.println('#endif//%s' % var)
 
+
 def get_c_type(haoda_type):
   if haoda_type in {
-      'uint8', 'uint16', 'uint32', 'uint64',
-      'int8', 'int16', 'int32', 'int64'}:
-    return haoda_type+'_t'
+      'uint8', 'uint16', 'uint32', 'uint64', 'int8', 'int16', 'int32', 'int64'
+  }:
+    return haoda_type + '_t'
   if haoda_type is None:
     return None
   if haoda_type == 'float32':
@@ -161,8 +167,10 @@ def get_c_type(haoda_type):
       return 'ap_{}<{}>'.format(token, haoda_type.replace(token, ''))
   return haoda_type
 
+
 def get_haoda_type(c_type):
   return c_type[:-2] if c_type[-2:] == '_t' else c_type
+
 
 def get_width_in_bits(haoda_type):
   if isinstance(haoda_type, str):
@@ -176,28 +184,38 @@ def get_width_in_bits(haoda_type):
       return get_width_in_bits(haoda_type.haoda_type)
   raise InternalError('unknown haoda type: %s' % haoda_type)
 
+
 def get_width_in_bytes(haoda_type):
-  return (get_width_in_bits(haoda_type)-1)//8+1
+  return (get_width_in_bits(haoda_type) - 1) // 8 + 1
+
 
 def is_float(haoda_type):
   return haoda_type in {'half', 'double'} or haoda_type.startswith('float')
 
+
 def idx2str(idx):
   return '(%s)' % ', '.join(map(str, idx))
+
 
 def lst2str(idx):
   return '[%s]' % ', '.join(map(str, idx))
 
+
 def get_module_name(module_id):
   return 'module_%d' % module_id
+
 
 def get_func_name(module_id):
   return 'Module%dFunc' % module_id
 
+
 get_port_name = lambda name, bank: 'bank_{}_{}'.format(bank, name)
 get_port_buf_name = lambda name, bank: 'bank_{}_{}_buf'.format(bank, name)
+
+
 def get_bundle_name(name, bank):
   return '{}_bank_{}'.format(name.replace('<', '_').replace('>', ''), bank)
+
 
 def pause_for_debugging():
   if _logger.isEnabledFor(logging.DEBUG):
@@ -207,10 +225,13 @@ def pause_for_debugging():
     except KeyboardInterrupt:
       pass
 
+
 @contextlib.contextmanager
 def timeout(seconds=1, error_message='Timeout'):
+
   def handler(signum, frame):
     raise TimeoutError(error_message)
+
   signal.signal(signal.SIGALRM, handler)
   signal.alarm(seconds)
   yield

@@ -15,6 +15,7 @@ import soda.visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
+
 def shift(obj, offset, excluded=(), op=operator.sub, verbose=False):
   """Shift soda.ir.Ref with the given offset.
 
@@ -35,15 +36,17 @@ def shift(obj, offset, excluded=(), op=operator.sub, verbose=False):
   """
   if op not in (operator.add, operator.sub):
     _logger.warn('shifting with neither + nor -, which most likely is an error')
+
   def visitor(obj, args):
     if isinstance(obj, ir.Ref):
       if obj.name not in excluded:
         new_idx = tuple(op(a, b) for a, b in zip(obj.idx, offset))
         if verbose:
-          _logger.debug('reference %s(%s) shifted to %s(%s)',
-                       obj.name, ', '.join(map(str, obj.idx)),
-                       obj.name, ', '.join(map(str, new_idx)))
+          _logger.debug('reference %s(%s) shifted to %s(%s)', obj.name,
+                        ', '.join(map(str, obj.idx)), obj.name,
+                        ', '.join(map(str, new_idx)))
         obj.idx = new_idx
+
   if isinstance(obj, ir.Node):
     return obj.visit(visitor)
   if isinstance(obj, tensor.Tensor):
@@ -51,6 +54,7 @@ def shift(obj, offset, excluded=(), op=operator.sub, verbose=False):
   else:
     raise TypeError('argument is not an IR node or a tensor')
   return obj
+
 
 def normalize(obj):
   """Make the least access index 0.
@@ -75,9 +79,11 @@ def normalize(obj):
     return shifter(obj)
   raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')
 
-def replace_expressions(
-    obj: ir.Node, cses: Dict[ir.Node, str],
-    used: Optional[Dict[ir.Node, ir.Node]] = None) -> ir.Node:
+
+def replace_expressions(obj: ir.Node,
+                        cses: Dict[ir.Node, str],
+                        used: Optional[Dict[ir.Node, ir.Node]] = None
+                       ) -> ir.Node:
   """Get AST with common subexpression elimination.
 
   Get AST with the given common subexpressions. If used is not None, the used
@@ -90,8 +96,10 @@ def replace_expressions(
   Returns:
     The ir.Node as the AST.
   """
-  def visitor(obj: ir.Node, args: Tuple[
-      Dict[ir.Node, str], Optional[Dict[ir.Node, ir.Node]]]) -> ir.Node:
+
+  def visitor(obj: ir.Node,
+              args: Tuple[Dict[ir.Node, str], Optional[Dict[ir.Node, ir.Node]]]
+             ) -> ir.Node:
     cses, used = args
     norm_idx = soda.visitor.get_normalize_index(obj)
     normalized = shift(obj, norm_idx) if any(norm_idx) else obj
@@ -99,10 +107,11 @@ def replace_expressions(
       if used is not None:
         if normalized not in used:
           used[normalized] = replace_expressions(
-              normalized,
-              {k: v for k, v in cses.items() if k != normalized}, used)
+              normalized, {k: v for k, v in cses.items() if k != normalized},
+              used)
       new_var = cses[normalized]
       _logger.debug('replacing %s with %s%s', obj, new_var, norm_idx)
       return ir.Ref(name=new_var, idx=norm_idx, lat=None)
     return obj
+
   return obj.visit(visitor, (cses, used))
