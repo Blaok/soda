@@ -1123,13 +1123,14 @@ class GreedySchedules(ScheduleBase):
       distance differ and only differ in that dimension.
       """
       assert self.linearizer is not None
-      idx = list(self.linearizer(dis))
-      if idx[dim] != 0:
-        del idx[dim]
-        return not any(idx)
-      return False
+      zipped = zip(self.linearizer(dis), self.linearizer.mins,
+                   self.linearizer.dims)
+      return all(idx != min_idx if d == dim else idx == min_idx
+                 for idx, min_idx, d in zipped)
 
     if self.linearizer is not None and len(reuses) > len(self):
+      _logger.debug('linearizer: mins: %s maxs: %s', self.linearizer.mins,
+                    self.linearizer.maxs)
       for dim in reversed(self.linearizer.dims):
         if any(aligns(op.distance, dim) for op in reuses):
           # only consider reuse with a single dimension, if possible
