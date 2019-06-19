@@ -6,6 +6,7 @@ from typing import (
     Iterable,
     Iterator,
     List,
+    MutableMapping,
     Optional,
     Sequence,
     Set,
@@ -195,9 +196,6 @@ def set_optimizations(optimizations: Sequence[str]) -> None:
   Expression.set_optimizations(optimizations)
 
 
-_temporal_cse_counter = 0
-
-
 def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
                 ) -> 'soda.core.Stencil':  # type: ignore
   """Eliminate temporal common subexpressions.
@@ -215,57 +213,36 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
 
   # pylint: disable=unsubscriptable-object
   def visitor(node: ir.Node,
-              args: Tuple[Dict[ir.BinaryOp, str], Set[ir.BinaryOp]]) -> ir.Node:
+              cses: MutableMapping[ir.BinaryOp, ir.Ref]) -> ir.Node:
     """Visitor for temporal common subexpression elimination.
 
     Args:
-      args: Tuple of (cses, used); cses is a dict mapping expressions to names
-          of the new variables; used is a dict mapping used common
-          subexpressions to those that have common subexpressions recursively
-          eliminated.
+      csel: A dict mapping expressions to the new ir.Refs.
+
     Returns:
       Optimized ir.Node with temporal common subexpressions eliminated.
     """
     try:
-      cses, used = args
       expression = Expression(node)
       if expression.best_schedule is not None:
-        if not expression.best_schedule.common_subexpressions:
-          _logger.debug('no temporal_cse found')
-          return node
-        _logger.debug('best schedule: (cost: %d)',
+        _logger.debug('best schedule: (cost: %s)',
                       expression.best_schedule.cost)
-        expression.best_schedule.print_tree()
-        for expr in expression.best_schedule.common_subexpressions:
-          expr = propagate_type(expr)
-          # pylint: disable=global-statement
-          global _temporal_cse_counter
-          cses[expr] = 'tcse_var_%d' % _temporal_cse_counter
-          stencil.symbol_table[cses[expr]] = expr.haoda_type
-          _logger.debug('common subexpression: %s <= %s', cses[expr],
-                        ir.unparenthesize(expr))
-          _temporal_cse_counter += 1
-        return expression.best_schedule.get_ir_node_with_cse(cses, used)
+        return expression.best_schedule.get_ir_node_with_tcse(stencil, cses)
     except Expression.CannotHandle:
       pass
     return node
 
   new_local_stmts = []
-  cses = OrderedDict()  # type: Dict[ir.BinaryOp, str]
-  used = OrderedDict()  # type: Dict[ir.BinaryOp, ir.BinaryOp]
-  transform = lambda node: propagate_type(node).visit(visitor, (cses, used))
+  cses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
+  transform = lambda node: propagate_type(node).visit(visitor, cses)
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     cses.clear()
-    used.clear()
     stmt.expr = transform(stmt.expr)
     stmt.let = tuple(map(transform, stmt.let))
-    # used points to old exprs so here it has to propagate type again
-    cses = {propagate_type(used[k]): v for k, v in cses.items() if k in used}
-    for expr, var in cses.items():
+    for expr, ref in cses.items():
+      expr = propagate_type(expr)
       new_local_stmts.append(
-          grammar.LocalStmt(ref=ir.Ref(name=var,
-                                       lat=None,
-                                       idx=(0,) * stencil.dim),
+          grammar.LocalStmt(ref=ref,
                             haoda_type=expr.haoda_type,
                             expr=expr,
                             let=stmt.let))
@@ -327,9 +304,13 @@ class CommSchedule(ScheduleBase):
         Dict[Tuple[Attr, ...], CommSchedule].
     uniq_expr_set: Unique expressions of this schedule as
         Set[Tuple[Attr, ...]].
-    cost: Number of operations required for this schedule.
-    common_subexpressions: Tuple of ir.BinaryOp, normalized.
+    cost: Tuple of number of operations and total reuse distance required for
+        this schedule.
     op_type: Class of self.operator, only works if self.operator is not None.
+    dependers: A dict mapping variable ids to its dependers set, which is an
+        ordered dict mapping dependers to None.
+    dependees: A dict mapping variable ids to its dependees dict, which maps
+        dependees to a tuple of the first and last accessed offset.
   """
 
   def __init__(self,
@@ -439,7 +420,7 @@ class CommSchedule(ScheduleBase):
     """
 
     def get_attrs(schedule: CommSchedule,
-                  reuses: Dict[Schedule, int],
+                  reuses: MutableMapping[Schedule, int],
                   offset: Optional[int] = None) -> Iterator[Tuple[int, int]]:
       """Get all accesses of variables in a schedule.
 
@@ -558,7 +539,9 @@ class CommSchedule(ScheduleBase):
       del dependers[src_vid]
       del dependees[dst_vid][src_vid]
       del dependees[src_vid]
+      del tcse_vars_table[src_vid]
     self._dependers, self._dependees = dependers, dependees
+    self._tcse_vars_table = tcse_vars_table
 
   @property
   def dependers(self) -> Dict[int, Dict[int, None]]:
@@ -583,6 +566,12 @@ class CommSchedule(ScheduleBase):
     if not hasattr(self, '_dependees'):
       self._calc_dependency()
     return self._dependees
+
+  @property
+  def tcse_vars_table(self) -> Dict[int, 'CommSchedule']:
+    if not hasattr(self, '_tcse_vars_table'):
+      self._calc_dependency()
+    return self._tcse_vars_table
 
   @cached_property.cached_property
   def total_distance(self) -> int:
@@ -620,9 +609,11 @@ class CommSchedule(ScheduleBase):
         lp_problem += lp_vars[src_vid] <= min_offset + lp_vars[dst_vid]
         lp_problem += lp_helper_vars[src_vid] >= max_offset + lp_vars[dst_vid]
     lp_status = pulp.LpStatus[lp_problem.solve()]
-    _logger.info('ILP status: %s', lp_status)
+    _logger.debug('ILP status: %s', lp_status)
     _logger.debug('var_0 should be produced @ 0 and kept until %d',
                   int(pulp.value(lp_helper_vars[0])))
+    self._produce_offsets = {}  # type: Dict[int, int]
+    self._consume_offsets = {}  # type: Dict[int, int]
     for vid, lp_var in lp_vars.items():
       if vid == 1:
         continue
@@ -630,11 +621,27 @@ class CommSchedule(ScheduleBase):
       consume_offset = int(pulp.value(lp_helper_vars[vid]))
       _logger.debug('var_%d should be produced @ %d and kept until %d', vid,
                     produce_offset, consume_offset)
+      self._produce_offsets[vid] = produce_offset
+      self._consume_offsets[vid] = consume_offset
     total_distance = int(pulp.value(lp_problem.objective))
     max_rattr = max(
         attr if isinstance(attr, int) else attr[0] for attr in self.norm_attrs)
     assert max_rattr <= total_distance, '%s < %s' % (total_distance, max_rattr)
     return total_distance
+
+  @property
+  def produce_offsets(self) -> Dict[int, int]:
+    """Maps variable ids to offsets at which they are first produced"""
+    if not hasattr(self, '_produce_offsets'):
+      _ = self.total_distance
+    return self._produce_offsets
+
+  @property
+  def consume_offsets(self) -> Dict[int, int]:
+    """Maps variable ids to offsets at which they are last consumed"""
+    if not hasattr(self, '_consume_offsets'):
+      _ = self.total_distance
+    return self._consume_offsets
 
   def get_attrs_with_offset(self, offset: int = 0) -> Iterator[Attr]:
     """Generate all attributes with the given offset.
@@ -737,27 +744,125 @@ class CommSchedule(ScheduleBase):
   def ir_node(self) -> ir.BinaryOp:
     return self.get_ir_node_with_offset(self.rattrs[0])
 
-  def get_ir_node_with_cse(self,
-                           cses: Dict[ir.Node, str],
-                           used: Optional[Dict[ir.Node, ir.Node]] = None
-                          ) -> ir.Node:
-    return mutator.replace_expressions(self.ir_node, cses, used)
-
   @cached_property.cached_property
-  def common_subexpressions(self) -> Tuple[ir.BinaryOp, ...]:
-    exprs = tuple(aattr for aattr in self.aattrs_as_ir_nodes
-                  if isinstance(aattr, ir.BinaryOp))
-    absolute_cses = tuple(
-        aattr for aattr, count in OrderedCounter(exprs).items() if count > 1)
-    for child in self.children:
-      base.print_tree(mutator.normalize(child.ir_node))
-    relative_cses = tuple(
-        mutator.normalize(schedules[0].ir_node)
-        for schedules in self.uniq_expr_dict.values()
-        if len(schedules) > 1)
-    for relative_cse in relative_cses:
-      _logger.debug('relative cse: %s', relative_cse)
-    return absolute_cses + relative_cses
+  def _rtcse_write_idx_table(self) -> Dict[ir.BinaryOp, Tuple[int, ...]]:
+    """Returns the CSE write index table.
+
+    Returns:
+      A dict mapping normalized common subexpressions to the index at which the
+      new variable should write to.
+    """
+    table = {}
+    for vid in self.dependers:
+      if vid == 0:  # 0 is the input
+        continue
+      expr = mutator.shift(self.tcse_vars_table[vid].ir_node,
+                           self.linearizer(-self.produce_offsets[vid]))
+      table[mutator.normalize(expr)] = util.add_inv(
+          soda.visitor.get_normalize_index(expr))
+    return table
+
+  def get_ir_node_with_rtcse(self,
+                             stencil,
+                             rtcses: MutableMapping[ir.BinaryOp, ir.Ref],
+                             write_idx_table=None) -> ir.BinaryOp:
+    """Returns an ir.Node with relative temporal CSE.
+
+    Args:
+      stencil: soda.core.Stencil object, whose symbol table will be updated.
+      rtcses: Dict mapping common subexpressions to the ir.Ref representing the
+        write access to the new variable. This dict is used as both an input and
+        an output. If the keys contain other common subexpressions, they should
+        be replaced with the new variables.
+      cse_write_idx_table: The CSE write index table, used to detect common
+        subexpressions.
+    """
+    if write_idx_table is None:
+      write_idx_table = self._rtcse_write_idx_table
+    operands = []  # type: List[ir.Node]
+    _logger.debug('get ir node with cse for %s', self)
+    if _logger.isEnabledFor(logging.DEBUG):
+      for rattr, aattr in self:
+        _logger.debug('  rattr: %s aattr: %s', rattr, aattr)
+    for rattr, aattr in self:
+      # replace the aattr with proper normalized node
+      if isinstance(aattr, CommSchedule):
+        node_without_cse = mutator.normalize(aattr.ir_node)
+        node_with_cse = mutator.normalize(
+            aattr.get_ir_node_with_rtcse(stencil, rtcses, write_idx_table))
+        idx = write_idx_table.get(node_without_cse)
+        if idx is not None:
+          # this aattr is a common subexpression, need to be replaced
+          # cses is key-ed by expressions with recursive CSE applied
+          if node_with_cse not in rtcses:
+            # this is the first time we see this aattr, allocate a new name
+            node = ir.Ref(name=stencil.new_tcse_var(), idx=idx, lat=None)
+            _logger.debug('  replace %s with %s', node_without_cse, node)
+            stencil.symbol_table[node.name] = node_without_cse.haoda_type
+            rtcses[node_with_cse] = node
+          else:
+            # we have seen this aattr, replace with the known
+            node = rtcses[node_with_cse]
+        else:
+          # this aattr is not a common subexpression
+          node = node_with_cse
+      else:
+        node = self.aattr_table[aattr]
+      operands.append(assemble_attr(self.linearizer(rattr), node))
+
+    result = arithmetic.simplify(
+        self.op_type(operator=(self.operator,) * (len(operands) - 1),
+                     operand=tuple(operands)))
+    assert isinstance(result, ir.BinaryOp)
+    return result
+
+  def get_ir_node_with_tcse(self, stencil,
+                            tcses: MutableMapping[ir.BinaryOp, ir.Ref]
+                           ) -> ir.BinaryOp:
+    rtcses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
+    ir_node_with_rtcse = self.get_ir_node_with_rtcse(stencil, rtcses)
+
+    # try to apply absolute CSE
+    binary_aattrs = collections.defaultdict(
+        list)  # type: Dict[ir.BinaryOp, List[Tuple[int, ...]]]
+
+    def add_to_count(node: ir.BinaryOp):
+      for op in getattr(node, 'operand'):
+        if isinstance(op, ir.BinaryOp):
+          binary_aattrs[mutator.normalize(op)].append(
+              soda.visitor.get_normalize_index(op))
+
+    _logger.debug('counting complex aattrs')
+    add_to_count(ir_node_with_rtcse)
+    for tcs in rtcses:
+      add_to_count(tcs)
+    _logger.debug('complex aattrs count')
+    atcses = {}
+    for op, indices in binary_aattrs.items():
+      count = len(indices)
+      _logger.debug(' %s x%d', op, count)
+      if count > 1:
+        new_name = stencil.new_tcse_var()
+        atcses[op] = ir.Ref(name=new_name,
+                            idx=util.add_inv(min(indices)),
+                            lat=None)
+        stencil.symbol_table[new_name] = getattr(op, 'haoda_type')
+
+    do_atcse = lambda op: mutator.replace_expressions(op, atcses)
+    rtcses = {do_atcse(k): v for k, v in rtcses.items()}
+    tcses.update(rtcses)
+    tcses.update(atcses)
+    if _logger.isEnabledFor(logging.INFO):
+      for tcs, ref in rtcses.items():
+        _logger.info('rtcse: %s => %s', ir.unparenthesize(tcs), ref)
+      for tcs, ref in atcses.items():
+        _logger.info('atcse: %s => %s', ir.unparenthesize(tcs), ref)
+
+    kwargs = {
+        'operator': getattr(ir_node_with_rtcse, 'operator'),
+        'operand': tuple(map(do_atcse, getattr(ir_node_with_rtcse, 'operand'))),
+    }
+    return arithmetic.simplify(self.op_type(**kwargs))
 
 
 def make_schedule_from_json(j: Dict[str, Any],
