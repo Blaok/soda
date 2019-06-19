@@ -1,7 +1,8 @@
 from typing import (
-    Dict,
+    MutableMapping,
     Optional,
     Tuple,
+    TypeVar,
 )
 
 import collections
@@ -80,10 +81,13 @@ def normalize(obj):
   raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')
 
 
-def replace_expressions(obj: ir.Node,
-                        cses: Dict[ir.Node, str],
-                        used: Optional[Dict[ir.Node, ir.Node]] = None
-                       ) -> ir.Node:
+NodeT = TypeVar('NodeT', bound=ir.Node)
+
+
+def replace_expressions(obj: NodeT,
+                        cses: MutableMapping[NodeT, ir.Ref],
+                        used: Optional[MutableMapping[NodeT, NodeT]] = None
+                       ) -> NodeT:
   """Get AST with common subexpression elimination.
 
   Get AST with the given common subexpressions. If used is not None, the used
@@ -91,15 +95,17 @@ def replace_expressions(obj: ir.Node,
 
   Args:
     obj: An ir.Node.
-    cses: Dict mapping common subexpressions to the new names.
+    cses: Dict mapping normalized common subexpressions to the new ir.Ref.
     used: Set of used common subexpressions, or None.
   Returns:
     The ir.Node as the AST.
   """
 
-  def visitor(obj: ir.Node,
-              args: Tuple[Dict[ir.Node, str], Optional[Dict[ir.Node, ir.Node]]]
-             ) -> ir.Node:
+  def visitor(
+      obj: NodeT,
+      args: Tuple[MutableMapping[NodeT, ir.
+                                 Ref], Optional[MutableMapping[NodeT, NodeT]]]
+  ) -> NodeT:
     cses, used = args
     norm_idx = soda.visitor.get_normalize_index(obj)
     normalized = shift(obj, norm_idx) if any(norm_idx) else obj
@@ -109,9 +115,9 @@ def replace_expressions(obj: ir.Node,
           used[normalized] = replace_expressions(
               normalized, {k: v for k, v in cses.items() if k != normalized},
               used)
-      new_var = cses[normalized]
-      _logger.debug('replacing %s with %s%s', obj, new_var, norm_idx)
-      return ir.Ref(name=new_var, idx=norm_idx, lat=None)
+      new_obj = shift(cses[normalized], norm_idx, op=operator.add)
+      _logger.debug('replacing %s with %s', obj, new_obj)
+      return new_obj
     return obj
 
   return obj.visit(visitor, (cses, used))

@@ -1,3 +1,8 @@
+from typing import (
+    Any,
+    Iterable,
+    Tuple,
+)
 import contextlib
 import logging
 import signal
@@ -199,6 +204,10 @@ def idx2str(idx):
 
 def lst2str(idx):
   return '[%s]' % ', '.join(map(str, idx))
+
+
+def add_inv(idx: Iterable[Any]) -> Tuple[Any, ...]:
+  return tuple(-x for x in idx)
 
 
 def get_module_name(module_id):

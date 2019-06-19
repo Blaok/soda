@@ -132,6 +132,7 @@ class Stencil():
       stmt.expr = arithmetic.simplify(stmt.expr)
       stmt.let = arithmetic.simplify(stmt.let)
 
+    self._temporal_cse_counter = 0
     if 'tcse' in self.optimizations:
       tcse.temporal_cse(self)
     if 'inline' in self.optimizations:
@@ -167,6 +168,10 @@ class Stencil():
   @property
   def module_traits(self):
     return self.dataflow_super_source.module_traits
+
+  def new_tcse_var(self) -> str:
+    self._temporal_cse_counter += 1
+    return 'tcse_var_%d' % (self._temporal_cse_counter - 1)
 
   @cached_property.cached_property
   def input_types(self):
