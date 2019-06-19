@@ -1033,7 +1033,12 @@ class GreedySchedules(ScheduleBase):
     """
     indices = tuple(indices)
     distance = self.rattrs[indices[1]] - self.rattrs[indices[0]]
-    other_args = distance, self.rattrs, self.aattrs
+    new_rattrs = tuple(map(self.rattrs.__getitem__, indices))
+    if self.aattrs is None:
+      new_aattrs = None
+    else:
+      new_aattrs = tuple(map(self.aattrs.__getitem__, indices))
+    other_args = distance, new_rattrs, new_aattrs
     if len(indices) == 2:
       if self.aattrs is None:
         return CommSchedule(None, None, *other_args)
@@ -1053,9 +1058,10 @@ class GreedySchedules(ScheduleBase):
     for left, right in itertools.combinations(self, 2):
       left_rattr, left_aattr = left
       right_rattr, right_aattr = right
-      operation = CommSchedule(left_aattr, right_aattr,
-                               right_rattr - left_rattr, self.rattrs,
-                               self.aattrs)
+      distance = right_rattr - left_rattr
+      new_aattr = left_aattr, right_aattr
+      operation = CommSchedule(  # type: ignore
+          left_aattr, right_aattr, distance, (0, distance), new_aattr)
       if operation in reuses:
         continue
       #_logger.debug('look for operation: %s', operation)
