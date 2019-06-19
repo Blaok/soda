@@ -2,6 +2,7 @@ from typing import (
     overload,
     Callable,
     Iterable,
+    TypeVar,
 )
 
 import collections
@@ -9,17 +10,19 @@ import collections
 from haoda import ir
 from haoda.ir.arithmetic import base
 
+NodeT = TypeVar('NodeT', bound=ir.Node)
+
 
 # pylint: disable=function-redefined
 @overload
-def simplify(expr: ir.Node, logger: Callable[..., None] = None) -> ir.Node:
+def simplify(expr: NodeT, logger: Callable[..., None] = None) -> NodeT:
   ...
 
 
 # pylint: disable=function-redefined
 @overload
-def simplify(expr: Iterable[ir.Node], logger: Callable[..., None] = None) \
-    -> Iterable[ir.Node]:
+def simplify(expr: Iterable[NodeT], logger: Callable[..., None] = None) \
+    -> Iterable[NodeT]:
   ...
 
 
@@ -27,7 +30,7 @@ def simplify(expr, logger=None):
   """Simplifies expressions.
 
   Args:
-    expr: A haoda.ir.Node or a sequence of haoda.ir.Node.
+    expr: A haoda.NodeT or a sequence of haoda.ir.Node.
 
   Returns:
     Simplified haoda.ir.Node or sequence.
