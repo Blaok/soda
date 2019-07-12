@@ -1,5 +1,6 @@
 from typing import (
     List,
+    Optional,
     Tuple,
 )
 
@@ -978,3 +979,50 @@ def get_result_type(operand1, operand2, operator):
       return t
   raise util.SemanticError('cannot parse type: %s %s %s' %
                            (operand1, operator, operand2))
+
+
+REDUCTION_OPS = {'+': AddSub, '*': MulDiv}
+REDUCTION_FUNCS = {'min', 'max'}
+
+
+def to_reduction(node: Node) -> Optional[Tuple[str, Tuple[Node, ...]]]:
+  """Extract reduction expression from a Node.
+
+  Args:
+    node: Node to extract.
+
+  Returns:
+    None if node is not a reduction expression, tuple of (operator, operands)
+    otherwise. operator is a string representing the reduction operator.
+    operands is a tuple of operands as Nodes.
+  """
+  if isinstance(node, BinaryOp):
+    operator = getattr(node, 'operator')
+    if len(set(operator)) == 1 and operator[0] in REDUCTION_OPS:
+      return operator[0], getattr(node, 'operand')
+  elif isinstance(node, Call):
+    operator = getattr(node, 'name')
+    if operator in REDUCTION_FUNCS:
+      return operator, getattr(node, 'arg')
+  return None
+
+
+def from_reduction(operator: str, operands: Tuple[Node, ...]) -> Node:
+  """Assemble Node from a reduction expression.
+
+  Args:
+    operator: String representing the reduction operator.
+    operands: Tuple of Nodes.
+
+  Returns:
+    Assembled Node.
+
+  Raises:
+    ValueError if operator is not a reduction operator.
+  """
+  if operator in REDUCTION_OPS:
+    return REDUCTION_OPS[operator](operator=(operator,) * (len(operands) - 1),
+                                   operand=operands)
+  if operator in {'min', 'max'}:
+    return Call(name=operator, arg=operands)
+  raise ValueError('%s is not a reduction operator' % operator)
