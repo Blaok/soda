@@ -11,6 +11,9 @@ import io
 import sys
 import xml.etree.ElementTree as ET
 
+class BadReport(Exception):
+  pass
+
 class HlsResources:
   """An object representing the HLS resource estimation.
 
@@ -185,9 +188,14 @@ class HlsPerformance:
     Returns:
       Updated self.
     """
+    def raise_if_not_found(item: ET.Element, key: str) -> int:
+      val = item.findtext(key)
+      if val is None:
+        raise BadReport('cannot find %s')
+      return int(val)
     for item in elem.findall('PerformanceEstimates/SummaryOfLoopLatency/*'):
-      self.ii = int(item.findtext('PipelineII'))
-      self.depth = int(item.findtext('PipelineDepth'))
+      self.ii = raise_if_not_found(item, 'PipelineII')
+      self.depth = raise_if_not_found(item, 'PipelineDepth')
     return self
 
 def resources(obj: Union[TextIO, str]) -> HlsResources:
