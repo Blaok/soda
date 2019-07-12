@@ -120,11 +120,16 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
       report_file = os.path.join(tmpdir, 'report', module_name + '_csynth.xml')
       hls_resource = hls_report.resources(report_file)
       use_count = len(nodes)
-      perf = hls_report.performance(report_file)
-      _logger.info('%s, usage: %5d times, II: %3d, Depth: %3d', hls_resource,
-                   use_count, perf.ii, perf.depth)
+      try:
+        perf = hls_report.performance(report_file)
+        _logger.info('%s, usage: %5d times, II: %3d, Depth: %3d', hls_resource,
+                    use_count, perf.ii, perf.depth)
+        depths[module_id] = perf.depth
+      except hls_report.BadReport as e:
+        _logger.warn('%s in %s report (%s)', e, module_name, report_file)
+        _logger.info('%s, usage: %5d times', hls_resource, use_count)
+        raise e
       hls_resources += hls_resource * use_count
-      depths[module_id] = perf.depth
     _logger.info('total usage:')
     _logger.info(hls_resources)
     if rpt_file:
