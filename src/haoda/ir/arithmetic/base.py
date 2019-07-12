@@ -6,12 +6,14 @@ from haoda import util
 
 _logger = logging.getLogger().getChild(__name__)
 
+
 def compose(*funcs):
   """Composes functions. The first function in funcs are invoked the first.
   """
   # Somehow pylint gives false positive for f and g.
   # pylint: disable=undefined-variable
   return functools.reduce(lambda g, f: lambda x: f(g(x)), funcs, lambda x: x)
+
 
 def flatten(node: ir.Node) -> ir.Node:
   """Flattens an node if possible.
@@ -20,13 +22,16 @@ def flatten(node: ir.Node) -> ir.Node:
     + a singleton BinaryOp; or
     + a compound BinaryOp with reduction operators; or
     + a compound Operand; or
-    + a Unary with an identity operator.
+    + a Unary with an identity operator; or
+    + a Call of a reduction functions.
 
   An Operand is a compound Operand if and only if its attr is a ir.Node.
 
   A Unary has identity operator if and only if all its operators are '+' or '-',
   and the number of '-' is even; or all of its operators are '!' and the number
   of '!' is even.
+
+  Reduction functions are defined in ir.REDUCTION_FUNCS.
 
   Args:
     node: ir.Node to flatten.
@@ -85,12 +90,27 @@ def flatten(node: ir.Node) -> ir.Node:
       if not_count % 2 == 0 and not_count == len(node.operator):
         return flatten(node.operand)
 
+    # Flatten reduction functions
+    if isinstance(node, ir.Call):
+      operator = getattr(node, 'name')
+      if operator in ir.REDUCTION_FUNCS:
+        operands = []
+        for operand in getattr(node, 'arg'):
+          if (isinstance(operand, ir.Call) and
+              getattr(operand, 'name') == operator):
+            operands.extend(getattr(operand, 'arg'))
+          else:
+            operands.append(operand)
+        if len(operands) > len(getattr(node, 'arg')):
+          return flatten(ir.Call(name=operator, arg=operands))
+
     return node
 
   if not isinstance(node, ir.Node):
     return node
 
   return node.visit(visitor)
+
 
 def print_tree(node, printer=_logger.debug):
   """Prints the node type as a tree.
@@ -116,13 +136,18 @@ def print_tree(node, printer=_logger.debug):
     return node
 
   printer('root')
-  return node.visit(visitor, args=[1], pre_recursion=pre_recursion,
+  return node.visit(visitor,
+                    args=[1],
+                    pre_recursion=pre_recursion,
                     post_recursion=post_recursion)
 
+
 def propagate_type(node, symbol_table):
+
   def visitor(node, symbol_table):
     if node.haoda_type is None:
       if isinstance(node, (ir.Ref, ir.Var)):
         node.haoda_type = symbol_table[node.name]
     return node
+
   return node.visit(visitor, symbol_table)
