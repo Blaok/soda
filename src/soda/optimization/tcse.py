@@ -11,7 +11,6 @@ from typing import (
     Sequence,
     Set,
     Tuple,
-    Type,
     Union,
     overload,
 )
@@ -49,8 +48,6 @@ class OrderedCounter(  # type: ignore
 
 
 _logger = logging.getLogger().getChild(__name__)
-
-REDUCTION_OPS = {'+': ir.AddSub, '*': ir.MulDiv}
 
 
 def extract_attr(node: ir.Node) -> Tuple[Tuple[int, ...], ir.Node]:
@@ -306,7 +303,6 @@ class CommSchedule(ScheduleBase):
         Set[Tuple[Attr, ...]].
     cost: Tuple of number of operations and total reuse distance required for
         this schedule.
-    op_type: Class of self.operator, only works if self.operator is not None.
     dependers: A dict mapping variable ids to its dependers set, which is an
         ordered dict mapping dependers to None.
     dependees: A dict mapping variable ids to its dependees dict, which maps
@@ -710,11 +706,7 @@ class CommSchedule(ScheduleBase):
           exprs.setdefault(attrs, []).extend(schedules)
     return exprs
 
-  @property
-  def op_type(self) -> Type[ir.BinaryOp]:
-    return REDUCTION_OPS[self.operator]
-
-  def get_ir_node_with_offset(self, offset: int = 0) -> ir.BinaryOp:
+  def get_ir_node_with_offset(self, offset: int = 0) -> ir.Node:
     """Get the IR node with the given offset.
 
     Args:
@@ -737,11 +729,10 @@ class CommSchedule(ScheduleBase):
       right_child = assemble_attr(self.linearizer(offset),
                                   self.aattr_table[self.right])
 
-    return self.op_type(operator=(self.operator,),
-                        operand=(left_child, right_child))
+    return ir.from_reduction(self.operator, (left_child, right_child))
 
   @cached_property.cached_property
-  def ir_node(self) -> ir.BinaryOp:
+  def ir_node(self) -> ir.Node:
     return self.get_ir_node_with_offset(self.rattrs[0])
 
   @cached_property.cached_property
@@ -765,7 +756,7 @@ class CommSchedule(ScheduleBase):
   def get_ir_node_with_rtcse(self,
                              stencil,
                              rtcses: MutableMapping[ir.BinaryOp, ir.Ref],
-                             write_idx_table=None) -> ir.BinaryOp:
+                             write_idx_table=None) -> ir.Node:
     """Returns an ir.Node with relative temporal CSE.
 
     Args:
@@ -810,15 +801,12 @@ class CommSchedule(ScheduleBase):
         node = self.aattr_table[aattr]
       operands.append(assemble_attr(self.linearizer(rattr), node))
 
-    result = arithmetic.simplify(
-        self.op_type(operator=(self.operator,) * (len(operands) - 1),
-                     operand=tuple(operands)))
-    assert isinstance(result, ir.BinaryOp)
-    return result
+    return arithmetic.simplify(ir.from_reduction(self.operator,
+                                                 tuple(operands)))
 
   def get_ir_node_with_tcse(self, stencil,
                             tcses: MutableMapping[ir.BinaryOp, ir.Ref]
-                           ) -> ir.BinaryOp:
+                           ) -> ir.Node:
     rtcses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
     ir_node_with_rtcse = self.get_ir_node_with_rtcse(stencil, rtcses)
 
@@ -826,11 +814,13 @@ class CommSchedule(ScheduleBase):
     binary_aattrs = collections.defaultdict(
         list)  # type: Dict[ir.BinaryOp, List[Tuple[int, ...]]]
 
-    def add_to_count(node: ir.BinaryOp):
-      for op in getattr(node, 'operand'):
-        if isinstance(op, ir.BinaryOp):
-          binary_aattrs[mutator.normalize(op)].append(
-              soda.visitor.get_normalize_index(op))
+    def add_to_count(node: ir.Node):
+      reduction = ir.to_reduction(node)
+      if reduction is not None:
+        for op in reduction[1]:
+          if isinstance(op, ir.BinaryOp):
+            binary_aattrs[mutator.normalize(op)].append(
+                soda.visitor.get_normalize_index(op))
 
     _logger.debug('counting complex aattrs')
     add_to_count(ir_node_with_rtcse)
@@ -858,11 +848,10 @@ class CommSchedule(ScheduleBase):
       for tcs, ref in atcses.items():
         _logger.info('atcse: %s => %s', ir.unparenthesize(tcs), ref)
 
-    kwargs = {
-        'operator': getattr(ir_node_with_rtcse, 'operator'),
-        'operand': tuple(map(do_atcse, getattr(ir_node_with_rtcse, 'operand'))),
-    }
-    return arithmetic.simplify(self.op_type(**kwargs))
+    reduction = ir.to_reduction(ir_node_with_rtcse)
+    assert reduction is not None
+    return arithmetic.simplify(
+        ir.from_reduction(reduction[0], tuple(map(do_atcse, reduction[1]))))
 
 
 def make_schedule_from_json(j: Dict[str, Any],
@@ -1403,22 +1392,16 @@ class Expression:
       Expression.CannotHandle: If the input cannot be handled but is not error.
       TypeError: If the input is not an instance of ir.Node.
     """
-    if isinstance(polynomial, ir.BinaryOp):
-      if any(op != polynomial.operator[0]  # type: ignore
-             for op in polynomial.operator):  # type: ignore
-        raise Expression.CannotHandle('mixed operators',
-                                      polynomial.operator)  # type: ignore
-      self.operator = polynomial.operator[0]  # type: ignore
-      if self.operator not in ('+', '*'):
-        raise Expression.CannotHandle('%s operator' % self.operator)
-      for operand in polynomial.operand:  # type: ignore
+    reduction = ir.to_reduction(polynomial)
+    if reduction is not None:
+      self.operator = reduction[0]
+      for operand in reduction[1]:
         if len(soda.visitor.get_load_set(operand)) > 1:
-          raise Expression.CannotHandle('multi-index operands', operand)
+          raise Expression.CannotHandle('multi-index operands', str(operand))
       self.operands = tuple(
-          sorted(
-              polynomial.operand,  # type: ignore
-              key=lambda x: tuple(reversed(soda.visitor.get_load_set(x)[0].idx))
-          ))
+          sorted(reduction[1],
+                 key=lambda x: tuple(
+                     reversed(soda.visitor.get_load_set(x)[0].idx))))
       rattrs, aattrs = zip(*map(extract_attr, self.operands))
       self.aattrs_as_ir_nodes = aattrs
 
