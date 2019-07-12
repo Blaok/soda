@@ -1,5 +1,7 @@
 from typing import (
-    Tuple,)
+    List,
+    Tuple,
+)
 
 import collections
 import copy
@@ -374,6 +376,20 @@ class Call(Node):
 
   @property
   def c_expr(self):
+    if self.name in {'min', 'max'}:
+      assert len(self.arg) >= 2, 'too few arguments to %s' % self.name
+      fmt_str = 'std::{}({}, {})'
+
+      def variadic_to_binary(args: List[str]) -> str:
+        nargs = len(args)
+        if nargs == 1:
+          return args[0]
+        if nargs == 2:
+          return fmt_str.format(self.name, *args)
+        return fmt_str.format(self.name, variadic_to_binary(args[:nargs // 2]),
+                              variadic_to_binary(args[nargs // 2:]))
+
+      return variadic_to_binary([_.c_expr for _ in self.arg])
     return '{}({})'.format(self.name, ', '.join(_.c_expr for _ in self.arg))
 
 

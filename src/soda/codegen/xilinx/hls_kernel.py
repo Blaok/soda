@@ -263,6 +263,9 @@ def print_header(printer):
                  'string', 'ap_int', 'hls_stream']:
     println('#include<%s.h>' % header)
   println()
+  for header in ['algorithm']:
+    println('#include<%s>' % header)
+  println()
 
 def _print_burst_read(printer):
   println = printer.println
