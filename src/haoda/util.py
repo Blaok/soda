@@ -169,7 +169,12 @@ def get_c_type(haoda_type):
     return 'double'
   for token in ('int', 'uint'):
     if haoda_type.startswith(token):
-      return 'ap_{}<{}>'.format(token, haoda_type.replace(token, ''))
+      bits = haoda_type.replace(token, '').split('_')
+      if len(bits) > 1:
+        assert len(bits) == 2
+        return 'ap_{}<{}, {}>'.format(token.replace('int', 'fixed'), *bits)
+      assert len(bits) == 1
+      return 'ap_{}<{}>'.format(token, *bits)
   return haoda_type
 
 
