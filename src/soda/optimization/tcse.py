@@ -22,6 +22,7 @@ import json
 import logging
 import operator
 import random
+import shutil
 import subprocess
 
 import cached_property
@@ -205,6 +206,9 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
   Returns:
     Modified stencil object.
   """
+  method = stencil.optimizations.get('tcse')
+  if method is None or method == 'no':
+    return stencil
   _logger.debug('invoke stencil temporal common subexpression elimination')
   propagate_type = lambda node: base.propagate_type(node, stencil.symbol_table)
 
@@ -220,7 +224,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
       Optimized ir.Node with temporal common subexpressions eliminated.
     """
     try:
-      expression = Expression(node)
+      expression = Expression(node, stencil.optimizations.get('tcse'))
       if expression.best_schedule is not None:
         _logger.debug('best schedule: (cost: %s)',
                       expression.best_schedule.cost)
@@ -256,6 +260,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
     stmt.expr = arithmetic.simplify(stmt.expr)
     stmt.let = arithmetic.simplify(stmt.let)
     _logger.debug('simplified: %s', stmt)
+  _logger.info('stencil after TCSE: %s', str(stencil).replace('\n', '\n  '))
   return stencil
 
 
@@ -854,16 +859,19 @@ class CommSchedule(ScheduleBase):
         ir.from_reduction(reduction[0], tuple(map(do_atcse, reduction[1]))))
 
 
-def make_schedule_from_json(j: Dict[str, Any],
-                            rattrs: Tuple[RelativeAttr, ...],
-                            aattrs: Optional[Tuple[AbsoluteAttr, ...]] = None
-                           ) -> CommSchedule:
-  left, right = j['left'], j['right']
+def make_schedule_from_json(j: Dict[str, Any], offset: int,
+                            null_aattr: bool) -> CommSchedule:
+  left, right, distance = j['left'], j['right'], j['distance']
+  rattrs = offset, offset + distance
   if isinstance(left, dict):
-    left = make_schedule_from_json(left, rattrs, aattrs)
+    left = make_schedule_from_json(left, rattrs[0], null_aattr)
+  elif isinstance(left, int) and null_aattr:
+    left = None
   if isinstance(right, dict):
-    right = make_schedule_from_json(right, rattrs, aattrs)
-  return CommSchedule(left, right, j['distance'], rattrs, aattrs)
+    right = make_schedule_from_json(right, rattrs[1], null_aattr)
+  elif isinstance(right, int) and null_aattr:
+    right = None
+  return CommSchedule(left, right, distance, rattrs, (left, right))
 
 
 class CommSchedules(ScheduleBase):
@@ -1037,7 +1045,7 @@ class CommSchedules(ScheduleBase):
           if best is None or schedule.cost < best.cost:
             best = schedule
             _logger.debug('schedule: %s', best)
-            _logger.info('cost: %d', best.cost)
+            _logger.info('cost: %s', best.cost)
     except TimeoutError:
       pass
     self.print_stats()
@@ -1147,8 +1155,8 @@ class GreedySchedules(ScheduleBase):
   def generator(self) -> Iterator[CommSchedule]:
     attr_map = {attr: idx for idx, attr in enumerate(self)}
     reuses = OrderedDict()  # type: Dict[CommSchedule, List[Tuple[int, int]]]
-    has_conflict = collections.defaultdict(lambda: False
-                                          )  # type: Dict[CommSchedule, bool]
+    has_conflict = collections.defaultdict(
+        lambda: False)  # type: Dict[CommSchedule, bool]
     for left, right in itertools.combinations(self, 2):
       left_rattr, left_aattr = left
       right_rattr, right_aattr = right
@@ -1317,13 +1325,10 @@ class ExternalSchedules(ScheduleBase):
                cache: Optional[Dict] = None) -> None:
     self.linearizer = linearizer
     super().__init__(rattrs, aattrs)  # type: ignore
+    self.cmd = ['tcse']
 
   def from_json(self, j: Dict[str, Any]) -> CommSchedule:
-    return make_schedule_from_json(
-        j,
-        self.rattrs,
-        self.aattrs,
-    )
+    return make_schedule_from_json(j, j['rattrs'][0], self.aattrs is None)
 
   @cached_property.cached_property
   def best(self) -> CommSchedule:
@@ -1337,10 +1342,9 @@ class ExternalSchedules(ScheduleBase):
           'mins': self.linearizer.mins
       }
     result = json.loads(
-        subprocess.run(['tcse'],
+        subprocess.run(self.cmd,
                        input=json.dumps(attrs),
                        stdout=subprocess.PIPE,
-                       shell=True,
                        universal_newlines=True).stdout)
     return self.from_json(result)
 
@@ -1349,7 +1353,6 @@ class ExternalSchedules(ScheduleBase):
 
 
 Schedule = CommSchedule
-Schedules = GreedySchedules
 
 
 class Expression:
@@ -1378,7 +1381,7 @@ class Expression:
       details = details or (': ' + str(details))
       super().__init__('cannot handle ' + str(msg) + ' yet' + str(details))
 
-  def __init__(self, polynomial: ir.Node) -> None:
+  def __init__(self, polynomial: ir.Node, method: str = 'greedy') -> None:
     """Figure out whether a ir.Node is suitable for temporal CSE.
 
     Construct a TCSE Expression of the input polynomial. If it cannot be handled
@@ -1387,17 +1390,21 @@ class Expression:
 
     Args:
       polynomial: ir.BinaryOp to work with.
+      method: One of 'yes', 'greedy', 'optimal'.
 
     Raises:
       Expression.CannotHandle: If the input cannot be handled but is not error.
       TypeError: If the input is not an instance of ir.Node.
     """
+    self.method = method
     reduction = ir.to_reduction(polynomial)
     if reduction is not None:
       self.operator = reduction[0]
       for operand in reduction[1]:
         if len(soda.visitor.get_load_set(operand)) > 1:
           raise Expression.CannotHandle('multi-index operands', str(operand))
+        if not soda.visitor.get_load_set(operand):
+          raise Expression.CannotHandle('const operand', str(operand))
       self.operands = tuple(
           sorted(reduction[1],
                  key=lambda x: tuple(
@@ -1437,8 +1444,20 @@ class Expression:
       raise TypeError('expect an instance of ir.BinaryOp')
 
   @cached_property.cached_property
-  def schedules(self) -> Schedules:
-    return Schedules(self.rattrs, self.aattrs, self.linearizer, cache={})
+  def schedules(self
+               ) -> Union[CommSchedules, GreedySchedules, ExternalSchedules]:
+    external_tcse = shutil.which('tcse')
+    args = self.rattrs, self.aattrs, self.linearizer
+    if external_tcse is None:
+      if self.method == 'optimal':
+        return CommSchedules(self.rattrs, self.aattrs, cache={})
+      return GreedySchedules(*args)
+    external_schedules = ExternalSchedules(*args)
+    if self.method == 'optimal':
+      external_schedules.cmd.append('--brute-force')
+    elif self.method == 'greedy':
+      external_schedules.cmd.append('--greedy')
+    return external_schedules
 
   @cached_property.cached_property
   def best_schedule(self) -> Schedule:

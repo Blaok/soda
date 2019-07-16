@@ -66,7 +66,7 @@ def main():
             'repeat execution multiple times iteratively')
   parser.add_argument('--temporal-cse',
             type=str,
-            metavar='(yes|no)',
+            metavar='(yes|no|greedy|optimal)',
             dest='temporal_cse',
             nargs='?', const='yes', default='yes',
             help='enable temporal common subexpression elimination or not')
@@ -149,10 +149,9 @@ def main():
       unroll_factor = args.replication_factor
       replication_factor = args.replication_factor
 
-    optimizations = set()
-    optimizations.add('inline')
-    if args.temporal_cse == 'yes':
-      optimizations.add('tcse')
+    optimizations = {'inline': ''}
+    if args.temporal_cse != 'no':
+      optimizations['tcse'] = args.temporal_cse
 
     stencil = core.Stencil(
       burst_width=args.burst_width if args.burst_width is not None
