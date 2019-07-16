@@ -235,7 +235,8 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
 
   new_local_stmts = []
   cses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
-  transform = lambda node: propagate_type(node).visit(visitor, cses)
+  transform = lambda node: propagate_type(base.reverse_distribute(node)).visit(
+      visitor, cses)
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     cses.clear()
     stmt.expr = transform(stmt.expr)
@@ -810,9 +811,8 @@ class CommSchedule(ScheduleBase):
                                                  tuple(operands)))
 
   def get_ir_node_with_tcse(self, stencil,
-                            tcses: MutableMapping[ir.BinaryOp, ir.Ref]
-                           ) -> ir.Node:
-    rtcses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
+                            tcses: Dict[ir.BinaryOp, ir.Ref]) -> ir.Node:
+    rtcses = tcses.copy()
     ir_node_with_rtcse = self.get_ir_node_with_rtcse(stencil, rtcses)
 
     # try to apply absolute CSE
@@ -844,7 +844,7 @@ class CommSchedule(ScheduleBase):
         stencil.symbol_table[new_name] = getattr(op, 'haoda_type')
 
     do_atcse = lambda op: mutator.replace_expressions(op, atcses)
-    rtcses = {do_atcse(k): v for k, v in rtcses.items()}
+    rtcses = OrderedDict((do_atcse(k), v) for k, v in rtcses.items())
     tcses.update(rtcses)
     tcses.update(atcses)
     if _logger.isEnabledFor(logging.INFO):
