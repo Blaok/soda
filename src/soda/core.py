@@ -75,7 +75,7 @@ class Stencil():
     self.input_stmts = kwargs.pop('input_stmts')
     self.local_stmts = kwargs.pop('local_stmts')
     self.output_stmts = kwargs.pop('output_stmts')
-    self.optimizations = set()
+    self.optimizations = {}
     if 'optimizations' in kwargs:
       self.optimizations = kwargs.pop('optimizations')
 
@@ -133,8 +133,7 @@ class Stencil():
       stmt.let = arithmetic.simplify(stmt.let)
 
     self._temporal_cse_counter = 0
-    if 'tcse' in self.optimizations:
-      tcse.temporal_cse(self)
+    tcse.temporal_cse(self)
     if 'inline' in self.optimizations:
       inline.inline(self)
 
@@ -156,6 +155,17 @@ class Stencil():
 
     _logger.debug('module table: %s', dict(self.module_table))
     _logger.debug('module traits: %s', self.module_traits)
+
+  def __str__(self) -> str:
+    stmts = (self.input_stmts + self.param_stmts + self.local_stmts +
+             self.output_stmts)
+    return '''kernel: {0.app_name}
+burst width: {0.burst_width}
+iterate: {0.iterate}
+unroll factor: {0.unroll_factor}
+{stmts}
+border: {0.border}
+cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
 
   @cached_property.cached_property
   def dataflow_super_source(self):
