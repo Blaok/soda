@@ -80,6 +80,7 @@ class ReportXoUtil(backend.Vivado):
     synth_kwargs.setdefault('part', part_num)
     synth_kwargs.setdefault('directive', 'RuntimeOptimized')
     report_util_kwargs.setdefault('hierarchical', '')
+    report_util_kwargs.setdefault('hierarchical_depth', '1')
     report_util_kwargs.setdefault('file', self.rpt_file_name)
 
     synth_args = ' '.join('-{} {}'.format(*kv) for kv in synth_kwargs.items())
