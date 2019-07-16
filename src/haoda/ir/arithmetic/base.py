@@ -1,5 +1,11 @@
+from typing import (
+    Dict,
+    List,
+    Tuple,
+)
 import functools
 import logging
+from collections import OrderedDict
 
 from haoda import ir
 from haoda import util
@@ -110,6 +116,68 @@ def flatten(node: ir.Node) -> ir.Node:
     return node
 
   return node.visit(visitor)
+
+
+def reverse_distribute(node: ir.Node) -> ir.Node:
+  """Apply distributive property in reverse, if possible.
+
+  Currently only left- and right-distribution of multiplication over addition is
+  supported.
+
+  Args:
+    node: ir.Node to process.
+
+  Returns:
+    Processed node.
+  """
+
+  def visitor(node: ir.Node, left_distribute: bool) -> ir.Node:
+    """Apply left- or right-distributive property in reverse, if possible
+
+    Args:
+      node: ir.Node to process.
+      left_distribute: Whether to apply *left*-distributive property.
+
+    Returns:
+      Processed node.
+    """
+    if isinstance(node, ir.AddSub):
+      items = OrderedDict()  # type: Dict[ir.Node, List[Tuple[str, ir.Node]]]
+      for operator, operand in zip(('+',) + getattr(node, 'operator'),
+                                   getattr(node, 'operand')):
+        if (operator == '+' and isinstance(operand, ir.MulDiv) and
+            getattr(operand, 'operator') == ('*',)):
+          if left_distribute:
+            coeff, item = getattr(operand, 'operand')
+          else:
+            item, coeff = getattr(operand, 'operand')
+          items.setdefault(coeff, []).append((operator, item))
+      new_operators = []
+      new_operands = []
+      for coeff, item in items.items():
+        operator, operand = zip(*item)
+        assert operator[0] == '+'
+        new_operators.append(operator[0])
+        if len(operand) > 1:
+          new_item = ir.AddSub(operator=operator[1:], operand=operand)
+        else:
+          new_item = operand[0]
+        if left_distribute:
+          children = coeff, new_item
+        else:
+          children = new_item, coeff
+        new_operands.append(ir.MulDiv(operator=('*',), operand=children))
+      if len(new_operands) > 1:
+        assert new_operators[0] == '+'
+        new_node = ir.AddSub(operator=tuple(new_operators[1:]),
+                             operand=tuple(new_operands))
+        if new_node != node:
+          return new_node
+      elif new_operands and new_operands[0] != node:
+        return new_operands[0]
+    return node
+
+  return node.visit(visitor, True).visit(visitor, False)
 
 
 def print_tree(node, printer=_logger.debug):
