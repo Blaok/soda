@@ -261,7 +261,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
     stmt.expr = arithmetic.simplify(stmt.expr)
     stmt.let = arithmetic.simplify(stmt.let)
     _logger.debug('simplified: %s', stmt)
-  _logger.info('stencil after TCSE: %s', str(stencil).replace('\n', '\n  '))
+  _logger.info('stencil after TCSE: \n  %s', str(stencil).replace('\n', '\n  '))
   return stencil
 
 
@@ -1204,6 +1204,7 @@ class GreedySchedules(ScheduleBase):
 
       min_idx_l = min((x[0] for x in reuses[operation]), default=0)
       max_idx_l = max((x[0] for x in reuses[operation]), default=-1)
+      _logger.debug('min_idx_l: %s | max_idx_l: %s', min_idx_l, max_idx_l)
 
       for group_list in group_lists:
         if len(group_list) % 2 == 0:
