@@ -792,11 +792,11 @@ class FIFORef(Node):
 
   @property
   def ld_name(self):
-    return '{LD_PREFIX}{ref_id}'.format(**self.__dict__, **type(self).__dict__)
+    return '{}{}'.format(type(self).LD_PREFIX, self.ref_id)
 
   @property
   def ref_name(self):
-    return '{REF_PREFIX}{ref_id}'.format(**self.__dict__, **type(self).__dict__)
+    return '{}{}'.format(type(self).REF_PREFIX, self.ref_id)
 
   @property
   def c_expr(self):
