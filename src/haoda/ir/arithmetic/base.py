@@ -198,7 +198,8 @@ def print_tree(node, printer=_logger.debug):
     args[0] -= 1
 
   def visitor(node, args):
-    printer('%s+-%s: %s' % (' ' * args[0], type(node).__name__, node))
+    printer('%s+-%s(%s): %s' %
+            (' ' * args[0], type(node).__name__, node.haoda_type, node))
 
   if not isinstance(node, ir.Node):
     return node
