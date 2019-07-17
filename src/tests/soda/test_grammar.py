@@ -55,8 +55,7 @@ output double:
 '''.strip('\n')
       soda_program = soda_mm.model_from_str(soda_program_str)
       self.maxDiff = None
-      self.assertEqual(str(soda_program),
-                       soda_program_str.replace('  l = ', '  float18_3 l = '))
+      self.assertMultiLineEqual(str(soda_program), soda_program_str)
       return
     except textx.exceptions.TextXSyntaxError as e:
       msg = str(e)

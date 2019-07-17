@@ -199,8 +199,50 @@ def get_width_in_bytes(haoda_type):
   return (get_width_in_bits(haoda_type) - 1) // 8 + 1
 
 
+def same_type(lhs: str, rhs: str) -> bool:
+  if is_float(lhs):
+    width = TYPE_WIDTH.get(lhs)
+    if width is not None:
+      lhs = 'float%d' % width
+  if is_float(rhs):
+    width = TYPE_WIDTH.get(rhs)
+    if width is not None:
+      rhs = 'float%d' % width
+  return lhs == rhs
+
+
 def is_float(haoda_type):
   return haoda_type in {'half', 'double'} or haoda_type.startswith('float')
+
+
+def is_fixed(haoda_type):
+  for token in ('int', 'uint'):
+    if haoda_type.startswith(token):
+      bits = haoda_type.replace(token, '').split('_')
+      if len(bits) > 1:
+        return True
+  return False
+
+
+def get_suitable_int_type(upper: int, lower: int = 0) -> str:
+  """Returns the suitable integer type with the least bits.
+
+  Returns the integer type that can hold all values between max_val and min_val
+  (inclusive) and has the least bits.
+
+  Args:
+    max_val: Maximum value that needs to be valid.
+    min_val: Minimum value that needs to be valid.
+
+  Returns:
+    The suitable haoda_type.
+  """
+  assert upper >= lower
+  upper = max(upper, 0)
+  lower = min(lower, 0)
+  if lower == 0:
+    return 'uint%d' % upper.bit_length()
+  return 'int%d' % (max(upper.bit_length(), (lower + 1).bit_length()) + 1)
 
 
 def idx2str(idx):
