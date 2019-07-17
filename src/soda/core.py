@@ -137,6 +137,12 @@ class Stencil():
     if 'inline' in self.optimizations:
       inline.inline(self)
 
+    for stmt in itertools.chain(self.local_stmts, self.output_stmts):
+      stmt.expr = self.propagate_type(stmt.expr)
+      if not util.same_type(stmt.expr.haoda_type, stmt.haoda_type):
+        stmt.expr = ir.Cast(expr=stmt.expr, haoda_type=stmt.haoda_type)
+      stmt.let = tuple(map(self.propagate_type, stmt.let))
+
     # soda frontend successfully parsed
     # triggers cached property
     # replicate tensors for iterative stencil
@@ -230,6 +236,10 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
     for name, haoda_type in zip(self.output_names, self.output_types):
       tensor_types[name] = haoda_type
     return tensor_types
+
+  @property
+  def propagate_type(self):
+    return lambda node: arithmetic.base.propagate_type(node, self.symbol_table)
 
   @cached_property.cached_property
   def tensors(self):

@@ -279,11 +279,96 @@ class LtCmp(BinaryOp):
 
 
 class AddSub(BinaryOp):
-  pass
+
+  @property
+  def haoda_type(self):
+    if getattr(self, '_haoda_type', None) is None:
+
+      # leave type undetermined if any child has undetermined type (None)
+      for opd in self.operand:
+        if opd.haoda_type is None:
+          return None
+
+      # use the biggest float if there is one
+      float_types = {
+          opd.haoda_type
+          for opd in self.operand
+          if util.is_float(opd.haoda_type)
+      }
+      if float_types:
+        for float_type, width in util.TYPE_WIDTH.items():
+          if float_type in float_types:
+            float_types.remove(float_type)
+            float_types.add('float%d' % width)
+        self._haoda_type = max(float_types, key=util.get_width_in_bits)
+        return self._haoda_type
+
+      # TODO: implement rules for fixed point non-interger numbers
+      for opd in self.operand:
+        if util.is_fixed(opd.haoda_type):
+          self._haoda_type = opd.haoda_type
+          return self._haoda_type
+
+      # all operands are integers
+      max_val = 0
+      min_val = 0
+      for opr, opd in zip(('+',) + self.operator, self.operand):
+        if opr == '+':
+          max_val += get_max_val(opd)
+          min_val += get_min_val(opd)
+        else:
+          max_val -= get_min_val(opd)
+          min_val -= get_max_val(opd)
+      self._haoda_type = util.get_suitable_int_type(max_val, min_val)
+    return self._haoda_type
+
+  @haoda_type.setter
+  def haoda_type(self, val):
+    self._haoda_type = val
 
 
 class MulDiv(BinaryOp):
-  pass
+
+  @property
+  def haoda_type(self):
+    if getattr(self, '_haoda_type', None) is None:
+
+      # leave type undetermined if any child has undetermined type (None)
+      for opd in self.operand:
+        if opd.haoda_type is None:
+          return None
+
+      # use the biggest float if there is one
+      float_types = {
+          opd.haoda_type
+          for opd in self.operand
+          if util.is_float(opd.haoda_type)
+      }
+      if float_types:
+        for float_type, width in util.TYPE_WIDTH.items():
+          if float_type in float_types:
+            float_types.remove(float_type)
+            float_types.add('float%d' % width)
+        self._haoda_type = max(float_types, key=util.get_width_in_bits)
+        return self._haoda_type
+
+    # TODO: implement rules for fixed point non-interger numbers
+      for opd in self.operand:
+        if util.is_fixed(opd.haoda_type):
+          self._haoda_type = opd.haoda_type
+          return self._haoda_type
+
+      # all operands are integers
+      max_val = 1
+      for opr, opd in zip(('*',) + self.operator, self.operand):
+        if opr == '*':
+          max_val *= max(abs(get_max_val(opd)), abs(get_min_val(opd)))
+      self._haoda_type = util.get_suitable_int_type(max_val, -max_val)
+    return self._haoda_type
+
+  @haoda_type.setter
+  def haoda_type(self, val):
+    self._haoda_type = val
 
 
 class Unary(Node):
@@ -939,6 +1024,12 @@ def make_var(val):
   return Var(name=val, idx=())
 
 
+def is_const(node: Node) -> bool:
+  if isinstance(node, Operand) and getattr(node, 'num') is not None:
+    return True
+  return False
+
+
 def str2int(s, none_val=None):
   if s is None:
     return none_val
@@ -979,6 +1070,34 @@ def get_result_type(operand1, operand2, operator):
       return t
   raise util.SemanticError('cannot parse type: %s %s %s' %
                            (operand1, operator, operand2))
+
+
+def get_max_val(node) -> int:
+  """Return the maximum valid value of an integer type."""
+  if is_const(node):
+    return int(node.num)
+  haoda_type = node.haoda_type
+  if util.is_float(haoda_type):
+    raise TypeError('haoda_type has to be an integer type, got %s' % haoda_type)
+  if util.is_fixed(haoda_type):
+    raise NotImplementedError
+  if haoda_type.startswith('uint'):
+    return 2**util.get_width_in_bits(haoda_type) - 1
+  return 2**(util.get_width_in_bits(haoda_type) - 1) - 1
+
+
+def get_min_val(node) -> int:
+  """Return the minimum valid value of an integer type."""
+  if is_const(node):
+    return int(node.num)
+  haoda_type = node.haoda_type
+  if util.is_float(haoda_type):
+    raise TypeError('haoda_type has to be an integer type, got %s' % haoda_type)
+  if util.is_fixed(haoda_type):
+    raise NotImplementedError
+  if haoda_type.startswith('uint'):
+    return 0
+  return -2**(util.get_width_in_bits(haoda_type) - 1)
 
 
 REDUCTION_OPS = {'+': AddSub, '*': MulDiv}

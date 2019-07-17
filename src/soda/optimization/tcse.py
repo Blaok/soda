@@ -210,7 +210,6 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
   if method is None or method == 'no':
     return stencil
   _logger.debug('invoke stencil temporal common subexpression elimination')
-  propagate_type = lambda node: base.propagate_type(node, stencil.symbol_table)
 
   # pylint: disable=unsubscriptable-object
   def visitor(node: ir.Node,
@@ -235,14 +234,14 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
 
   new_local_stmts = []
   cses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
-  transform = lambda node: propagate_type(base.reverse_distribute(node)).visit(
-      visitor, cses)
+  transform = lambda node: stencil.propagate_type(base.reverse_distribute(node)
+                                                 ).visit(visitor, cses)
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     cses.clear()
     stmt.expr = transform(stmt.expr)
     stmt.let = tuple(map(transform, stmt.let))
     for expr, ref in cses.items():
-      expr = propagate_type(expr)
+      expr = stencil.propagate_type(expr)
       new_local_stmts.append(
           grammar.LocalStmt(ref=ref,
                             haoda_type=expr.haoda_type,
