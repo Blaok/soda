@@ -66,12 +66,22 @@ class ReportXoUtil(backend.Vivado):
           raise util.InputError('cannot parse XO file')
         ip_dir = kernel.attrib['IP']
         kernel_name = kernel.attrib['Name']
-      hdl_dir = os.path.join(self.tmpdir.name, ip_dir, 'src')
+      hdl_dir_prefix = ip_dir + '/src'
+      if all(not x.startswith(hdl_dir_prefix) for x in xo_zip.namelist()):
+        hdl_dir_prefix = ip_dir + '/hdl/verilog'
+      hdl_dir = os.path.join(self.tmpdir.name, hdl_dir_prefix)
       xo_zip.extractall(path=self.tmpdir.name, members=[
-        name for name in xo_zip.namelist() if name.startswith(ip_dir + '/src')])
+        name for name in xo_zip.namelist() if name.startswith(hdl_dir_prefix)])
       if part_num is None:
-        with open(os.path.join(hdl_dir, kernel_name + '.v')) as hdl_file:
-          part_num = RtlHlsInfo(hdl_file)['HLS_INPUT_PART']
+        for hdl_file_format in ('{}.v', '{0}_{0}.v'):
+          try:
+            with open(os.path.join(
+                hdl_dir, hdl_file_format.format(kernel_name))) as hdl_file:
+              part_num = RtlHlsInfo(hdl_file)['HLS_INPUT_PART']
+            break
+          except FileNotFoundError:
+            pass
+    assert part_num is not None
     if synth_kwargs is None:
       synth_kwargs = {}
     if report_util_kwargs is None:
