@@ -9,30 +9,35 @@ from soda import visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
+
 def inline(stencil):
   """Inline statements that are only referenced once.
   """
   if not stencil.local_stmts:
     return stencil
 
-  refs = {}   # type: Dict[str, Set[Tuple[ir.Ref, ir.LocalOrOutputStmt]]]
+  refs = {}  # type: Dict[str, Set[Tuple[ir.Ref, ir.LocalOrOutputStmt]]]
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     for var_name, ref_list in visitor.get_load_dict(stmt).items():
       if var_name in stencil.input_names or var_name == stmt.name:
         continue
-      refs.setdefault(var_name, set()).update(zip(ref_list,
-                                                  itertools.repeat(stmt)))
+      refs.setdefault(var_name,
+                      set()).update(zip(ref_list, itertools.repeat(stmt)))
 
-  refs = {name: next(iter(ref_set))
-          for name, ref_set in refs.items() if len(ref_set) == 1}
+  refs = {
+      name: next(iter(ref_set))
+      for name, ref_set in refs.items()
+      if len(ref_set) == 1
+  }
   if not refs:
     return stencil
 
   # sort loads to avoid referencing wrong stmt
-  local_stmt_table = {stmt.name: idx
-                      for idx, stmt in enumerate(stencil.local_stmts)}
+  local_stmt_table = {
+      stmt.name: idx for idx, stmt in enumerate(stencil.local_stmts)
+  }
   ref_queue = collections.deque(list(refs.items()))
-  sorted_refs = []   # type: List[Tuple[ir.Ref, ir.LocalOrOutputStmt]]
+  sorted_refs = []  # type: List[Tuple[ir.Ref, ir.LocalOrOutputStmt]]
   while ref_queue:
     var_name, (ref, load_stmt) = ref_queue.popleft()
     store_stmt = stencil.local_stmts[local_stmt_table[ref.name]]
@@ -48,8 +53,8 @@ def inline(stencil):
 
   for var_name, (ref, load_stmt) in sorted_refs:
     idx, store_stmt = {
-        stmt.name: (idx, stmt)
-        for idx, stmt in enumerate(stencil.local_stmts)}[var_name]
+        stmt.name: (idx, stmt) for idx, stmt in enumerate(stencil.local_stmts)
+    }[var_name]
     offset = tuple(a - b for a, b in zip(store_stmt.ref.idx, ref.idx))
     ref = mutator.shift(store_stmt.ref, offset)
     lets = tuple(mutator.shift(let, offset) for let in store_stmt.let)
@@ -57,8 +62,8 @@ def inline(stencil):
     _logger.info('`%s` is referenced only once, replace with `%s`', ref, expr)
     replace_load = lambda obj, args: args[1] if obj == args[0] else obj
     # TODO: resolve let variable name conflicts
-    load_stmt.let = lets + tuple(let.visit(replace_load, (ref, expr))
-                                 for let in load_stmt.let)
+    load_stmt.let = lets + tuple(
+        let.visit(replace_load, (ref, expr)) for let in load_stmt.let)
     load_stmt.expr = load_stmt.expr.visit(replace_load, (ref, expr))
     del stencil.local_stmts[idx]
 
