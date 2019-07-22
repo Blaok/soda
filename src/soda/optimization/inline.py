@@ -78,3 +78,90 @@ def inline(stencil):
     stmt.let = arithmetic.simplify(stmt.let)
     _logger.debug('simplified:  %s', stmt)
   return inline(stencil)
+
+
+def inline2(stencil):
+  """Inline statements that are referenced by only one other statement.
+  """
+  if not stencil.local_stmts:
+    return stencil
+
+  refs = collections.OrderedDict(
+  )  # type: Dict[str, Dict[ir.LocalOrOutputStmt, List[ir.Ref]]]
+  for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
+    for var_name, ref_list in visitor.get_load_dict(stmt).items():
+      if var_name in stencil.input_names or var_name == stmt.name:
+        continue
+      refs.setdefault(var_name,
+                      collections.OrderedDict()).setdefault(stmt,
+                                                            []).extend(ref_list)
+
+  refs = {
+      name: next(iter(ref_dict.items()))
+      for name, ref_dict in refs.items()
+      if len(ref_dict) == 1 and len(
+          visitor.get_load_set(
+              {stmt.name: stmt.expr
+               for stmt in stencil.local_stmts}[name])) == 1
+  }
+  for name, (stmt, ref_list) in refs.items():
+    _logger.info(
+        'name: %s stmt: %s ref_list: %s', name, stmt.name,
+        util.lst2str(
+            visitor.get_load_set(
+                {stmt.name: stmt.expr for stmt in stencil.local_stmts}[name])))
+  if not refs:
+    return stencil
+
+  # sort loads to avoid referencing wrong stmt
+  local_stmt_table = {
+      stmt.name: idx for idx, stmt in enumerate(stencil.local_stmts)
+  }
+  ref_queue = collections.deque(list(refs.items()))
+  sorted_refs = []  # type: List[Tuple[ir.Ref, ir.LocalOrOutputStmt]]
+  while ref_queue:
+    var_name, (load_stmt, ref_list) = ref_queue.popleft()
+    store_stmt = stencil.local_stmts[local_stmt_table[ref_list[0].name]]
+    accessed_vars = {ref.name for ref in visitor.get_load_set(store_stmt)}
+    queued_vars = {var_name for var_name, _ in ref_queue}
+    _logger.debug('stmt to be removed: %s', store_stmt)
+    _logger.debug('accessed vars: %s', util.lst2str(accessed_vars))
+    _logger.debug('queued vars %s', util.lst2str(queued_vars))
+    if accessed_vars & queued_vars:
+      ref_queue.append((var_name, (load_stmt, ref_list)))
+    else:
+      sorted_refs.append((var_name, (load_stmt, ref_list)))
+
+  for var_name, (load_stmt, ref_list) in sorted_refs:
+    idx, store_stmt = {
+        stmt.name: (idx, stmt) for idx, stmt in enumerate(stencil.local_stmts)
+    }[var_name]
+    ref_table = {}
+    for ref in ref_list:
+      offset = tuple(a - b for a, b in zip(store_stmt.ref.idx, ref.idx))
+      ref = mutator.shift(store_stmt.ref, offset)
+      lets = tuple(mutator.shift(let, offset) for let in store_stmt.let)
+      expr = mutator.shift(store_stmt.expr, offset)
+      _logger.info('`%s` is referenced only once by stmt %s, replace with `%s`',
+                   ref, load_stmt.name, expr)
+      ref_table[ref] = expr
+    replace_load = lambda obj, args: args.get(obj, obj)
+    # TODO: resolve let variable name conflicts
+    load_stmt.let = lets + tuple(
+        let.visit(replace_load, ref_table) for let in load_stmt.let)
+    load_stmt.expr = load_stmt.expr.visit(replace_load, ref_table)
+    del stencil.local_stmts[idx]
+
+  # invalidate cached_property
+  stencil.__dict__.pop('symbol_table', None)
+  stencil.__dict__.pop('local_names', None)
+  stencil.__dict__.pop('local_types', None)
+
+  for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
+    _logger.debug('simplify  : %s', stmt)
+    stmt.expr = arithmetic.simplify(
+        arithmetic.base.reverse_distribute(stmt.expr))
+    stmt.let = arithmetic.simplify(
+        tuple(map(arithmetic.base.reverse_distribute, stmt.let)))
+    _logger.debug('simplified:  %s', stmt)
+  return inline2(stencil)
