@@ -143,6 +143,8 @@ def reverse_distribute(node: ir.Node) -> ir.Node:
     """
     if isinstance(node, ir.AddSub):
       items = OrderedDict()  # type: Dict[ir.Node, List[Tuple[str, ir.Node]]]
+      new_operators = []
+      new_operands = []
       for operator, operand in zip(('+',) + getattr(node, 'operator'),
                                    getattr(node, 'operand')):
         if (operator == '+' and isinstance(operand, ir.MulDiv) and
@@ -152,8 +154,9 @@ def reverse_distribute(node: ir.Node) -> ir.Node:
           else:
             item, coeff = getattr(operand, 'operand')
           items.setdefault(coeff, []).append((operator, item))
-      new_operators = []
-      new_operands = []
+        else:
+          new_operators.append(operator)
+          new_operands.append(operand)
       for coeff, item in items.items():
         operator, operand = zip(*item)
         assert operator[0] == '+'
