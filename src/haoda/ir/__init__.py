@@ -100,6 +100,10 @@ class Node():
                  tuple(tuple(getattr(self, _)) for _ in self.LINEAR_ATTRS)))
 
   def __eq__(self, other):
+    if (getattr(self, 'haoda_type', None) is not None and
+        getattr(other, 'haoda_type', None) is not None and
+        not util.same_type(self.haoda_type, other.haoda_type)):
+      return False
     return all(
         hasattr(other, attr) and getattr(self, attr) == getattr(other, attr)
         for attr in self.ATTRS)
@@ -867,6 +871,9 @@ class FIFORef(Node):
     return hash((self.lat, self.ref_id))
 
   def __eq__(self, other):
+    if (self.haoda_type is not None and other.haoda_type is not None and
+        not util.same_type(self.haoda_type, other.haoda_type)):
+      return False
     return all(
         getattr(self, attr) == getattr(other, attr)
         for attr in ('lat', 'ref_id'))
@@ -910,6 +917,9 @@ class DRAMRef(Node):
     return hash((self.dram, self.offset))
 
   def __eq__(self, other):
+    if (self.haoda_type is not None and other.haoda_type is not None and
+        not util.same_type(self.haoda_type, other.haoda_type)):
+      return False
     return all(
         getattr(self, attr) == getattr(other, attr)
         for attr in ('dram', 'offset'))
