@@ -2,8 +2,10 @@ import collections
 import itertools
 import logging
 
+from haoda import ir
 from haoda import util
 from haoda.ir import arithmetic
+from soda import grammar
 from soda import mutator
 from soda import visitor
 
@@ -165,3 +167,97 @@ def inline2(stencil):
         tuple(map(arithmetic.base.reverse_distribute, stmt.let)))
     _logger.debug('simplified:  %s', stmt)
   return inline2(stencil)
+
+
+REBALANCE_THRESHOLDS = {
+    'float': 32,
+}
+
+
+def rebalance(stencil):
+  """Rebalance the generated code to improve codegen speed.
+
+  This function modifies stencil in-place. Long reduction expressions will be
+  divided into groups based on the number of operations. The thresholds are
+  defined in REBALANCE_THRESHOLDS.
+
+  Arg:
+    stencil: The Stencil object to modify.
+  Returns:
+    The modified Stencil object.
+  """
+  for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
+    if stmt.haoda_type not in REBALANCE_THRESHOLDS:
+      continue
+    if isinstance(stmt.expr, ir.AddSub) and set(stmt.expr.operator) == {'+'}:
+      reduction = []
+      for operator, operand in zip(('+',) + getattr(stmt.expr, 'operator'),
+                                   getattr(stmt.expr, 'operand')):
+        if isinstance(operand, ir.MulDiv) and operand.operator == ('*',):
+          opds = getattr(operand, 'operand')
+          if isinstance(opds[0], ir.AddSub):
+            reduction.append((opds[1], opds[0]))
+          elif isinstance(opds[1], ir.AddSub):
+            reduction.append((opds[0], opds[1]))
+          else:
+            reduction.append((None, operand))
+        else:
+          reduction.append((None, operand))
+
+      get_num_items = lambda x: 1 if x[0] is None else len(x[1].operand)
+      reduction.sort(key=get_num_items, reverse=True)
+
+      num_items = 0
+      reductions = [[]]
+      for coeff, opds in reduction:
+        if num_items + get_num_items(
+            (coeff, opds)) > REBALANCE_THRESHOLDS[stmt.haoda_type]:
+          reductions.append([])
+          num_items = 0
+        reductions[-1].append((coeff, opds))
+        num_items += get_num_items((coeff, opds))
+      if len(reductions) == 1:
+        continue
+      _logger.info('stmt %s has too many operations, breaking\'em into %d ',
+                   stmt.name, len(reductions))
+      new_stmts = []
+      new_exprs = []
+      for reduction in reductions:
+        new_operators = []
+        new_operands = []
+        for coeff, opds in reduction:
+          new_operators.append('+')
+          if coeff is None:
+            new_operands.append(opds)
+          else:
+            new_operands.append(
+                ir.MulDiv(operator=('*',), operand=(opds, coeff)))
+        new_exprs.append(
+            stencil.propagate_type(
+                ir.AddSub(operator=tuple(new_operators[1:]),
+                          operand=tuple(new_operands))))
+      for new_expr in new_exprs[:-1]:
+        new_stmt_name = stencil.new_tcse_var()
+        new_stmts.append(
+            grammar.LocalStmt(ref=ir.Ref(name=new_stmt_name,
+                                         lat=None,
+                                         idx=(0,) * len(stmt.ref.idx)),
+                              haoda_type=new_expr.haoda_type,
+                              expr=new_expr,
+                              let=stmt.let))
+        _logger.debug('new stmt: %s', new_stmts[-1])
+      stencil.local_stmts.extend(new_stmts)
+      stmt.expr = ir.AddSub(
+          operator=new_exprs[-1].operator + ('+',) * len(new_stmts),
+          operand=new_exprs[-1].operand + tuple(stmt.ref for stmt in new_stmts))
+
+      # invalidate cached_property
+      stencil.__dict__.pop('symbol_table', None)
+      stencil.__dict__.pop('local_names', None)
+      stencil.__dict__.pop('local_types', None)
+
+      _logger.info('stencil after rebalancing: \n  %s',
+                   str(stencil).replace('\n', '\n  '))
+
+      return rebalance(stencil)
+  return stencil
