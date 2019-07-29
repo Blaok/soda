@@ -377,12 +377,32 @@ def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
     println('to->write(from[epoch]);')
   un_scope()
 
+  println('template<typename T>')
+  print_func('void BurstRead', ['hls::stream<T>* to', 'T* from',
+                                'uint64_t data_num'], align=0)
+  do_scope()
+  println('burst_load_epoch:', 0)
+  with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
+    println('#pragma HLS pipeline II=1', 0)
+    println('to->write(from[epoch]);')
+  un_scope()
+
   println('template<int kBurstWidth>')
   print_func('void BurstWrite', [
       'ap_uint<kBurstWidth>* to', 'hls::stream<ap_uint<kBurstWidth>>* from',
       'uint64_t data_num'], align=0)
   do_scope()
   println('store_epoch:', 0)
+  with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
+    println('#pragma HLS pipeline II=1', 0)
+    println('to[epoch] = from->read();')
+  un_scope()
+
+  println('template<typename T>')
+  print_func('void BurstWrite', ['T* to', 'hls::stream<T>* from',
+                                 'uint64_t data_num'], align=0)
+  do_scope()
+  println('burst_store_epoch:', 0)
   with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
     println('#pragma HLS pipeline II=1', 0)
     println('to[epoch] = from->read();')
