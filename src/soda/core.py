@@ -136,6 +136,7 @@ class Stencil():
     tcse.temporal_cse(self)
     if 'inline' in self.optimizations:
       inline.inline(self)
+    inline.rebalance(self)
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
       stmt.expr = self.propagate_type(stmt.expr)
