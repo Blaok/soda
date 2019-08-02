@@ -234,8 +234,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
 
   new_local_stmts = []
   cses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
-  transform = lambda node: stencil.propagate_type(base.reverse_distribute(node)
-                                                 ).visit(visitor, cses)
+  transform = lambda node: stencil.propagate_type(node).visit(visitor, cses)
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     cses.clear()
     stmt.expr = transform(stmt.expr)
