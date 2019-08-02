@@ -783,25 +783,29 @@ class CommSchedule(ScheduleBase):
     for rattr, aattr in self:
       # replace the aattr with proper normalized node
       if isinstance(aattr, CommSchedule):
-        node_without_cse = mutator.normalize(aattr.ir_node)
-        node_with_cse = mutator.normalize(
-            aattr.get_ir_node_with_rtcse(stencil, rtcses, write_idx_table))
+        # node_without_cse is used for key-ing write_idx_table
+        node_without_cse = mutator.shift(
+            aattr.ir_node, soda.visitor.get_normalize_index(aattr.ir_node))
+        node_with_cse = aattr.get_ir_node_with_rtcse(stencil, rtcses,
+                                                     write_idx_table)
+        # node_with_cse_norm is used for key-ing rtcses
+        node_with_cse_norm = mutator.normalize(node_with_cse)
         idx = write_idx_table.get(node_without_cse)
         if idx is not None:
           # this aattr is a common subexpression, need to be replaced
           # cses is key-ed by expressions with recursive CSE applied
-          if node_with_cse not in rtcses:
+          if node_with_cse_norm not in rtcses:
             # this is the first time we see this aattr, allocate a new name
             node = ir.Ref(name=stencil.new_tcse_var(), idx=idx, lat=None)
             _logger.debug('  replace %s with %s', node_without_cse, node)
             stencil.symbol_table[node.name] = node_without_cse.haoda_type
-            rtcses[node_with_cse] = node
+            rtcses[node_with_cse_norm] = node
           else:
             # we have seen this aattr, replace with the known
-            node = rtcses[node_with_cse]
+            node = rtcses[node_with_cse_norm]
         else:
           # this aattr is not a common subexpression
-          node = node_with_cse
+          node = mutator.shift(node_with_cse, self.linearizer(rattr))
       else:
         node = self.aattr_table[aattr]
       operands.append(assemble_attr(self.linearizer(rattr), node))
