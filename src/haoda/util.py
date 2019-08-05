@@ -2,9 +2,12 @@ from typing import (
     Any,
     Iterable,
     Tuple,
+    Optional,
+    Union,
 )
 import contextlib
 import logging
+import os
 import signal
 
 # constants
@@ -292,3 +295,58 @@ def timeout(seconds=1, error_message='Timeout'):
   signal.alarm(seconds)
   yield
   signal.alarm(0)
+
+
+def get_job_server_fd(job_server_fd: Union[int, Tuple[()], None]
+                     ) -> Optional[int]:
+  """Get the job server file descriptor from env var if input is a tuple.
+
+  Args:
+    job_server_fd: If this is not a tuple, return it directly.
+
+  Returns:
+    The job server file descriptor, or None.
+  """
+  if isinstance(job_server_fd, tuple):
+    job_server = os.environ.get("JOB_SERVER_FD")
+    if job_server is not None:
+      job_server_fd = int(job_server)
+    else:
+      job_server_fd = None
+  return job_server_fd
+
+
+# pylint: disable=bad-whitespace
+def acquire_job_slot(job_server_fd: Union[int, Tuple[()], None] = ()
+                    ) -> Optional[int]:
+  """Acquire a job slot if input is not None.
+
+  Args:
+    job_server_fd: If this is a tuple, obtain the fd from env var; if this is
+        none, do nothing.
+
+  Returns:
+    The job server file descriptor, or None.
+  """
+  job_server_fd = get_job_server_fd(job_server_fd)
+  if job_server_fd is not None and len(os.read(job_server_fd, 1)) != 1:
+    job_server_fd = None
+  return job_server_fd
+
+
+# pylint: disable=bad-whitespace
+def release_job_slot(job_server_fd: Union[int, Tuple[()], None] = ()
+                    ) -> Optional[int]:
+  """Release a job slot if input is not None.
+
+  Args:
+    job_server_fd: If this is a tuple, obtain the fd from env var; if this is
+        none, do nothing.
+
+  Returns:
+    The job server file descriptor, or None.
+  """
+  job_server_fd = get_job_server_fd(job_server_fd)
+  if job_server_fd is not None and os.write(job_server_fd, b'x') != 1:
+    job_server_fd = None
+  return job_server_fd
