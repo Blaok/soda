@@ -89,6 +89,7 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
       hls_kernel.print_code(stencil, kernel_fileobj)
 
     super_source = stencil.dataflow_super_source
+    job_server = util.release_job_slot()
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
       threads = []
       for module_id in range(len(super_source.module_traits)):
@@ -107,6 +108,7 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
         if returncode != 0:
           util.pause_for_debugging()
           sys.exit(returncode)
+    util.acquire_job_slot(job_server)
 
     # generate HLS report
     depths = {}   # type: Dict[int, int]
@@ -164,6 +166,7 @@ def synthesis_module(tmpdir, kernel_files, module_name, device_info):
   Returns:
     (returncode, stdout, stderr) results of the subprocess.
   """
+  job_server = util.acquire_job_slot()
   with tempfile.TemporaryFile(mode='w+b') as tarfileobj:
     with backend.RunHls(
         tarfileobj, kernel_files, module_name, device_info['clock_period'],
@@ -175,6 +178,7 @@ def synthesis_module(tmpdir, kernel_files, module_name, device_info):
         tar.extractall(tmpdir, (
             f for f in tar.getmembers()
             if f.name.startswith('hdl') or f.name.startswith('report')))
+  util.release_job_slot(job_server)
   return proc.returncode, stdout, stderr
 
 FIFO_PORT_SUFFIXES = dict(
