@@ -1,7 +1,9 @@
 from typing import (
-  List,
   Dict,
   Iterable,
+  List,
+  Mapping,
+  Optional,
   Tuple,
   Union,
 )
@@ -87,8 +89,10 @@ def get_load_dict(obj: Union[ir.Node, tensor.Tensor]) -> Dict[ir.Ref,
     raise TypeError('argument is not an IR node or a tensor.Tensor')
   return loads
 
-def get_normalize_index(obj: Union[ir.Node, Iterable[ir.Node]]) -> Tuple[int,
-                                                                         ...]:
+def get_normalize_index(
+    obj: Union[ir.Node, Iterable[ir.Node]],
+    references: Optional[Mapping[str, Tuple[int, ...]]] = None
+    ) -> Tuple[int, ...]:
   """Get the normalize index that will make the least access index 0.
 
   Args:
@@ -103,8 +107,15 @@ def get_normalize_index(obj: Union[ir.Node, Iterable[ir.Node]]) -> Tuple[int,
   if isinstance(obj, ir.Node):
     obj = (obj,)
   try:
-    return min(sum(map(get_load_tuple, obj), ()),
-               key=lambda load: tuple(reversed(load.idx))).idx
+    def get_idx(load: ir.Ref) -> Tuple[int, ...]:
+      if references is None:
+        return load.idx
+      ref = references.get(getattr(load, 'name'))
+      if ref is None:
+        return load.idx
+      return tuple(x - y for x, y in zip(load.idx, ref))
+    return get_idx(min(sum(map(get_load_tuple, obj), ()),
+                       key=lambda load: tuple(reversed(get_idx(load)))))
   except ValueError as e:
     if str(e) == 'min() arg is an empty sequence':
       return ()

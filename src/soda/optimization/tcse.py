@@ -753,6 +753,8 @@ class CommSchedule(ScheduleBase):
         continue
       expr = mutator.shift(self.tcse_vars_table[vid].ir_node,
                            self.linearizer(-self.produce_offsets[vid]))
+      # okay not to add references because expr does not contain tcse vars
+      # TODO: support multi-stage input
       table[mutator.normalize(expr)] = util.add_inv(
           soda.visitor.get_normalize_index(expr))
     return table
@@ -783,12 +785,15 @@ class CommSchedule(ScheduleBase):
       # replace the aattr with proper normalized node
       if isinstance(aattr, CommSchedule):
         # node_without_cse is used for key-ing write_idx_table
+        # okay not to add references because expr does not contain tcse vars
+        # TODO: support multi-stage input
         node_without_cse = mutator.shift(
             aattr.ir_node, soda.visitor.get_normalize_index(aattr.ir_node))
         node_with_cse = aattr.get_ir_node_with_rtcse(stencil, rtcses,
                                                      write_idx_table)
         # node_with_cse_norm is used for key-ing rtcses
-        node_with_cse_norm = mutator.normalize(node_with_cse)
+        node_with_cse_norm = mutator.normalize(
+            node_with_cse, {ref.name: ref.idx for ref in rtcses.values()})
         idx = write_idx_table.get(node_without_cse)
         if idx is not None:
           # this aattr is a common subexpression, need to be replaced
@@ -816,6 +821,7 @@ class CommSchedule(ScheduleBase):
                             tcses: Dict[ir.BinaryOp, ir.Ref]) -> ir.Node:
     rtcses = tcses.copy()
     ir_node_with_rtcse = self.get_ir_node_with_rtcse(stencil, rtcses)
+    norm_refs = {getattr(ref, 'name'): ref.idx for ref in rtcses.values()}
 
     # try to apply absolute CSE
     binary_aattrs = collections.defaultdict(
@@ -826,8 +832,8 @@ class CommSchedule(ScheduleBase):
       if reduction is not None:
         for op in reduction[1]:
           if isinstance(op, ir.BinaryOp):
-            binary_aattrs[mutator.normalize(op)].append(
-                soda.visitor.get_normalize_index(op))
+            binary_aattrs[mutator.normalize(op, references=norm_refs)].append(
+                soda.visitor.get_normalize_index(op, references=norm_refs))
 
     _logger.debug('counting complex aattrs')
     add_to_count(ir_node_with_rtcse)
@@ -845,7 +851,8 @@ class CommSchedule(ScheduleBase):
                             lat=None)
         stencil.symbol_table[new_name] = getattr(op, 'haoda_type')
 
-    do_atcse = lambda op: mutator.replace_expressions(op, atcses)
+    do_atcse = lambda op: mutator.replace_expressions(
+        op, atcses, references=norm_refs)
     rtcses = OrderedDict((do_atcse(k), v) for k, v in rtcses.items())
     tcses.update(rtcses)
     tcses.update(atcses)

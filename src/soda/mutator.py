@@ -1,8 +1,11 @@
 from typing import (
+    Iterable,
+    Mapping,
     MutableMapping,
     Optional,
     Tuple,
     TypeVar,
+    Union,
 )
 
 import collections
@@ -57,7 +60,8 @@ def shift(obj, offset, excluded=(), op=operator.sub, verbose=False):
   return obj
 
 
-def normalize(obj):
+def normalize(obj: Union[ir.Node, Iterable[ir.Node]],
+              references: Optional[Mapping[str, Tuple[int, ...]]] = None):
   """Make the least access index 0.
 
   Works on an ir.Node or an iterable of ir.Nodes. If it is shifted, a different
@@ -72,10 +76,10 @@ def normalize(obj):
   """
   if isinstance(obj, types.GeneratorType):
     return normalize(tuple(obj))
-  norm_idx = soda.visitor.get_normalize_index(obj)
+  norm_idx = soda.visitor.get_normalize_index(obj, references)
   shifter = lambda x: shift(x, norm_idx) if any(norm_idx) else x
   if isinstance(obj, collections.Iterable):
-    return type(obj)(map(shifter, obj))
+    return type(obj)(map(shifter, obj))  # type: ignore
   if isinstance(obj, ir.Node):
     return shifter(obj)
   raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')
@@ -84,10 +88,12 @@ def normalize(obj):
 NodeT = TypeVar('NodeT', bound=ir.Node)
 
 
-def replace_expressions(obj: NodeT,
-                        cses: MutableMapping[NodeT, ir.Ref],
-                        used: Optional[MutableMapping[NodeT, NodeT]] = None
-                       ) -> NodeT:
+def replace_expressions(
+    obj: NodeT,
+    cses: MutableMapping[NodeT, ir.Ref],
+    used: Optional[MutableMapping[NodeT, NodeT]] = None,
+    references: Optional[Mapping[str, Tuple[int, ...]]] = None,
+) -> NodeT:
   """Get AST with common subexpression elimination.
 
   Get AST with the given common subexpressions. If used is not None, the used
@@ -107,7 +113,7 @@ def replace_expressions(obj: NodeT,
                                  Ref], Optional[MutableMapping[NodeT, NodeT]]]
   ) -> NodeT:
     cses, used = args
-    norm_idx = soda.visitor.get_normalize_index(obj)
+    norm_idx = soda.visitor.get_normalize_index(obj, references)
     normalized = shift(obj, norm_idx) if any(norm_idx) else obj
     if normalized in cses:
       if used is not None:
