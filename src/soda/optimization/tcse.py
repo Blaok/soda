@@ -1353,6 +1353,16 @@ class ExternalSchedules(ScheduleBase):
           'maxs': self.linearizer.maxs,
           'mins': self.linearizer.mins
       }
+    if len(self.rattrs) < 32:
+      attrs['num_pruned'] = 5
+    elif len(self.rattrs) < 64:
+      attrs['num_pruned'] = 4
+    elif len(self.rattrs) < 128:
+      attrs['num_pruned'] = 3
+    elif len(self.rattrs) < 256:
+      attrs['num_pruned'] = 2
+    else:
+      attrs['num_pruned'] = 1
     jemalloc = ctypes_util.find_library('jemalloc')
     if jemalloc is not None:
       os.environ['LD_PRELOAD'] = jemalloc
