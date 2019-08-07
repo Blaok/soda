@@ -16,11 +16,13 @@ from typing import (
 )
 
 import collections
+from ctypes import util as ctypes_util
 import heapq
 import itertools
 import json
 import logging
 import operator
+import os
 import random
 import shutil
 import subprocess
@@ -1351,6 +1353,9 @@ class ExternalSchedules(ScheduleBase):
           'maxs': self.linearizer.maxs,
           'mins': self.linearizer.mins
       }
+    jemalloc = ctypes_util.find_library('jemalloc')
+    if jemalloc is not None:
+      os.environ['LD_PRELOAD'] = jemalloc
     result = json.loads(
         subprocess.run(self.cmd,
                        input=json.dumps(attrs),
