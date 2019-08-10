@@ -239,6 +239,40 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
     return lambda node: arithmetic.base.propagate_type(node, self.symbol_table)
 
   @cached_property.cached_property
+  def norm_refs(self):
+    norm_refs = {}
+    stmt_table = {}
+    for stmt in self.local_stmts:
+      stmt_table[stmt.name] = stmt
+
+    def get_norm_idx(stmt) -> Tuple[int, ...]:
+      norm_idx = norm_refs.get(stmt.name)
+      if norm_idx is None:
+        loads = visitor.get_load_tuple(stmt.expr)
+        for let in stmt.let:
+          loads += visitor.get_load_tuple(let)
+
+        def all_indices():
+          for load in loads:
+            if load.name in self.input_names:
+              yield load.idx
+            else:
+              yield tuple(x + y for x, y in zip(
+                  load.idx, get_norm_idx(stmt_table[load.name])))
+
+        norm_idx = tuple(x - y for x, y in zip(
+            min(all_indices(), key=lambda idx: tuple(reversed(tuple(idx)))),
+            stmt.ref.idx))
+        norm_refs[stmt.name] = norm_idx
+        _logger.debug('%s has norm idx %s', stmt.name, norm_idx)
+      return norm_idx
+
+    for stmt in self.local_stmts + self.output_stmts:
+      get_norm_idx(stmt)
+    _logger.debug('norm refs %s', norm_refs)
+    return norm_refs
+
+  @cached_property.cached_property
   def tensors(self):
     """Constructs high-level DAG and creates the tensors.
 

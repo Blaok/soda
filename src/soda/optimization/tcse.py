@@ -40,6 +40,7 @@ import soda.visitor
 RelativeAttr = int
 AbsoluteAttr = int
 Attr = Union[RelativeAttr, Tuple[RelativeAttr, Optional[AbsoluteAttr]]]
+Index = Tuple[int, ...]
 
 OrderedDict = collections.OrderedDict
 
@@ -828,18 +829,23 @@ class CommSchedule(ScheduleBase):
     binary_aattrs = collections.defaultdict(
         list)  # type: Dict[ir.BinaryOp, List[Tuple[int, ...]]]
 
-    def add_to_count(node: ir.Node):
+    def add_to_count(node: ir.Node, norm_idx: Index = ()) -> None:
       reduction = ir.to_reduction(node)
       if reduction is not None:
         for op in reduction[1]:
           if isinstance(op, ir.BinaryOp):
-            binary_aattrs[mutator.normalize(op, references=norm_refs)].append(
-                soda.visitor.get_normalize_index(op, references=norm_refs))
+            idx = soda.visitor.get_normalize_index(op, references=norm_refs)
+            if norm_idx:
+              idx = tuple(x - y for x, y in zip(idx, norm_idx))
+            binary_aattrs[mutator.normalize(op,
+                                            references=norm_refs)].append(idx)
 
     _logger.debug('counting complex aattrs')
-    add_to_count(ir_node_with_rtcse)
+    norm_idx = soda.visitor.get_normalize_index(self.ir_node,
+                                                references=norm_refs)
+    add_to_count(ir_node_with_rtcse, norm_idx)  # not normalized; need norm_idx
     for tcs in rtcses:
-      add_to_count(tcs)
+      add_to_count(tcs)  # all normalized
     _logger.debug('complex aattrs count')
     atcses = {}
     for op, indices in binary_aattrs.items():
@@ -847,9 +853,9 @@ class CommSchedule(ScheduleBase):
       _logger.debug(' %s x%d', op, count)
       if count > 1:
         new_name = stencil.new_tcse_var()
-        atcses[op] = ir.Ref(name=new_name,
-                            idx=util.add_inv(min(indices)),
-                            lat=None)
+        # select the least index to minimize buffer size required
+        min_idx = min(indices, key=lambda x: tuple(reversed(x)))
+        atcses[op] = ir.Ref(name=new_name, idx=util.add_inv(min_idx), lat=None)
         stencil.symbol_table[new_name] = getattr(op, 'haoda_type')
 
     do_atcse = lambda op: mutator.replace_expressions(
