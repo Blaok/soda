@@ -1143,7 +1143,7 @@ class GreedySchedules(ScheduleBase):
   """Schedules of an Expression, found greedily.
   """
   timeout = 1
-  num_pruned = 3
+  num_pruned = 5
 
   def __init__(self,
                rattrs: Tuple[RelativeAttr, ...],
