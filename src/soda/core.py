@@ -648,7 +648,7 @@ def _get_reuse_buffer(tile_size, tensor, unroll_factor):
   for chain_id, chain in enumerate(
       _get_reuse_chains(tile_size, tensor, unroll_factor)):
     reuse_buffer.append((unroll_factor - 1 - chain_id, chain[0]))
-    _logger.error('chain id: %s, chain[0]: %s', chain_id, chain[0])
+    _logger.debug('chain id: %s, chain[0]: %s', chain_id, chain[0])
     offsets.append(chain[0])
     for j in range(len(chain) - 1):
       reuse_buffer.append((chain[j], chain[j + 1]))
