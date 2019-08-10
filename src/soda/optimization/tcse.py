@@ -597,11 +597,8 @@ class CommSchedule(ScheduleBase):
     lp_helper_vars = {}
     objectives = []
     for src_vid in self.dependers:
-      lp_var = pulp.LpVariable('produced_offset_%d' % src_vid,
-                               lowBound=0,
-                               cat='Integer')
+      lp_var = pulp.LpVariable('produced_offset_%d' % src_vid, cat='Integer')
       lp_helper_var = pulp.LpVariable('consumed_offset_%d' % src_vid,
-                                      lowBound=0,
                                       cat='Integer')
       lp_vars.setdefault(src_vid, lp_var)
       lp_helper_vars[src_vid] = lp_helper_var
@@ -619,7 +616,7 @@ class CommSchedule(ScheduleBase):
     self._produce_offsets = {}  # type: Dict[int, int]
     self._consume_offsets = {}  # type: Dict[int, int]
     for vid, lp_var in lp_vars.items():
-      if vid == 1:
+      if vid == 1:  # output
         continue
       produce_offset = 0 if vid == 0 else int(pulp.value(lp_var))
       consume_offset = int(pulp.value(lp_helper_vars[vid]))
