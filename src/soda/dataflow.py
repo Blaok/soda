@@ -270,7 +270,11 @@ def create_dataflow_graph(stencil):
           #depth=stencil.get_reuse_buffer_length(src_name, offset))
           _logger.debug('create %s', print_node(fwd_node))
           # init_offsets is the start of each reuse chain
-          init_offsets = [start for start, end in reuse_buffer if start == end]
+          init_offsets = [
+            next(end for start, end in reuse_buffer if start == unroll_idx)
+            for unroll_idx in reversed(range(stencil.unroll_factor))]
+          _logger.info('reuse buffer: %s', reuse_buffer)
+          _logger.info('init offsets: %s', init_offsets)
           if offset in init_offsets:
             if src_name in stencil.input_names:
               # fwd from external input

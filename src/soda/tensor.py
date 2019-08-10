@@ -29,7 +29,6 @@ class Tensor():
     lets: Lets of computation.
     expr: Expr of computation.
     ld_refs: Dict from str of name to dict of Ref loaded.
-    ld_delays: Dict from str of name to extra delay of the input.
 
   Property:
     name: str, unique in each SODA program.
@@ -59,11 +58,9 @@ class Tensor():
     _logger.debug('                   at tx position %d', stmt._tx_position)
 
     # these fields are to be set externally
-    self.st_delay = 0
     self.parents = collections.OrderedDict()
     self.children = collections.OrderedDict()
     self.ld_refs = collections.OrderedDict()
-    self.ld_delays = collections.OrderedDict()
 
   @property
   def name(self):
@@ -79,7 +76,7 @@ class Tensor():
 
   @property
   def st_offset(self):
-    return soda.util.serialize(self.st_idx, self._tile_size) + self.st_delay
+    return soda.util.serialize(self.st_idx, self._tile_size)
 
   @cached_property.cached_property
   def ld_indices(self):
@@ -130,12 +127,12 @@ class Tensor():
   def __str__(self):
     return '''Tensor
   {haoda_type}: {name} = {expr}
-  store: {st_ref} with delay {st_delay}
+  store: {st_ref}
   parents: {parents}
   children: {children}'''.format(
       name=self.name, haoda_type=self.haoda_type, expr=self.expr,
       parents=util.idx2str(self.parents), children=util.idx2str(self.children),
-      st_ref=str(self.st_ref), st_delay=self.st_delay)
+      st_ref=str(self.st_ref))
 
   def is_output(self):
     return len(self.children) == 0
