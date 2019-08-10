@@ -64,12 +64,11 @@ def main():
             dest='iterate',
             help='override iterate directive; '
             'repeat execution multiple times iteratively')
-  parser.add_argument('--temporal-cse',
-            type=str,
-            metavar='(yes|no|greedy|optimal)',
-            dest='temporal_cse',
-            nargs='?', const='yes', default='yes',
-            help='enable temporal common subexpression elimination or not')
+  parser.add_argument(
+    '--temporal-cse', type=str, metavar=
+    '(yes|no|greedy|optimal|glore|built-in|built-in:greedy|built-in:optimal)',
+    dest='temporal_cse', nargs='?', const='yes', default='yes',
+    help='enable temporal common subexpression elimination or not')
   parser.add_argument('--border',
             type=str,
             metavar='(ignore|preserve)',
