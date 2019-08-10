@@ -752,8 +752,7 @@ class CommSchedule(ScheduleBase):
     for vid in self.dependers:
       if vid == 0:  # 0 is the input
         continue
-      expr = mutator.shift(self.tcse_vars_table[vid].ir_node,
-                           self.linearizer(-self.produce_offsets[vid]))
+      expr = mutator.normalize(self.tcse_vars_table[vid].ir_node)
       # okay not to add references because expr does not contain tcse vars
       # TODO: support multi-stage input
       table[mutator.normalize(expr)] = util.add_inv(
