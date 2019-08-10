@@ -3,7 +3,6 @@ from typing import (
     Callable,
     Dict,
     FrozenSet,
-    Iterable,
     Iterator,
     List,
     MutableMapping,
@@ -781,7 +780,9 @@ class CommSchedule(ScheduleBase):
     if _logger.isEnabledFor(logging.DEBUG):
       for rattr, aattr in self:
         _logger.debug('  rattr: %s aattr: %s', rattr, aattr)
-    for rattr, aattr in self:
+    for rattr, aattr in (  # type: ignore
+        (self.rattrs[0], self.left), (self.rattrs[0] + self.distance,
+                                      self.right)):
       # replace the aattr with proper normalized node
       if isinstance(aattr, CommSchedule):
         # node_without_cse is used for key-ing write_idx_table
@@ -871,16 +872,29 @@ class CommSchedule(ScheduleBase):
 def make_schedule_from_json(j: Dict[str, Any], offset: int,
                             null_aattr: bool) -> CommSchedule:
   left, right, distance = j['left'], j['right'], j['distance']
-  rattrs = offset, offset + distance
+  attrs = []  # type: List[Tuple[RelativeAttr, AbsoluteAttr]]
   if isinstance(left, dict):
-    left = make_schedule_from_json(left, rattrs[0], null_aattr)
-  elif isinstance(left, int) and null_aattr:
-    left = None
+    left = make_schedule_from_json(left, offset, null_aattr)
+    attrs.extend(left)
+  elif isinstance(left, int):
+    if null_aattr:
+      left = None
+    attrs.append((offset, left))
+
+  offset += distance
+
   if isinstance(right, dict):
-    right = make_schedule_from_json(right, rattrs[1], null_aattr)
-  elif isinstance(right, int) and null_aattr:
-    right = None
-  return CommSchedule(left, right, distance, rattrs, (left, right))
+    right = make_schedule_from_json(right, offset, null_aattr)
+    attrs.extend(right)
+  elif isinstance(right, int):
+    if null_aattr:
+      right = None
+    attrs.append((offset, right))
+
+  attrs.sort(key=lambda attr: attr[0])
+  rattrs, aattrs = zip(*attrs)
+  return CommSchedule(left, right, distance, rattrs,
+                      None if null_aattr else aattrs)
 
 
 class CommSchedules(ScheduleBase):
@@ -1026,8 +1040,16 @@ class CommSchedules(ScheduleBase):
               continue
             distance = self.rattrs[right_indices[0]]
             distance -= self.rattrs[left_indices[0]]
+            rattrs = tuple(self.rattrs[i]
+                           for i, op in enumerate(self.operands)
+                           if op != '0')
+            aattrs = None
+            if self.aattrs is not None:
+              aattrs = tuple(self.aattrs[i]
+                             for i, op in enumerate(self.operands)
+                             if op != '0')
             schedule = CommSchedule(  # type: ignore
-                left, right, distance, self.rattrs, self.aattrs)
+                left, right, distance, rattrs, aattrs)
             num_ops = schedule.num_ops  # type: ignore
             if num_ops < self.max_cost:
               self.max_cost = num_ops
@@ -1131,34 +1153,7 @@ class GreedySchedules(ScheduleBase):
 
   @cached_property.cached_property
   def comparison_key(self) -> CommSchedule:
-    return self.linear_schedule(range(len(self.rattrs)))
-
-  def linear_schedule(self, indices: Iterable[int]) -> CommSchedule:
-    """Schedule the attributes linearily.
-
-    Args:
-      indices: Iterable of ints, indicating what attributes should be used.
-
-    Returns:
-      CommSchedule of the attributes, scheduled as a linear tree.
-    """
-    indices = tuple(indices)
-    distance = self.rattrs[indices[1]] - self.rattrs[indices[0]]
-    new_rattrs = tuple(map(self.rattrs.__getitem__, indices))
-    if self.aattrs is None:
-      new_aattrs = None
-    else:
-      new_aattrs = tuple(map(self.aattrs.__getitem__, indices))
-    other_args = distance, new_rattrs, new_aattrs
-    if len(indices) == 2:
-      if self.aattrs is None:
-        return CommSchedule(None, None, *other_args)
-      return CommSchedule(self.aattrs[indices[0]], self.aattrs[indices[1]],
-                          *other_args)
-    if self.aattrs is None:
-      return CommSchedule(None, self.linear_schedule(indices[1:]), *other_args)
-    return CommSchedule(self.aattrs[indices[0]],
-                        self.linear_schedule(indices[1:]), *other_args)
+    return linear_schedule(tuple(self))
 
   @property
   def generator(self) -> Iterator[CommSchedule]:
@@ -1172,7 +1167,8 @@ class GreedySchedules(ScheduleBase):
       distance = right_rattr - left_rattr
       new_aattr = left_aattr, right_aattr
       operation = CommSchedule(  # type: ignore
-          left_aattr, right_aattr, distance, (0, distance), new_aattr)
+          left_aattr, right_aattr, distance, (left_rattr, right_rattr),
+          new_aattr)
       if operation in reuses:
         continue
       #_logger.debug('look for operation: %s', operation)
@@ -1231,7 +1227,7 @@ class GreedySchedules(ScheduleBase):
     # they may not all be useful because they overlap
     reuses = {k: v for k, v in reuses.items() if len(v) > 1}
     if not reuses:
-      yield self.linear_schedule(range(len(self.rattrs)))
+      yield linear_schedule(tuple(self))
       return
 
     def aligns(dis: int, dim: int) -> bool:
@@ -1321,6 +1317,26 @@ class GreedySchedules(ScheduleBase):
 
   def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
     return
+
+
+def linear_schedule(attrs) -> CommSchedule:
+  """Schedule the attributes linearily.
+
+  Args:
+    indices: Iterable of ints, indicating what attributes should be used.
+
+  Returns:
+    CommSchedule of the attributes, scheduled as a linear tree.
+  """
+  rattrs, aattrs = zip(*attrs)
+  # rattrs doesn't have to start with 0 but has to be sorted
+  if list(rattrs) != sorted(rattrs):
+    raise util.InputError('rattrs not sorted: %s' % str(rattrs))
+  distance = rattrs[1] - rattrs[0]
+  other_args = distance, rattrs, aattrs
+  if len(attrs) == 2:
+    return CommSchedule(aattrs[0], aattrs[1], *other_args)
+  return CommSchedule(aattrs[0], linear_schedule(attrs[1:]), *other_args)
 
 
 class ExternalSchedules(ScheduleBase):

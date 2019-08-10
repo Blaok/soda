@@ -2,7 +2,6 @@ from typing import (
     Tuple,)
 
 import cProfile
-import itertools
 import os
 import pstats
 import tracemalloc
@@ -297,9 +296,7 @@ class TestGreedySchedules(TestCommSchedules):
         y[0, 0] + y[0, 1] + y[0, 2]
     """
     m, n = 3, 4
-    rattr = tuple(
-        map(tuple, map(reversed, itertools.product(range(m), range(n)))))
-    rattr = tuple(m * j + i for i in range(m) for j in range(n))
+    rattr = tuple(m * 2 * i + j for i in range(m) for j in range(n))
     aattr = tuple(range(1, n + 1)) * m
     schedule = self.Schedules(rattr, aattr, cache=self.cache).best
     self.assertEqual(5, schedule.num_ops)
