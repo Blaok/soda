@@ -228,7 +228,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
       Optimized ir.Node with temporal common subexpressions eliminated.
     """
     try:
-      expression = Expression(node, stencil.optimizations.get('tcse'))
+      expression = Expression(node, stencil)
       if expression.best_schedule is not None:
         _logger.debug('best schedule: (cost: %s)',
                       expression.best_schedule.cost)
@@ -1427,7 +1427,7 @@ class Expression:
       details = details or (': ' + str(details))
       super().__init__('cannot handle ' + str(msg) + ' yet' + str(details))
 
-  def __init__(self, polynomial: ir.Node, method: str = 'greedy') -> None:
+  def __init__(self, polynomial: ir.Node, stencil) -> None:
     """Figure out whether a ir.Node is suitable for temporal CSE.
 
     Construct a TCSE Expression of the input polynomial. If it cannot be handled
@@ -1442,7 +1442,7 @@ class Expression:
       Expression.CannotHandle: If the input cannot be handled but is not error.
       TypeError: If the input is not an instance of ir.Node.
     """
-    self.method = method
+    self.method = stencil.optimizations.get('tcse') or 'greedy'
     reduction = ir.to_reduction(polynomial)
     if reduction is not None:
       self.operator = reduction[0]
@@ -1490,12 +1490,13 @@ class Expression:
       raise TypeError('expect an instance of ir.BinaryOp')
 
   @cached_property.cached_property
-  def schedules(self
-               ) -> Union[CommSchedules, GreedySchedules, ExternalSchedules]:
+  def schedules(
+      self
+  ) -> Union[CommSchedules, GreedySchedules, ExternalSchedules]:
     external_tcse = shutil.which('tcse')
     args = self.rattrs, self.aattrs, self.linearizer
-    if external_tcse is None:
-      if self.method == 'optimal':
+    if external_tcse is None or self.method.startswith('built-in'):
+      if self.method.endswith('optimal'):
         return CommSchedules(self.rattrs, self.aattrs, cache={})
       return GreedySchedules(*args)
     external_schedules = ExternalSchedules(*args)
