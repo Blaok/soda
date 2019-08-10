@@ -94,15 +94,17 @@ class Linearizer:
   Attributes:
     maxs: List of integers, maximum index in each dimension.
     mins: List of integers, minimum index in each dimension.
+    sizes: Tuple of integers, size of each linearized dimension.
 
   Properties:
     num_dim: Integer, number of dimensions.
     weights: List of integers, weight of each dimension.
     dims: Tuple of integers, all dimension indices.
-    sizes: Tuple of integers, size of each linearized dimension.
   """
 
-  def __init__(self, rattrs: Sequence[Sequence[int]]):
+  def __init__(self,
+               rattrs: Sequence[Sequence[int]],
+               tile_size: Sequence[int] = ()):
     """Initialize the Linearizer with the given relative attribute tuples.
 
     Args:
@@ -115,6 +117,12 @@ class Linearizer:
     for d in self.dims:
       self.maxs[d] = max(rattr[d] for rattr in rattrs)
       self.mins[d] = min(rattr[d] for rattr in rattrs)
+    if tile_size:
+      self.sizes = tuple(tile_size)[:-1] + (
+          (self.maxs[-1] - self.mins[-1] + 1) * 2 - 1,)
+    else:
+      self.sizes = tuple(
+          (self.maxs[d] - self.mins[d] + 1) * 2 - 1 for d in self.dims)
 
   @property
   def num_dim(self) -> int:
@@ -130,11 +138,6 @@ class Linearizer:
   @property
   def dims(self) -> Tuple[int, ...]:
     return tuple(range(self.num_dim))
-
-  @property
-  def sizes(self) -> Tuple[int, ...]:
-    # make sure different rows do not overlap
-    return tuple((self.maxs[d] - self.mins[d] + 1) * 2 - 1 for d in self.dims)
 
   def apply(self, rattr: Sequence[int]) -> int:
     return sum((rval - min_val) * weight
@@ -1351,7 +1354,8 @@ class ExternalSchedules(ScheduleBase):
     if self.linearizer is not None:
       attrs['linearizer'] = {
           'maxs': self.linearizer.maxs,
-          'mins': self.linearizer.mins
+          'mins': self.linearizer.mins,
+          'sizes': self.linearizer.sizes,
       }
     if len(self.rattrs) < 32:
       attrs['num_pruned'] = 5
@@ -1437,7 +1441,7 @@ class Expression:
       rattrs, aattrs = zip(*map(extract_attr, self.operands))
       self.aattrs_as_ir_nodes = aattrs
 
-      self.linearizer = Linearizer(rattrs)
+      self.linearizer = Linearizer(rattrs, stencil.tile_size)
 
       # linearize the relative attribtues and memorize the mapping
       self.rattrs = tuple(map(self.linearizer, rattrs))
