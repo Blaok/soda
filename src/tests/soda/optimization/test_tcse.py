@@ -274,6 +274,7 @@ class TestGreedySchedules(TestCommSchedules):
     test((1, 6, 5, 5, 4, 1, 1, 6, 5), num_ops=6, total_distance=17)
     test((4, 3, 0, 2, 0, 0, 6, 0, 0), num_ops=7, total_distance=12)
     test((1, 1, 1, 0, 1, 1, 1, 0, 3), num_ops=6, total_distance=18)
+    test((1, 2, 1, 2, 3, 2, 1, 2, 1), num_ops=6, total_distance=13)
 
   def test_5x5_tcse(self):
     """Test a 5x5 temporal CSE case."""
