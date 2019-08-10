@@ -10,14 +10,14 @@ import logging
 import operator
 
 import cached_property
+import pulp
+import toposort
 
 from haoda import ir
 from haoda import util
 from haoda.ir import arithmetic
 from soda import dataflow
-from soda import grammar
 from soda import visitor
-from soda import mutator
 from soda.optimization import inline
 from soda.optimization import tcse
 import soda.util
@@ -145,10 +145,6 @@ class Stencil():
       stmt.let = tuple(map(self.propagate_type, stmt.let))
 
     # soda frontend successfully parsed
-    # triggers cached property
-    # replicate tensors for iterative stencil
-    # pylint: disable=pointless-statement
-    self.tensors
     _logger.debug('producer tensors: [%s]',
                   ', '.join(tensor.name for tensor in self.producer_tensors))
     _logger.debug('consumer tensors: [%s]',
@@ -288,16 +284,6 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
       for stmt in itertools.chain(self.local_stmts, self.output_stmts):
         tensor = soda.tensor.Tensor(stmt.visit(mutate_name_callback),
                                     self.tile_size)
-        loads = visitor.get_load_tuple(tensor)
-        norm_idx = tuple(
-            min(load.idx[d]
-                for load in loads
-                if load.name not in self.param_names)
-            for d in range(self.dim))
-        if any(norm_idx):
-          _logger.debug('normalize index of %s: (%s)', tensor.name,
-                        ', '.join(map(str, norm_idx)))
-          mutator.shift(tensor, norm_idx, excluded=self.param_names)
         tensor_map[tensor.name] = tensor
         tensors.append(tensor)
 
@@ -316,6 +302,79 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
           tensor.parents[parent_name] = parent_tensor
           tensor.ld_refs[parent_name] = ld_refs
 
+    # solve ILP for optimal reuse buffer
+    lp_problem = pulp.LpProblem("optimal_reuse_buffer", pulp.LpMinimize)
+    lp_vars = {name: 0 for name in self.input_names}
+    lp_helper_vars = {}  # type: Dict[str, pulp.LpVariable]
+    objectives = []
+    constraints = []
+    for tensor in tensor_map.values():
+      lp_var = pulp.LpVariable('produced_offset_' + tensor.name, cat='Integer')
+      lp_helper_var = pulp.LpVariable('consumed_offset_' + tensor.name,
+                                      cat='Integer')
+      lp_vars.setdefault(tensor.name, lp_var)
+      lp_helper_vars[tensor.name] = lp_helper_var
+      # tensor need to be kept for this long
+      objectives.append(lp_helper_var - lp_vars[tensor.name])
+      # tensor cannot be consumed until it is produced
+      constraints.append(lp_helper_var >= lp_vars[tensor.name])
+    lp_problem += sum(objectives)
+    lp_problem.extend(constraints)
+    for st_tensor in tensor_map.values():
+      for ld_tensor_name, offsets in st_tensor.ld_offsets.items():
+        oldest_access = min(offsets)
+        newest_access = max(offsets)
+        _logger.debug('%s @ %s accesses %s @ [%s, %s]', st_tensor.name,
+                      st_tensor.st_offset, ld_tensor_name, oldest_access,
+                      newest_access)
+        # newest ld_tensor access must have been produced
+        # when st_tensor is produced
+        lp_problem += lp_vars[ld_tensor_name] <= lp_vars[st_tensor.name] + (
+            st_tensor.st_offset - newest_access)
+        # oldest ld_tensor access must have been not consumed
+        # when st_tensor is produced
+        lp_problem += lp_helper_vars[ld_tensor_name] >= lp_vars[
+            st_tensor.name] + (st_tensor.st_offset - oldest_access)
+
+    lp_status = lp_problem.solve()
+    lp_status_str = pulp.LpStatus[lp_status]
+    total_distance = int(pulp.value(lp_problem.objective))
+    _logger.debug('ILP status: %s %s', lp_status_str, total_distance)
+
+    if lp_status != pulp.LpStatusOptimal:
+      _logger.error('ILP error: %s\n%s', lp_status_str, lp_problem)
+      raise util.InternalError('unexpected ILP status: %s' % lp_status_str)
+
+    # set produce offsets
+    for tensor in tensor_map.values():
+      produce_offset = int(pulp.value(lp_vars[tensor.name]))
+      consume_offset = int(pulp.value(lp_helper_vars[tensor.name]))
+      tensor.produce_offset = produce_offset
+      tensor.consume_offset = consume_offset
+      tensor.max_access = 0  # pixels before current produce
+      _logger.debug('%s should be produced @ %d and kept until %d', tensor.name,
+                    produce_offset, consume_offset)
+
+    # calculate overall acceses
+    for ld_tensor in tensor_map.values():
+      for st_tensor in ld_tensor.children.values():
+        oldest_access = st_tensor.st_offset - min(
+            st_tensor.ld_offsets[ld_tensor.name]
+        ) + st_tensor.produce_offset - ld_tensor.produce_offset
+        newest_access = st_tensor.st_offset - max(
+            st_tensor.ld_offsets[ld_tensor.name]
+        ) + st_tensor.produce_offset - ld_tensor.produce_offset
+        _logger.debug(
+            '  producing %s @ %s accesses [%s, %s] pixels before %s '
+            'produced @ %s', st_tensor.name, st_tensor.produce_offset,
+            newest_access, oldest_access, ld_tensor.name,
+            ld_tensor.produce_offset)
+        ld_tensor.max_access = max(ld_tensor.max_access, oldest_access)
+
+    for tensor in tensor_map.values():
+      _logger.debug('%s should be kept for %s pixels', tensor.name,
+                    tensor.max_access)
+
     # high-level DAG construction finished
     for tensor in tensor_map.values():
       if tensor.name in self.input_names:
@@ -333,142 +392,13 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
     Returns:
       A list of Tensor, in chronological order.
     """
-    _logger.info('calculate tensor offsets')
-    processing_queue = collections.deque(list(self.input_names))
-    processed_tensors = set(self.input_names)
-    chronological_tensors = list(map(self.tensors.get, self.input_names))
-    for tensor in chronological_tensors:
-      _logger.debug('tensor <%s> is at offset %d' %
-                    (tensor.name, tensor.st_offset))
-    _logger.debug('processing queue: %s', processing_queue)
-    _logger.debug('processed_tensors: %s', processed_tensors)
-    while processing_queue:
-      tensor = self.tensors[processing_queue.popleft()]
-      _logger.debug('inspecting tensor %s\'s children' % tensor.name)
-      for child in tensor.children.values():
-        if ({x.name for x in child.parents.values()} <= processed_tensors and
-            child.name not in processed_tensors):
-          # good, all inputs are processed
-          # can determine offset of current tensor
-          _logger.debug('input%s for tensor <%s> (i.e. %s) %s processed',
-                        '' if len(child.parents) == 1 else 's', child.name,
-                        ', '.join([x.name for x in child.parents.values()]),
-                        'is' if len(child.parents) == 1 else 'are')
-          stage_offset = soda.util.serialize(child.st_idx, self.tile_size)
-
-          # synchronization check
-          def sync(tensor, offset):
-            if tensor is None:
-              return offset
-            _logger.debug('index of tensor <%s>: %s', tensor.name,
-                          tensor.st_idx)
-            stage_offset = soda.util.serialize(tensor.st_idx, self.tile_size)
-            _logger.debug('offset of tensor <%s>: %d', tensor.name,
-                          stage_offset)
-            loads = visitor.get_load_dict(tensor)
-            for name in loads:
-              loads[name] = tuple(ref.idx for ref in loads[name])
-            _logger.debug(
-                'loads: %s', ', '.join(
-                    '%s@%s' % (name, util.lst2str(map(util.idx2str, indices)))
-                    for name, indices in loads.items()))
-            for n in loads:
-              loads[n] = soda.util.serialize_iter(loads[n], self.tile_size)
-            for l in loads.values():
-              l[0], l[-1] = (stage_offset - max(l), stage_offset - min(l))
-              del l[1:-1]
-              if len(l) == 1:
-                l.append(l[-1])
-            _logger.debug(
-                'load offset range in tensor %s: %s', tensor.name, '{%s}' %
-                (', '.join('%s: [%d:%d]' % (n, *v) for n, v in loads.items())))
-            for parent in tensor.parents.values():
-              tensor_distance = next(reversed(tensor.ld_offsets[parent.name]))
-              _logger.debug('tensor distance: %s', tensor_distance)
-              _logger.debug(
-                  'want to access tensor <%s> at offset [%d, %d] '
-                  'to generate tensor <%s> at offset %d', parent.name,
-                  offset + loads[parent.name][0],
-                  offset + loads[parent.name][-1], tensor.name, offset)
-              tensor_offset = (parent.st_delay + tensor_distance - stage_offset)
-              if offset < tensor_offset:
-                _logger.debug(
-                    'but tensor <%s> won\'t be available until offset %d',
-                    parent.name, tensor_offset)
-                offset = tensor_offset
-                _logger.debug(
-                    'need to access tensor <%s> at offset [%d, %d] '
-                    'to generate tensor <%s> at offset %d', parent.name,
-                    offset + loads[parent.name][0],
-                    offset + loads[parent.name][-1], tensor.name, offset)
-            return offset
-
-          _logger.debug('intend to generate tensor <%s> at offset %d',
-                        child.name, child.st_delay)
-          synced_offset = sync(child, child.st_delay)
-          _logger.debug('synced offset: %s', synced_offset)
-          child.st_delay = synced_offset
-          _logger.debug('decide to generate tensor <%s> at offset %d',
-                        child.name, child.st_delay)
-
-          # add delay
-          for sibling in child.parents.values():
-            delay = child.st_delay - (sibling.st_delay + list(
-                child.ld_offsets[sibling.name].keys())[-1] - stage_offset)
-            if delay > 0:
-              _logger.debug(
-                  'tensor %s arrives at tensor <%s> at offset %d < %d; '
-                  'add %d delay', sibling.name, child.name, sibling.st_delay +
-                  next(reversed(child.ld_offsets[sibling.name])) - stage_offset,
-                  child.st_delay, delay)
-            else:
-              _logger.debug(
-                  'tensor %s arrives at tensor <%s> at offset %d = %d; good',
-                  sibling.name, child.name, sibling.st_delay +
-                  next(reversed(child.ld_offsets[sibling.name])) - stage_offset,
-                  child.st_delay)
-            child.ld_delays[sibling.name] = max(delay, 0)
-            _logger.debug(
-                'set delay of |%s <- %s| to %d' %
-                (child.name, sibling.name, child.ld_delays[sibling.name]))
-
-          processing_queue.append(child.name)
-          processed_tensors.add(child.name)
-          chronological_tensors.append(child)
-        else:
-          for parent in tensor.parents.values():
-            if parent.name not in processed_tensors:
-              _logger.debug('tensor %s requires tensor <%s> as an input',
-                            tensor.name, parent.name)
-              _logger.debug('but tensor <%s> isn\'t processed yet', parent.name)
-              _logger.debug('add %s to scheduling queue', parent.name)
-              processing_queue.append(parent.name)
-
-    _logger.debug('tensors in insertion order: [%s]',
-                  ', '.join(map(str, self.tensors)))
-    _logger.debug('tensors in chronological order: [%s]',
-                  ', '.join(t.name for t in chronological_tensors))
-
-    for tensor in self.tensors.values():
-      for name, indices in tensor.ld_indices.items():
-        _logger.debug('stage index: %s@%s <- %s@%s', tensor.name,
-                      util.idx2str(tensor.st_idx), name,
-                      util.lst2str(util.idx2str(idx) for idx in indices))
-    for tensor in self.tensors.values():
-      if tensor.is_input():
-        continue
-      _logger.debug('stage expr: %s = %s', tensor.st_ref, tensor.expr)
-    for tensor in self.tensors.values():
-      for name, offsets in tensor.ld_offsets.items():
-        _logger.debug('stage offset: %s@%d <- %s@%s', tensor.name,
-                      soda.util.serialize(tensor.st_idx, self.tile_size), name,
-                      util.lst2str(offsets))
-    for tensor in self.tensors.values():
-      for name, delay in tensor.ld_delays.items():
-        _logger.debug('stage delay: %s <- %s delayed %d' %
-                      (tensor.name, name, delay))
-
-    return chronological_tensors
+    return list(
+        map(
+            self.tensors.get,
+            toposort.toposort_flatten({
+                tensor.name: set(tensor.parents)
+                for tensor in self.tensors.values()
+            })))
 
   @cached_property.cached_property
   def input_partition(self):
@@ -501,34 +431,6 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
   @cached_property.cached_property
   def consumer_tensors(self):
     return tuple(filter(soda.tensor.Tensor.is_consumer, self.tensors.values()))
-
-  # return [Tensor, ...]
-  def _get_parent_tensors_for(self, node):
-    return {
-        x: self.tensors[x] for x in
-        {x.name for x in node.get_loads() if x.name not in self.extra_params}
-    }
-
-  # return {name: [(idx, ...), ...]}
-  def _get_window_for(self, node):
-    loads = node.get_loads()  # [Load, ...]
-    load_names = {l.name for l in loads if l.name not in self.extra_params}
-    windows = {
-        name: sorted({l.idx for l in loads if l.name == name},
-                     key=lambda x: soda.util.serialize(x, self.tile_size))
-        for name in load_names
-    }
-    _logger.debug('window for %s@(%s) is %s' %
-                  (node.name, ', '.join(map(str, node.expr[0].idx)), windows))
-    return windows
-
-  # return [StageExpr, ...]
-  def _get_expr_for(self, node):
-    if isinstance(node, grammar.Output):
-      return node.expr
-    if isinstance(node, grammar.Local):
-      return node.expr
-    raise util.SemanticError('cannot get expression for %s' % str(type(node)))
 
   @cached_property.cached_property
   def reuse_buffers(self):
@@ -660,19 +562,17 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
 
   _logger.debug('get reuse chains of tensor %s', tensor.name)
 
-  def unroll_offsets(offsets, child):
+  def unroll_offsets(child):
     unrolled_offsets = set()
     for unroll_idx in range(unroll_factor):
-      for offset in offsets:
-        unrolled_offsets.add(
-            max(offsets) + unroll_idx - offset + child.ld_delays[tensor.name])
+      for offset in child.ld_offsets[tensor.name]:
+        unrolled_offsets.add(unroll_idx + child.st_offset - offset +
+                             child.produce_offset - tensor.produce_offset)
     return unrolled_offsets
 
   A_dag = set()
   for child in tensor.children.values():
-    A_dag |= unroll_offsets(
-        soda.util.serialize_iter(child.ld_indices[tensor.name], tile_size),
-        child)
+    A_dag |= unroll_offsets(child)
   _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
@@ -711,8 +611,8 @@ def _get_points(tile_size, tensor, unroll_factor):
     for unroll_idx in range(unroll_factor):
       for idx, offset in enumerate(offsets):
         all_points[child.name].setdefault(
-            max(offsets) - offset + child.ld_delays[tensor.name] + unroll_idx,
-            {})[unroll_factor - 1 - unroll_idx] = idx
+            unroll_idx + child.st_offset - offset + child.produce_offset -
+            tensor.produce_offset, {})[unroll_factor - 1 - unroll_idx] = idx
   for child in tensor.children.values():
     for offset, points in all_points[child.name].items():
       for unroll_idx, point in points.items():
@@ -745,8 +645,10 @@ def _get_reuse_buffer(tile_size, tensor, unroll_factor):
 
   reuse_buffer = [None]  # [length, (start, end), (start, end), ...]
   offsets = []
-  for chain in _get_reuse_chains(tile_size, tensor, unroll_factor):
-    reuse_buffer.append((chain[0], chain[0]))
+  for chain_id, chain in enumerate(
+      _get_reuse_chains(tile_size, tensor, unroll_factor)):
+    reuse_buffer.append((unroll_factor - 1 - chain_id, chain[0]))
+    _logger.error('chain id: %s, chain[0]: %s', chain_id, chain[0])
     offsets.append(chain[0])
     for j in range(len(chain) - 1):
       reuse_buffer.append((chain[j], chain[j + 1]))
