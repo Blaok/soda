@@ -1345,6 +1345,175 @@ def linear_schedule(attrs) -> CommSchedule:
   return CommSchedule(aattrs[0], linear_schedule(attrs[1:]), *other_args)
 
 
+class GloreSchedules(ScheduleBase):
+  """Schedules of an Expression, found using GLORE paper's heuristics.
+  """
+
+  def __init__(self,
+               rattrs: Tuple[RelativeAttr, ...],
+               aattrs: Optional[
+                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               linearizer: Optional[Linearizer] = None,
+               cache: Optional[Dict] = None) -> None:
+    if linearizer is None:
+      raise util.InputError('linearizer must not be None for GloreSchedules')
+    self.linearizer = linearizer
+    super().__init__(rattrs, aattrs)  # type: ignore
+
+  @property
+  def generator(self) -> Iterator[CommSchedule]:
+    num_dim = self.linearizer.num_dim
+    for direction in ((1,) + (0,) * (num_dim - 1), (1,) * num_dim):
+      _logger.debug('explore direction %s', direction)
+
+      # maps line_id to (attrs, reuse distance list)
+      # line_id is the unique identifier of a line along the specific direction
+      reuse_groups = collections.defaultdict(lambda: ([], [
+      ]))  # type: Dict[Index, Tuple[List[Tuple[Index, Any]], List[int]]]
+
+      def log_reuse_group(logger=_logger.debug,
+                          reuse_groups=reuse_groups,
+                          direction=direction) -> None:
+        for line_id, (group, reuse_distance_list) in reuse_groups.items():
+          logger('logging reuse groups')
+          logger('  line #%s along direction <%s>:', line_id, direction)
+          rattr_indices, aattrs = zip(*group)
+          logger('    rattrs: %s', util.lst2str(rattr_indices))
+          logger('    aattrs: %s', util.lst2str(aattrs))
+          logger('    reuse distances: %s', reuse_distance_list)
+        logger('')
+
+      # step 1: grouping
+      _logger.debug('attrs: %s', util.lst2str(self))
+      for rattr, aattr in self:
+        rattr_idx = self.linearizer(rattr)
+        if collections.Counter(direction)[1] > 1:  # diagonal
+          line_id = tuple(x - rattr_idx[0] for x in rattr_idx[1:])
+        else:
+          line_id = rattr_idx[1:]
+        reuse_groups[line_id][0].append((rattr_idx, aattr))
+      _logger.debug('step 1')
+      log_reuse_group()
+
+      # step 2: sorting
+      for line_id, (group, reuse_distance_list) in reuse_groups.items():
+        group.sort(key=lambda attr: tuple(reversed(attr[0])), reverse=True)
+        for rattr_idx, aattr in group:
+          reuse_distance_list.append(group[0][0][0] - rattr_idx[0])
+      _logger.debug('step 2')
+      log_reuse_group()
+
+      # step 3: find inner-group redundancy
+      InnerGroupReuseKeyType = Tuple[int, Index, Index, Tuple[Any, ...]]
+      InnerGroupReuseValueType = List[
+          Tuple[List[Tuple[Index, Any]], Index, Optional[CommSchedule], List[
+              Tuple[int, Any]]]]
+
+      # dict mappping (stride, reused_distances, not_reused_distances, aattrs)
+      # to list of (attrs, line_id, reused_schedule, new_attrs)
+      inner_group_reuses = collections.defaultdict(
+          list)  # type: Dict[InnerGroupReuseKeyType, InnerGroupReuseValueType]
+
+      def log_inner_group_reuses(logger=_logger.debug,
+                                 inner_group_reuses=inner_group_reuses) -> None:
+        for (stride, reused, not_reused,
+             aattrs), groups in inner_group_reuses.items():
+          logger('logging inner group reuses')
+          logger(
+              '  stride: %d; reused distances: %s; not reused: %s; aattrs: %s',
+              stride, reused, not_reused, util.lst2str(aattrs))
+          for attrs, line_id, reused_schedule, new_attrs in groups:
+            logger('    attrs: %s; line: %s; schedule: %s; new attrs: %s',
+                   attrs, line_id, reused_schedule, new_attrs)
+        logger('')
+
+      for line_id, (group, reuse_distance_list) in reuse_groups.items():
+        if len(group) > 3:
+          reuse_dict = {}
+          for stride in range(reuse_distance_list[1], reuse_distance_list[-1]):
+            distance_map = {
+                dist: attr for attr, dist in zip(group, reuse_distance_list)
+            }
+            distances = list(reuse_distance_list)
+            reused_lst = []
+            not_reused_lst = []
+            new_attrs = []
+            while distances:
+              dist = distances.pop(0)
+              if dist + stride in distances and (
+                  distance_map[dist][1],
+                  distance_map[dist + stride][1]) == (distance_map[0][1],
+                                                      distance_map[stride][1]):
+                distances.remove(dist + stride)
+                reused_lst.append(dist)
+                left_attr = (self.linearizer(distance_map[stride][0]),
+                             distance_map[stride][1])
+                right_attr = (self.linearizer(distance_map[0][0]),
+                              distance_map[0][1])
+                reused_schedule = linear_schedule((left_attr, right_attr))
+                new_attrs.append(
+                    (self.linearizer(distance_map[dist + stride][0]),
+                     reused_schedule))
+              else:
+                not_reused_lst.append(dist)
+                new_attrs.append((self.linearizer(distance_map[dist][0]),
+                                  distance_map[dist][1]))
+            reuse_dict[stride] = tuple(reused_lst), tuple(
+                not_reused_lst), reused_schedule, new_attrs
+          # best stride is the one with most reused items and least stride
+          if reuse_dict:
+            _logger.debug('reuse dict: %s', reuse_dict)
+            stride, (reused, not_reused, reused_schedule,
+                     new_attrs) = max(reuse_dict.items(),
+                                      key=lambda item:
+                                      (len(item[1][0]), -item[0]))
+            new_attrs.sort(key=lambda attr: attr[0])
+            _, aattrs = zip(*new_attrs)
+            inner_group_reuses[(stride, reused, not_reused, aattrs)].append(
+                (group, line_id, reused_schedule, new_attrs))
+            continue
+        _logger.debug('no reuse found')
+        _, aattrs = zip(*reversed(group))
+        inner_group_reuses[(0, (), tuple(reuse_distance_list), aattrs)].append(
+            (group, line_id, None, [(self.linearizer(rattr_idx), aattr)
+                                    for rattr_idx, aattr in reversed(group)]))
+      _logger.debug('step 3')
+      log_inner_group_reuses()
+
+      # step 4: find inter-group redundancy
+      all_attrs = []  # type: List[Tuple[int, Optional[CommSchedule]]]
+      for (stride, reused, not_reused, _), groups in inner_group_reuses.items():
+        if len(groups) > 1 and len(reused) + len(not_reused) > 1:  # with reuse
+          groups.sort(key=lambda item: item[1])
+          group, line_id, optional_reused_schedule, new_attrs = groups[0]
+          _logger.debug('groups[0]: %s', groups[0])
+          reused_expr = linear_schedule(new_attrs)
+          for group, line_id, optional_reused_schedule, new_attrs in groups:
+            _logger.debug('reusing %s @ %d', reused_expr, new_attrs[0][0])
+            all_attrs.append((new_attrs[0][0], reused_expr))
+          for group, line_id, optional_reused_schedule, new_attrs in groups:
+            _logger.debug('reuse distance list: %s', reuse_groups[line_id][1])
+            _logger.debug(
+                'direction id: %s, stride: %s, reused: %s, not_reused: %s',
+                line_id, stride, reused, not_reused)
+            break
+        else:  # without reuse
+          for group, line_id, optional_reused_schedule, new_attrs in groups:
+            all_attrs.extend(new_attrs)
+      all_attrs.sort(key=lambda attr: attr[0])
+      _logger.debug('attrs: %s', util.lst2str(map(util.idx2str, all_attrs)))
+      schedule = linear_schedule(all_attrs)
+      _logger.debug('schedule: %s (%d)', schedule, schedule.num_ops)
+      yield schedule
+
+  @cached_property.cached_property
+  def best(self) -> CommSchedule:
+    return min(self.generator, key=lambda schedule: schedule.num_ops)
+
+  def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
+    return
+
+
 class ExternalSchedules(ScheduleBase):
   """Schedules of an Expression, found externally.
   """
@@ -1399,6 +1568,8 @@ class ExternalSchedules(ScheduleBase):
 
 
 Schedule = CommSchedule
+Schedules = Union[CommSchedules, GreedySchedules, GloreSchedules,
+                  ExternalSchedules]
 
 
 class Expression:
@@ -1490,11 +1661,11 @@ class Expression:
       raise TypeError('expect an instance of ir.BinaryOp')
 
   @cached_property.cached_property
-  def schedules(
-      self
-  ) -> Union[CommSchedules, GreedySchedules, ExternalSchedules]:
+  def schedules(self) -> Schedules:
     external_tcse = shutil.which('tcse')
     args = self.rattrs, self.aattrs, self.linearizer
+    if self.method == 'glore':
+      return GloreSchedules(*args)
     if external_tcse is None or self.method.startswith('built-in'):
       if self.method.endswith('optimal'):
         return CommSchedules(self.rattrs, self.aattrs, cache={})
