@@ -22,6 +22,7 @@ if {{ $ips ne "" }} {{
   read_ip $ips
   generate_target synthesis [ get_files *.xci ]
 }}
+{set_parallel}
 synth_design {synth_args}
 report_utilization {report_util_args}
 '''
@@ -37,6 +38,8 @@ class ReportXoUtil(backend.Vivado):
     tmpdir: Temporary working directory for the RTL files and generated report.
     rpt_file: File object of generated resource utilization report.
     rpt_file_name: Name of the generated temporary resource utilization report.
+    job_server_fd: Optional file descriptor of a job server.
+    num_jobs: Optional number of jobs.
   """
   def __init__(self, xo_file: BinaryIO, rpt_file: TextIO,
                top_name: str = 'Dataflow', part_num: Optional[str] = None,
@@ -100,11 +103,26 @@ class ReportXoUtil(backend.Vivado):
       'hdl_dir': hdl_dir,
       'synth_args': synth_args,
       'report_util_args': report_util_args,
+      'set_parallel': '',
     }
+    self.job_server_fd = util.get_job_server_fd(())
+    if self.job_server_fd is not None:
+      new_fd = os.open('/proc/self/fd/%d' % self.job_server_fd,
+                       os.O_RDWR | os.O_NONBLOCK)
+      self.num_jobs = 1
+      try:
+        for i in range(7):
+          self.num_jobs += len(os.read(new_fd, 1))
+      except BlockingIOError as e:
+        pass
+      os.close(new_fd)
+      kwargs['set_parallel'] = 'set_param general.maxThreads %d' % self.num_jobs
     super().__init__(REPORT_UTIL_COMMANDS.format(**kwargs))
 
   def __exit__(self, *args):
     super().__exit__(*args)
+    if self.job_server_fd is not None:
+      os.write(self.job_server_fd, b'x' * (self.num_jobs - 1))
     try:
       with open(self.rpt_file_name) as src_rpt_file:
         shutil.copyfileobj(src_rpt_file, self.rpt_file)
