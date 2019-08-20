@@ -1537,14 +1537,14 @@ class ExternalSchedules(ScheduleBase):
         'rattrs': self.rattrs,
         'aattrs': self.aattrs or [1] * len(self.rattrs)
     }  # type: Dict[str, Any]
-    if self.linearizer is not None:
+    if self.linearizer is not None and len(self.rattrs) >= 32:
       attrs['linearizer'] = {
           'maxs': self.linearizer.maxs,
           'mins': self.linearizer.mins,
           'sizes': self.linearizer.sizes,
       }
     if len(self.rattrs) < 32:
-      attrs['num_pruned'] = 5
+      attrs['num_pruned'] = 64
     elif len(self.rattrs) < 64:
       attrs['num_pruned'] = 4
     elif len(self.rattrs) < 128:
