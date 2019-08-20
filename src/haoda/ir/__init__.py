@@ -283,7 +283,7 @@ class LtCmp(BinaryOp):
 
 
 class AddSub(BinaryOp):
-
+  '''
   @property
   def haoda_type(self):
     if getattr(self, '_haoda_type', None) is None:
@@ -329,10 +329,11 @@ class AddSub(BinaryOp):
   @haoda_type.setter
   def haoda_type(self, val):
     self._haoda_type = val
+  '''
 
 
 class MulDiv(BinaryOp):
-
+  '''
   @property
   def haoda_type(self):
     if getattr(self, '_haoda_type', None) is None:
@@ -373,6 +374,7 @@ class MulDiv(BinaryOp):
   @haoda_type.setter
   def haoda_type(self, val):
     self._haoda_type = val
+  '''
 
 
 class Unary(Node):
