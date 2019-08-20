@@ -47,10 +47,10 @@ local int27:
   int32 g = int32(a(0, 0) ~1 + p0 + p1[1][3])
   c(0, 0) ~3 = +-+-l * --+~l
 output double:
-  l = float18_3(c(0, 1) ~5) + a(1, 0)
+  float18_3 l = float18_3(c(0, 1) ~5) + a(1, 0)
   d(0, 0) = sqrt(float15(l <= (l / 2)))
 output double:
-  l = float18_3(c(0, 1) ~5) + a(1, 0)
+  float18_3 l = float18_3(c(0, 1) ~5) + a(1, 0)
   e(0, 0) = float15(l + (l / 2))
 '''.strip('\n')
       soda_program = soda_mm.model_from_str(soda_program_str)
