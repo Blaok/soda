@@ -211,6 +211,7 @@ class TestCommSchedules(unittest.TestCase):
     self.assertEqual(3, schedule.num_ops)
 
 
+@unittest.skipIf(os.environ['GIT_DIR'], 'too slow')
 class TestCommSchedulesWithoutLazyCartesianProduct(TestCommSchedules):
 
   def setUp(self):
@@ -218,6 +219,7 @@ class TestCommSchedulesWithoutLazyCartesianProduct(TestCommSchedules):
     self.Schedules.set_optimizations(('no-lazy-evaluation',))
 
 
+@unittest.skipIf(os.environ['GIT_DIR'], 'too slow')
 class TestCommSchedulesWithoutSkipping(TestCommSchedules):
 
   def setUp(self):
@@ -225,6 +227,7 @@ class TestCommSchedulesWithoutSkipping(TestCommSchedules):
     self.Schedules.set_optimizations(('no-skip-with-partial-cost',))
 
 
+@unittest.skipIf(os.environ['GIT_DIR'], 'too slow')
 class TestCommSchedulesWithoutReorderingExploration(TestCommSchedules):
 
   def setUp(self):
@@ -232,6 +235,7 @@ class TestCommSchedulesWithoutReorderingExploration(TestCommSchedules):
     self.Schedules.set_optimizations(('no-reorder-exploration',))
 
 
+@unittest.skipIf(os.environ['GIT_DIR'], 'too slow')
 class TestCommSchedulesWithoutCaching(TestCommSchedules):
 
   def setUp(self):
@@ -302,6 +306,7 @@ class TestGreedySchedules(TestCommSchedules):
     schedule = self.Schedules(rattr, aattr, cache=self.cache).best
     self.assertEqual(5, schedule.num_ops)
 
+  @unittest.skipIf(os.environ['GIT_DIR'], 'too slow')
   def test_11x11_tcse(self):
     m, n = 11, 11
     rattrs = [0] * m * n
@@ -319,6 +324,7 @@ class TestGreedySchedules(TestCommSchedules):
     self.assertEqual(10, schedule.num_ops)
     self.assertGreaterEqual(220, schedule.total_distance)
 
+  @unittest.skipIf(os.environ['GIT_DIR'], 'too slow')
   def test_16x16_tcse(self):
     m, n = 16, 16
     rattrs = [0] * m * n
