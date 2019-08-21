@@ -493,6 +493,8 @@ class Call(Node):
                               variadic_to_binary(args[nargs // 2:]))
 
       return variadic_to_binary([_.c_expr for _ in self.arg])
+    if self.name == 'select':
+      return '({0.c_expr} ? {1.c_expr} : {2.c_expr})'.format(*self.arg)
     return '{}({})'.format(self.name, ', '.join(_.c_expr for _ in self.arg))
 
 
