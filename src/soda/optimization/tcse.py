@@ -239,17 +239,18 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
 
   new_local_stmts = []
   cses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
-  transform = lambda node: stencil.propagate_type(node).visit(visitor, cses)
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
-    stmt.expr = transform(stmt.expr)
-    stmt.let = tuple(map(transform, stmt.let))
+    stmt.propagate_type(stencil.symbol_table)
+    stmt.expr = stmt.expr.visit(visitor, cses)
+    stmt.let = tuple(let.visit(visitor, cses) for let in stmt.let)
     for expr, ref in cses.items():
-      expr = stencil.propagate_type(expr)
+      expr = stencil.propagate_type(expr, stmt)
       new_local_stmts.append(
           grammar.LocalStmt(ref=ref,
                             haoda_type=expr.haoda_type,
                             expr=expr,
-                            let=stmt.let))
+                            let=stmt.let,
+                            stencil=stencil))
       _logger.debug('temporal cse stmt: %s', new_local_stmts[-1])
   stencil.local_stmts.extend(new_local_stmts)
 

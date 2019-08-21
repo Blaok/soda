@@ -129,6 +129,9 @@ class Stencil():
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
       _logger.debug('simplify %s', stmt.name)
+      # LocalStmt and OutputStmt must remember the stencil object
+      # for type propagation
+      stmt.stencil = self
       stmt.expr = arithmetic.simplify(stmt.expr)
       stmt.let = arithmetic.simplify(stmt.let)
 
@@ -139,10 +142,7 @@ class Stencil():
     inline.rebalance(self)
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
-      stmt.expr = self.propagate_type(stmt.expr)
-      if not util.same_type(stmt.expr.haoda_type, stmt.haoda_type):
-        stmt.expr = ir.Cast(expr=stmt.expr, haoda_type=stmt.haoda_type)
-      stmt.let = tuple(map(self.propagate_type, stmt.let))
+      stmt.propagate_type()
 
     # soda frontend successfully parsed
     _logger.debug('producer tensors: [%s]',
@@ -219,24 +219,43 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
     return tuple(stmt.name for stmt in self.output_stmts)
 
   @cached_property.cached_property
-  def symbol_table(self):
-    """Constructs a mapping from a tensor's name to its type.
+  def symbol_table(self) -> Dict[str, str]:
+    """Constructs a dict mapping tensors' names to haoda types.
+
+    Constructs a symbol table mapping names of the tensors to their haoda types.
+    This table does not contain the local variables (ir.Let) in the LocalStmt
+    and OutputStmt. For those, use stmt.symbol_table.
 
     Returns:
-      tensor_types: dict from name (str) to haoda_type (str).
+      symbol_table: A dict mapping tensors' names (str) to haoda types (str).
+
+    Raises:
+      util.InputError if names conflict.
     """
-    tensor_types = {}
-    for name, haoda_type in zip(self.input_names, self.input_types):
-      tensor_types[name] = haoda_type
-    for name, haoda_type in zip(self.local_names, self.local_types):
-      tensor_types[name] = haoda_type
-    for name, haoda_type in zip(self.output_names, self.output_types):
-      tensor_types[name] = haoda_type
-    return tensor_types
+    symbol_table = {}   # type: Dict[str, str]
+    for name, haoda_type in zip(
+        itertools.chain(self.input_names, self.local_names, self.output_names),
+        itertools.chain(self.input_types, self.local_types, self.output_types)):
+      if name in symbol_table:
+        raise util.InputError('conflicting stmt name: %s' % name)
+      symbol_table[name] = haoda_type
+    return symbol_table
 
   @property
   def propagate_type(self):
-    return lambda node: arithmetic.base.propagate_type(node, self.symbol_table)
+    """Returns a callable that propagates type, optionally for a specific stmt.
+
+    Returns:
+      propagate_type: A callable that propagates type. It takes an optional
+          argument of stmt, used for propagating types including the local
+          variables (ir.Let).
+    """
+    def propagate_type(node, stmt=None):
+      symbol_table = self.symbol_table
+      if stmt is not None:
+        symbol_table = stmt.symbol_table
+      return arithmetic.base.propagate_type(node, symbol_table)
+    return propagate_type
 
   @cached_property.cached_property
   def norm_refs(self):

@@ -1,10 +1,15 @@
 from typing import (
+    Dict,
     Tuple,
 )
 
 import logging
 
+import toposort
+
 from haoda import ir
+from haoda import util as haoda_util
+from haoda.ir.arithmetic import base
 from soda import util
 
 _logger = logging.getLogger().getChild(__name__)
@@ -70,6 +75,11 @@ class LocalStmtOrOutputStmt(ir.Node):
   SCALAR_ATTRS = 'haoda_type', 'ref', 'expr' # type: Tuple[str, ...]
   LINEAR_ATTRS = ('let',) # type: Tuple[str, ...]
   def __init__(self, **kwargs):
+    # inform mypy of the attributes
+    self.haoda_type = None
+    self.ref = None
+    self.expr = None
+    self.let = ()
     super().__init__(**kwargs)
     var_types = {}
     # pylint: disable=access-member-before-definition
@@ -81,6 +91,7 @@ class LocalStmtOrOutputStmt(ir.Node):
       return obj
     self.let = tuple(_.visit(set_var_type, var_types) for _ in self.let)
     self.expr = self.expr.visit(set_var_type, var_types)
+    self.stencil = kwargs.pop('stencil', None)
 
   @property
   def name(self):
@@ -94,6 +105,35 @@ class LocalStmtOrOutputStmt(ir.Node):
     return '{} {}:{} {} = {}'.format(type(self).__name__[:-4].lower(),
                                      self.haoda_type, let, self.ref,
                                      ir.unparenthesize(self.expr))
+
+  @property
+  def symbol_table(self) -> Dict[str, str]:
+    # types of lets are local to this statement
+    # must **not** modify self.stencil.symbol_table in-place
+    symbol_table = self.stencil.symbol_table.copy()
+    lets = {let.name: let for let in self.let}
+    for var in toposort.toposort_flatten({
+        let.name: {var.name for var in ir.visitor.get_vars(let)}
+        for let in self.let}):
+      symbol_table[var] = base.propagate_type(lets[var],
+                                              symbol_table).haoda_type
+    return symbol_table
+
+
+  def propagate_type(self, dummy=None) -> None:
+    """Propagate haoda type of the nodes in this statement.
+
+    Args:
+      symbol_table: A dict mapping input or local tensor names to haoda types.
+
+    Returns:
+      None.
+    """
+    symbol_table = self.symbol_table
+    self.expr = base.propagate_type(self.expr, symbol_table)
+    if not haoda_util.same_type(self.expr.haoda_type, self.haoda_type):
+      self.expr = ir.Cast(expr=self.expr, haoda_type=self.haoda_type)
+    self.let = tuple(base.propagate_type(let, symbol_table) for let in self.let)
 
 class LocalStmt(LocalStmtOrOutputStmt):
   pass
