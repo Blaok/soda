@@ -16,6 +16,26 @@ from haoda.ir import visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
+MATH_FUNCS = ('cos', 'sin', 'tan', 'acos', 'asin', 'atan', 'atan2', 'cosh',
+              'sinh', 'tanh', 'acosh', 'asinh', 'atanh', 'exp', 'frexp',
+              'ldexp', 'log', 'log10', 'modf', 'exp2', 'expm1', 'ilogb',
+              'log1p', 'log2', 'logb', 'scalbn', 'scalbln', 'pow', 'sqrt',
+              'cbrt', 'hypot', 'erf', 'erfc', 'tgamma', 'lgamma', 'ceil',
+              'floor', 'fmod', 'trunc', 'round', 'lround', 'llround', 'rint',
+              'lrint', 'llrint', 'nearbyint', 'remainder', 'remquo', 'copysign',
+              'nan', 'nextafter', 'nexttoward', 'fdim', 'fmax', 'fmin', 'fabs',
+              'fma')
+
+STD_FUNCS = ('abs', 'labs', 'llabs', 'div', 'ldiv', 'lldiv', 'imaxabs',
+             'imaxdiv')
+
+OTHER_FUNCS = ('min', 'max', 'select')
+
+FUNCS = (tuple(map('/{}[fl]?/'.format, MATH_FUNCS)) +
+         tuple(map("'{}'".format, STD_FUNCS + OTHER_FUNCS)))
+
+FUNC_NAME = 'FuncName: %s;' % '|'.join(FUNCS)
+
 GRAMMAR = r'''
 Bin: /0[Bb][01]+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
 Dec: /\d+([Uu][Ll][Ll]?|[Ll]?[Ll]?[Uu]?)/;
@@ -62,21 +82,12 @@ MulDivOp: '*'|'/'|'%';
 Unary: (operator=UnaryOp)* operand=Operand;
 UnaryOp: '+'|'-'|'~'|'!';
 
-FuncName: 'cos'|'sin'|'tan'|'acos'|'asin'|'atan'|'atan2'|
-  'cosh'|'sinh'|'tanh'|'acosh'|'asinh'|'atanh'|
-  'exp'|'frexp'|'ldexp'|'log'|'log10'|'modf'|'exp2'|'expm1'|'ilogb'|'log1p'|'log2'|'logb'|'scalbn'|'scalbln'|
-  'pow'|'sqrt'|'cbrt'|'hypot'|
-  'erf'|'erfc'|'tgamma'|'lgamma'|
-  'ceil'|'floor'|'fmod'|'trunc'|'round'|'lround'|'llround'|'rint'|'lrint'|'llrint'|'nearbyint'|'remainder'|'remquo'|
-  'copysign'|'nan'|'nextafter'|'nexttoward'|'fdim'|'fmax'|'fmin'|'fabs'|'abs'|'fma'|
-  'min'|'max'|'select';
-
 Operand: cast=Cast | call=Call | ref=Ref | num=Num | var=Var | '(' expr=Expr ')';
 Cast: haoda_type=Type '(' expr=Expr ')';
 Call: name=FuncName '(' arg=Expr (',' arg=Expr)* ')';
 Var: name=ID ('[' idx=Int ']')*;
 
-'''
+''' + FUNC_NAME
 
 
 class Node():
