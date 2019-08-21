@@ -12,9 +12,9 @@ _logger = logging.getLogger().getChild(__name__)
 GRAMMAR = r'''
 SodaProgram:
 (
-  ('border' ':' border=BorderStrategies)
+  ('border' ':' border=BorderStrategies)?
   ('burst' 'width' ':' burst_width=INT)
-  ('cluster' ':' cluster=ClusterStrategies)
+  ('cluster' ':' cluster=ClusterStrategies)?
   ('iterate' ':' iterate=INT)
   ('kernel' ':' app_name=ID)
   ('unroll' 'factor' ':' unroll_factor=INT)
