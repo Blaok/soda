@@ -29,6 +29,10 @@ def main():
                       action='count',
                       dest='quiet',
                       help='decrease verbosity')
+  parser.add_argument('--recursion-limit',
+                      type=int,
+                      dest='recursion_limit',
+                      help='override Python recursion limit')
   parser.add_argument('--burst-width',
                       type=int,
                       dest='burst_width',
@@ -113,6 +117,17 @@ def main():
   logging.getLogger().setLevel(logging_level)
   logger.info('set log level to %s', logging.getLevelName(logging_level))
   # TODO: check tile size
+
+  if args.recursion_limit is not None:
+    sys_recursion_limit = sys.getrecursionlimit()
+    if sys_recursion_limit > args.recursion_limit:
+      logger.warning(
+        'Python system recursion limit (%d) > specified value (%d); '
+        'the latter will be ignored', sys_recursion_limit, args.recursion_limit)
+    else:
+      sys.setrecursionlimit(args.recursion_limit)
+      logger.warning('Python recursion limit is set to %d',
+                     sys.getrecursionlimit())
 
   soda_mm = textx.metamodel_from_str(grammar.GRAMMAR, classes=grammar.CLASSES)
   logger.info('build metamodel')
