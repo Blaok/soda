@@ -474,7 +474,9 @@ class Call(Node):
   @property
   def haoda_type(self):
     if self.name in ('select',):
-      return self.arg[1].haoda_type
+      if any(self.arg[idx].haoda_type is None for idx in (1, 2)):
+        return None
+      return util.common_type(self.arg[1].haoda_type, self.arg[2].haoda_type)
     return self.arg[0].haoda_type
 
   @property
@@ -494,7 +496,13 @@ class Call(Node):
 
       return variadic_to_binary([_.c_expr for _ in self.arg])
     if self.name == 'select':
-      return '({0.c_expr} ? {1.c_expr} : {2.c_expr})'.format(*self.arg)
+      common_type = util.common_type(self.arg[1].haoda_type,
+                                     self.arg[2].haoda_type)
+      args = list(self.arg)
+      for idx in 1, 2:
+        if args[idx].haoda_type != common_type:
+          args[idx] = Cast(haoda_type=common_type, expr=args[idx])
+      return '({0.c_expr} ? {1.c_expr} : {2.c_expr})'.format(*args)
     return '{}({})'.format(self.name, ', '.join(_.c_expr for _ in self.arg))
 
 
