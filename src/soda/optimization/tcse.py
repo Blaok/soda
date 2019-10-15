@@ -1561,7 +1561,7 @@ class ExternalSchedules(ScheduleBase):
         subprocess.run(self.cmd,
                        input=json.dumps(attrs),
                        stdout=subprocess.PIPE,
-                       universal_newlines=True).stdout)
+                       universal_newlines=True, check=True).stdout)
     return self.from_json(result)
 
   def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
