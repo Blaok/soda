@@ -166,7 +166,7 @@ class RunHls(VivadoHls):
     super().__init__(HLS_COMMANDS.format(**kwargs))
 
   def __exit__(self, *args):
-    super().__exit__(*args)
+    self.wait()
     if self.returncode == 0:
       with tarfile.open(mode='w', fileobj=self.tarfileobj) as tar:
         solution_dir = os.path.join(self.project_dir.name, self.project_name,
@@ -174,11 +174,12 @@ class RunHls(VivadoHls):
         try:
           tar.add(os.path.join(solution_dir, 'syn/report'), arcname='report')
           tar.add(os.path.join(solution_dir, 'syn/verilog'), arcname='hdl')
-          tar.add(os.path.join(solution_dir, self.solution_name + '.log'),
+          tar.add(os.path.join(solution_dir, self.cwd.name, 'vivado_hls.log'),
                   arcname='log/' + self.solution_name + '.log')
         except FileNotFoundError as e:
           self.returncode = 1
           _logger.error('%s', e)
+    super().__exit__(*args)
     self.project_dir.cleanup()
 
 XILINX_XML_NS = {'xd' : 'http://www.xilinx.com/xd'}
