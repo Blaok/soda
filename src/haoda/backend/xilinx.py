@@ -151,7 +151,7 @@ class RunHls(VivadoHls):
                part_num):
     self.project_dir = tempfile.TemporaryDirectory(prefix='hls-')
     self.project_name = 'project'
-    self.solution_name = 'solution'
+    self.solution_name = top_name
     self.tarfileobj = tarfileobj
     kwargs = {
         'project_dir' : self.project_dir.name,
@@ -175,7 +175,7 @@ class RunHls(VivadoHls):
           tar.add(os.path.join(solution_dir, 'syn/report'), arcname='report')
           tar.add(os.path.join(solution_dir, 'syn/verilog'), arcname='hdl')
           tar.add(os.path.join(solution_dir, self.solution_name + '.log'),
-                  arcname=self.solution_name + '.log')
+                  arcname='log/' + self.solution_name + '.log')
         except FileNotFoundError as e:
           self.returncode = 1
           _logger.error('%s', e)
