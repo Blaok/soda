@@ -12,6 +12,7 @@ from haoda import util
 
 _logger = logging.getLogger().getChild(__name__)
 
+
 class Vivado(subprocess.Popen):
   """Call vivado with the given tcl commands and arguments.
 
@@ -19,20 +20,24 @@ class Vivado(subprocess.Popen):
     commands: string of tcl commands
     args: sequence of arguments
   """
+
   def __init__(self, commands, *args):
     self.cwd = tempfile.TemporaryDirectory(prefix='vivado-')
     self.tcl_file = open(os.path.join(self.cwd.name, 'tcl'), mode='w+')
     self.tcl_file.write(commands)
     self.tcl_file.flush()
-    cmd_args = ['vivado', '-mode', 'batch', '-source', self.tcl_file.name,
-                '-nojournal', '-tclargs', *args]
-    pipe_args = {'stdout' : subprocess.PIPE, 'stderr' : subprocess.PIPE}
+    cmd_args = [
+        'vivado', '-mode', 'batch', '-source', self.tcl_file.name, '-nojournal',
+        '-tclargs', *args
+    ]
+    pipe_args = {'stdout': subprocess.PIPE, 'stderr': subprocess.PIPE}
     super().__init__(cmd_args, cwd=self.cwd.name, **pipe_args)
 
   def __exit__(self, *args):
     super().__exit__(*args)
     self.tcl_file.close()
     self.cwd.cleanup()
+
 
 class VivadoHls(subprocess.Popen):
   """Call vivado_hls with the given tcl commands.
@@ -40,19 +45,21 @@ class VivadoHls(subprocess.Popen):
   Args:
     commands: string of tcl commands
   """
+
   def __init__(self, commands):
     self.cwd = tempfile.TemporaryDirectory(prefix='vivado-hls-')
     self.tcl_file = open(os.path.join(self.cwd.name, 'tcl'), mode='w+')
     self.tcl_file.write(commands)
     self.tcl_file.flush()
     cmd_args = ['vivado_hls', '-f', self.tcl_file.name]
-    pipe_args = {'stdout' : subprocess.PIPE, 'stderr' : subprocess.PIPE}
+    pipe_args = {'stdout': subprocess.PIPE, 'stderr': subprocess.PIPE}
     super().__init__(cmd_args, cwd=self.cwd.name, **pipe_args)
 
   def __exit__(self, *args):
     super().__exit__(*args)
     self.tcl_file.close()
     self.cwd.cleanup()
+
 
 PACKAGEXO_COMMANDS = r'''
 set tmp_ip_dir "{tmpdir}/tmp_ip_dir"
@@ -87,6 +94,7 @@ close_project -delete
 package_xo -force -xo_path "{xo_file}" -kernel_name {top_name} -ip_directory ${{tmp_ip_dir}} -kernel_xml {kernel_xml}{cpp_kernels}
 '''
 
+
 class PackageXo(Vivado):
   """Packages the given files into a Xilinx hardware object.
 
@@ -98,29 +106,36 @@ class PackageXo(Vivado):
     m_axi_names: variable names connected to the m_axi bus.
     cpp_kernels: sequence of file names of C++ kernels.
   """
-  def __init__(self, xo_file, top_name, kernel_xml, hdl_dir, m_axi_names,
+
+  def __init__(self,
+               xo_file,
+               top_name,
+               kernel_xml,
+               hdl_dir,
+               m_axi_names,
                cpp_kernels=()):
     self.tmpdir = tempfile.TemporaryDirectory(prefix='package-xo-')
     if _logger.isEnabledFor(logging.INFO):
       for _, _, files in os.walk(hdl_dir):
         for filename in files:
           _logger.info('packing: %s', filename)
+    bus_iface_template = ('ipx::associate_bus_interfaces -busif m_axi_{} '
+                          '-clock ap_clk [ipx::current_core]')
     kwargs = {
-        'top_name' : top_name,
-        'kernel_xml' : kernel_xml,
-        'hdl_dir' : hdl_dir,
-        'xo_file' : xo_file,
-        'bus_ifaces' : '\n'.join(map(
-            'ipx::associate_bus_interfaces -busif m_axi_{} -clock ap_clk '
-            '[ipx::current_core]'.format, m_axi_names)),
-        'tmpdir' : self.tmpdir.name,
-        'cpp_kernels' : ''.join(map(' -kernel_files {}'.format, cpp_kernels))
+        'top_name': top_name,
+        'kernel_xml': kernel_xml,
+        'hdl_dir': hdl_dir,
+        'xo_file': xo_file,
+        'bus_ifaces': '\n'.join(map(bus_iface_template.format, m_axi_names)),
+        'tmpdir': self.tmpdir.name,
+        'cpp_kernels': ''.join(map(' -kernel_files {}'.format, cpp_kernels))
     }
     super().__init__(PACKAGEXO_COMMANDS.format(**kwargs))
 
   def __exit__(self, *args):
     super().__exit__(*args)
     self.tmpdir.cleanup()
+
 
 HLS_COMMANDS = r'''
 cd "{project_dir}"
@@ -137,6 +152,7 @@ csynth_design
 exit
 '''
 
+
 class RunHls(VivadoHls):
   """Runs Vivado HLS for the given kernels and generate HDL files
 
@@ -147,6 +163,7 @@ class RunHls(VivadoHls):
     clock_period: target clock period.
     part_num: target part number.
   """
+
   def __init__(self, tarfileobj, kernel_files, top_name, clock_period,
                part_num):
     self.project_dir = tempfile.TemporaryDirectory(prefix='hls-')
@@ -154,14 +171,22 @@ class RunHls(VivadoHls):
     self.solution_name = top_name
     self.tarfileobj = tarfileobj
     kwargs = {
-        'project_dir' : self.project_dir.name,
-        'project_name' : self.project_name,
-        'solution_name' : self.solution_name,
-        'top_name' : top_name,
-        'add_kernels' :  '\n'.join(map(
-            'add_files "{}" -cflags "-std=c++11"'.format, kernel_files)),
-        'part_num' : part_num,
-        'clock_period' : clock_period
+        'project_dir':
+            self.project_dir.name,
+        'project_name':
+            self.project_name,
+        'solution_name':
+            self.solution_name,
+        'top_name':
+            top_name,
+        'add_kernels':
+            '\n'.join(
+                map('add_files "{}" -cflags "-std=c++11"'.format,
+                    kernel_files)),
+        'part_num':
+            part_num,
+        'clock_period':
+            clock_period
     }
     super().__init__(HLS_COMMANDS.format(**kwargs))
 
@@ -182,7 +207,9 @@ class RunHls(VivadoHls):
     super().__exit__(*args)
     self.project_dir.cleanup()
 
-XILINX_XML_NS = {'xd' : 'http://www.xilinx.com/xd'}
+
+XILINX_XML_NS = {'xd': 'http://www.xilinx.com/xd'}
+
 
 def get_device_info(platform_path):
   """Extract device part number and target frequency from SDAccel platform.
@@ -190,19 +217,21 @@ def get_device_info(platform_path):
   Currently only support 5.x platforms.
   """
   device_name = os.path.basename(platform_path)
-  with zipfile.ZipFile(os.path.join(
-      platform_path, 'hw', device_name + '.dsa')) as platform:
+  with zipfile.ZipFile(os.path.join(platform_path, 'hw',
+                                    device_name + '.dsa')) as platform:
     with platform.open(device_name + '.hpfm') as metadata:
       platform_info = ET.parse(metadata).find('./xd:component/xd:platformInfo',
                                               XILINX_XML_NS)
       return {
-          'clock_period' : platform_info.find(
-              "./xd:systemClocks/xd:clock/[@xd:id='0']", XILINX_XML_NS).attrib[
-                  '{{{xd}}}period'.format(**XILINX_XML_NS)],
-          'part_num' : platform_info.find(
-              'xd:deviceInfo', XILINX_XML_NS).attrib[
+          'clock_period':
+              platform_info.find("./xd:systemClocks/xd:clock/[@xd:id='0']",
+                                 XILINX_XML_NS).attrib[
+                                     '{{{xd}}}period'.format(**XILINX_XML_NS)],
+          'part_num':
+              platform_info.find('xd:deviceInfo', XILINX_XML_NS).attrib[
                   '{{{xd}}}name'.format(**XILINX_XML_NS)]
       }
+
 
 KERNEL_XML_TEMPLATE = r'''
 <?xml version="1.0" encoding="UTF-8"?>
@@ -225,6 +254,7 @@ ARG_TEMPLATE = r'''
       <arg name="{name}" addressQualifier="{addr_qualifier}" id="{arg_id}" port="{port_name}" size="{size:#x}" offset="{offset:#x}" hostOffset="0x0" hostSize="{host_size:#x}" type="{c_type}"/>
 '''
 
+
 def print_kernel_xml(top_name, ports, kernel_xml):
   """Generate kernel.xml file.
 
@@ -245,18 +275,29 @@ def print_kernel_xml(top_name, ports, kernel_xml):
           name=bundle_name,
           width=util.get_width_in_bits(haoda_type)).rstrip('\n')
       bundle_set.add(bundle_name)
-    args += ARG_TEMPLATE.format(
-        name=port_name, addr_qualifier=1, arg_id=arg_id,
-        port_name='m_axi_' + bundle_name, c_type=util.get_c_type(haoda_type),
-        size=size, offset=offset, host_size=host_size).rstrip('\n')
+    args += ARG_TEMPLATE.format(name=port_name,
+                                addr_qualifier=1,
+                                arg_id=arg_id,
+                                port_name='m_axi_' + bundle_name,
+                                c_type=util.get_c_type(haoda_type),
+                                size=size,
+                                offset=offset,
+                                host_size=host_size).rstrip('\n')
     offset += size + 4
     arg_id += 1
-  args += ARG_TEMPLATE.format(
-      name='coalesced_data_num', addr_qualifier=0, arg_id=arg_id,
-      port_name='s_axi_control', c_type='uint64_t', size=size, offset=offset,
-      host_size=host_size).rstrip('\n')
-  kernel_xml.write(KERNEL_XML_TEMPLATE.format(
-      top_name=top_name, m_axi_ports=m_axi_ports, args=args))
+  args += ARG_TEMPLATE.format(name='coalesced_data_num',
+                              addr_qualifier=0,
+                              arg_id=arg_id,
+                              port_name='s_axi_control',
+                              c_type='uint64_t',
+                              size=size,
+                              offset=offset,
+                              host_size=host_size).rstrip('\n')
+  kernel_xml.write(
+      KERNEL_XML_TEMPLATE.format(top_name=top_name,
+                                 m_axi_ports=m_axi_ports,
+                                 args=args))
+
 
 BRAM_FIFO_TEMPLATE = r'''
 `timescale 1ns/1ps
@@ -548,7 +589,9 @@ U_{name}_w{width}_d{depth}_A_ram (
 endmodule
 '''
 
+
 class VerilogPrinter(util.Printer):
+
   def module(self, module_name, args):
     self.println('module %s (' % module_name)
     self.do_indent()
@@ -606,9 +649,9 @@ class VerilogPrinter(util.Printer):
     self.println('{module_name} {instance_name}('.format(**locals()))
     self.do_indent()
     if isinstance(args, collections.Mapping):
-      self._out.write(',\n'.join(
-          ' ' * self._indent * self._tab + '.{}({})'.format(*arg)
-          for arg in args.items()))
+      self._out.write(',\n'.join(' ' * self._indent * self._tab +
+                                 '.{}({})'.format(*arg)
+                                 for arg in args.items()))
     else:
       self._out.write(',\n'.join(
           ' ' * self._indent * self._tab + arg for arg in args))
@@ -646,9 +689,11 @@ class VerilogPrinter(util.Printer):
       depth: FIFO depth
       name: Optionally give the fifo a name prefix, default to 'fifo'.
     """
-    self._out.write(BRAM_FIFO_TEMPLATE.format(
-        width=width, depth=depth, name=name,
-        addr_width=(depth - 1).bit_length()))
+    self._out.write(
+        BRAM_FIFO_TEMPLATE.format(width=width,
+                                  depth=depth,
+                                  name=name,
+                                  addr_width=(depth - 1).bit_length()))
 
   def srl_fifo_module(self, width, depth, name='fifo'):
     """Generate SRL FIFO with the given parameters.
@@ -662,6 +707,9 @@ class VerilogPrinter(util.Printer):
       name: Optionally give the fifo a name prefix, default to 'fifo'.
     """
     addr_width = (depth - 1).bit_length()
-    self._out.write(SRL_FIFO_TEMPLATE.format(
-        width=width, depth=depth, name=name, addr_width=addr_width,
-        depth_width=addr_width + 1))
+    self._out.write(
+        SRL_FIFO_TEMPLATE.format(width=width,
+                                 depth=depth,
+                                 name=name,
+                                 addr_width=addr_width,
+                                 depth_width=addr_width + 1))
