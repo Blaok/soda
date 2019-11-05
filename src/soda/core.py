@@ -183,8 +183,14 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
     return self.dataflow_super_source.module_traits
 
   def new_tcse_var(self) -> str:
-    self._temporal_cse_counter += 1
-    return 'tcse_var_%d' % (self._temporal_cse_counter - 1)
+    while True:
+      var = 'tcse_var_%d' % (self._temporal_cse_counter)
+      self._temporal_cse_counter += 1
+      if var not in {
+          stmt.name
+          for stmt in self.input_stmts + self.local_stmts + self.output_stmts
+      }:
+        return var
 
   @cached_property.cached_property
   def input_types(self):
@@ -626,7 +632,7 @@ def _get_reuse_chains(tile_size, tensor, unroll_factor):
   A_dag = set()
   for child in tensor.children.values():
     A_dag |= unroll_offsets(child)
-  _logger.debug('A† of tensor %s: %s', tensor.name, A_dag)
+  _logger.debug('Aâ€  of tensor %s: %s', tensor.name, A_dag)
 
   chains = []
   for chain_idx in reversed(range(unroll_factor)):
@@ -720,7 +726,7 @@ def _get_replicated_reuse_chains(tile_size, tensor, replication_factor):
     A_dag |= {
         max(offsets) - offset + stage.delay[tensor.name] for offset in offsets
     }
-  _logger.debug('A† of tensor %s: %s' % (tensor.name, A_dag))
+  _logger.debug('Aâ€  of tensor %s: %s' % (tensor.name, A_dag))
   chains = sum(
       reversed([
           tuple(
