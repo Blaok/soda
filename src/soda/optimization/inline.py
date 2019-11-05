@@ -244,7 +244,8 @@ def rebalance(stencil):
                                          idx=(0,) * len(stmt.ref.idx)),
                               haoda_type=new_expr.haoda_type,
                               expr=new_expr,
-                              let=stmt.let))
+                              let=stmt.let,
+                              stencil=stencil))
         _logger.debug('new stmt: %s', new_stmts[-1])
       stencil.local_stmts.extend(new_stmts)
       stmt.expr = ir.AddSub(
