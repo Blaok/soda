@@ -239,11 +239,16 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
 
   new_local_stmts = []
   cses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
+  seen = set()
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     stmt.propagate_type(stencil.symbol_table)
     stmt.expr = stmt.expr.visit(visitor, cses)
     stmt.let = tuple(let.visit(visitor, cses) for let in stmt.let)
     for expr, ref in cses.items():
+      if expr in seen:
+        continue
+      else:
+        seen.add(expr)
       expr = stencil.propagate_type(expr, stmt)
       new_local_stmts.append(
           grammar.LocalStmt(ref=ref,
