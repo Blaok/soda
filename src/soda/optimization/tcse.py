@@ -1326,6 +1326,188 @@ class GreedySchedules(ScheduleBase):
     return
 
 
+class BeamSchedules(ScheduleBase):
+  """Schedules of an Expression, found using beam search.
+  """
+  beam_width = 5
+
+  def __init__(self,
+               rattrs: Tuple[RelativeAttr, ...],
+               aattrs: Optional[
+                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               linearizer: Optional[Linearizer] = None,
+               cache: Optional[Dict] = None) -> None:
+    self.linearizer = linearizer
+    super().__init__(rattrs, aattrs)  # type: ignore
+
+  def __lt__(self, other: 'BeamSchedules') -> bool:
+    return self.linear_schedule.cost < other.linear_schedule.cost
+
+  @cached_property.cached_property
+  def linear_schedule(self) -> CommSchedule:
+    return linear_schedule(tuple(self))
+
+  @property
+  def candidates(self) -> List[Tuple[bool, 'BeamSchedules']]:
+    """Return new candidates with computation reuse.
+
+    Returns:
+        List[Tuple[bool, BeamSchedules]]: A list of (has_conflict, candidates).
+    """
+
+    attr_map = {attr: idx for idx, attr in enumerate(self)}
+    reuses = OrderedDict()  # type: Dict[CommSchedule, List[Tuple[int, int]]]
+    has_conflict = collections.defaultdict(
+        lambda: False)  # type: Dict[CommSchedule, bool]
+    for left, right in itertools.combinations(self, 2):
+      left_rattr, left_aattr = left
+      right_rattr, right_aattr = right
+      distance = right_rattr - left_rattr
+      new_aattr = left_aattr, right_aattr
+      operation = CommSchedule(  # type: ignore
+          left_aattr, right_aattr, distance, (left_rattr, right_rattr),
+          new_aattr)
+      if operation in reuses:
+        continue
+      #_logger.debug('look for operation: %s', operation)
+      # look for reuse of this operation over all operands
+      reuses[operation] = []
+      # conflict groups
+      # group_lists maps group id to a list of (idx_l, idx_r) tuple, in order
+      # group_table maps attr idx to group id
+      group_lists = []  # type: List[List[Tuple[int, int]]]
+      group_table = {}  # type: Dict[int, int]
+      for idx_l, (rattr_l, aattr_l) in enumerate(self):
+        if aattr_l != left_aattr:
+          continue
+        rattr_r, aattr_r = rattr_l + right_rattr - left_rattr, right_aattr
+        idx_r = attr_map.get((rattr_r, aattr_r))
+        if idx_r is None:
+          continue
+        # (idx_l, idx_r) is compatible with `operation`
+        group_id = group_table.get(idx_l)
+        if group_id is None:
+          group_id = group_table.get(idx_r)
+        if group_id is None:
+          # new conflict group
+          group_id = len(group_lists)
+          group_lists.append([])
+        group_lists[group_id].append((idx_l, idx_r))
+        group_table[idx_l] = group_id
+        group_table[idx_r] = group_id
+
+      for group_list in group_lists:
+        if len(group_list) > 1:
+          _logger.debug('conflict group of %s: %s', operation, group_list)
+          has_conflict[operation] = True
+
+      for group_list in group_lists:
+        if len(group_list) % 2 != 0:
+          reuses[operation].extend(group_list[::2])
+
+      min_idx_l = min((x[0] for x in reuses[operation]), default=0)
+      max_idx_l = max((x[0] for x in reuses[operation]), default=-1)
+      _logger.debug('min_idx_l: %s | max_idx_l: %s', min_idx_l, max_idx_l)
+
+      for group_list in group_lists:
+        if len(group_list) % 2 == 0:
+          span_0 = (self.rattrs[max(group_list[-2][0], max_idx_l)] -
+                    self.rattrs[min(group_list[0][0], min_idx_l)])
+          span_1 = (self.rattrs[max(group_list[-1][0], max_idx_l)] -
+                    self.rattrs[min(group_list[1][0], min_idx_l)])
+          _logger.debug('span 0: %d, span 1: %d', span_0, span_1)
+          reuses[operation].extend(group_list[1 if span_1 < span_0 else 0::2])
+      if len(reuses[operation]) > 1:
+        _logger.debug('reuses[%s]: %s', operation, reuses[operation])
+      reuses[operation].sort()  # ?
+
+    # filter out operations that cannot be reused
+    # they may not all be useful because they overlap
+    reuses = {k: v for k, v in reuses.items() if len(v) > 1}
+    if not reuses:
+      return []
+
+    def aligns(dis: int, dim: int) -> bool:
+      """Returns whether dis aligns with dim.
+
+      A distance aligns with a dimension if the indices of two points with that
+      distance differ and only differ in that dimension.
+      """
+      assert self.linearizer is not None
+      zipped = zip(self.linearizer(dis), self.linearizer.mins,
+                   self.linearizer.dims)
+      return all(idx != min_idx if d == dim else idx == min_idx
+                 for idx, min_idx, d in zipped)
+
+    if self.linearizer is not None and len(reuses) > len(self):
+      _logger.debug('linearizer: mins: %s maxs: %s', self.linearizer.mins,
+                    self.linearizer.maxs)
+      for dim in reversed(self.linearizer.dims):
+        if any(aligns(op.distance, dim) for op in reuses):
+          # only consider reuse with a single dimension, if possible
+          reuses = {
+              k: [(idx_l, idx_r)
+                  for idx_l, idx_r in v
+                  if aligns(self.rattrs[idx_r] - self.rattrs[idx_l], dim)
+                 ] for k, v in reuses.items() if aligns(k.distance, dim)
+          }
+          break
+
+    candidates = []
+    for op in reuses:
+      # find all compatible reuses that include op
+      _logger.debug('find all compatible reuses that include %s', op)
+      new_attrs = OrderedDict(enumerate(self))
+      used = set()  # type: Set[int]
+
+      def do_reuse_for(schedule: CommSchedule) -> None:
+        reused_indices = [(idx_l, idx_r)
+                          for idx_l, idx_r in reuses[schedule]
+                          if idx_l not in used and idx_r not in used]
+        if len(reused_indices) > 1:
+          for idx_l, idx_r in reused_indices:
+            _logger.debug('reusing %s for %s + %s', schedule,
+                          '%s:%s' % self[idx_l], '%s:%s' % self[idx_r])
+            # pylint: disable=cell-var-from-loop
+            new_attrs[idx_l] = new_attrs[idx_l][0], schedule  # type: ignore
+            del new_attrs[idx_r]
+            used.update({idx_l, idx_r})
+
+      do_reuse_for(op)
+      for operation in sorted(reuses,
+                              key=lambda s: (-len(reuses[s]), s.distance)):
+        do_reuse_for(operation)
+
+      new_rattrs, new_aattrs = zip(*new_attrs.values())
+      candidates.append((has_conflict[op],
+                         BeamSchedules(new_rattrs, new_aattrs,
+                                       self.linearizer)))
+
+    return candidates
+
+  @cached_property.cached_property
+  def best(self) -> CommSchedule:
+    candidates = [(False, self)]
+    best = self.linear_schedule
+    while candidates:
+      candidates = heapq.nsmallest(
+          BeamSchedules.beam_width,
+          sum((x.candidates for _, x in candidates), []))
+      for _, candidate in candidates:
+        schedule = candidate.linear_schedule
+        _logger.debug('schedule: %s', schedule)
+        if schedule.cost < best.cost:
+          best = schedule
+          _logger.info('schedule: %s num ops: %d total distance: %d', best,
+                       *best.cost)
+    _logger.info('schedule: %s num ops: %d total distance: %d', best,
+                 *best.cost)
+    return best
+
+  def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
+    return
+
+
 def linear_schedule(attrs) -> CommSchedule:
   """Schedule the attributes linearily.
 
@@ -1561,7 +1743,8 @@ class ExternalSchedules(ScheduleBase):
         subprocess.run(self.cmd,
                        input=json.dumps(attrs),
                        stdout=subprocess.PIPE,
-                       universal_newlines=True, check=True).stdout)
+                       universal_newlines=True,
+                       check=True).stdout)
     return self.from_json(result)
 
   def print_stats(self, logger: Callable[..., None] = _logger.info) -> None:
@@ -1670,12 +1853,16 @@ class Expression:
     if external_tcse is None or self.method.startswith('built-in'):
       if self.method.endswith('optimal'):
         return CommSchedules(self.rattrs, self.aattrs, cache={})
-      return GreedySchedules(*args)
+      if self.method.endswith('greedy'):
+        return GreedySchedules(*args)
+      return BeamSchedules(*args)
     external_schedules = ExternalSchedules(*args)
     if self.method == 'optimal':
       external_schedules.cmd.append('--brute-force')
     elif self.method == 'greedy':
       external_schedules.cmd.append('--greedy')
+    elif self.method == 'beam':
+      external_schedules.cmd.append('--beam')
     return external_schedules
 
   @cached_property.cached_property
