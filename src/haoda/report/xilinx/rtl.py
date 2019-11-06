@@ -130,7 +130,9 @@ class ReportXoUtil(backend.Vivado):
       raise util.InternalError('failed to generated report file')
     self.tmpdir.cleanup()
 
-RTL_HLS_INFO_REGEX = r'\(\* CORE_GENERATION_INFO=".*,\{(.*)\}" \*\)'
+
+RTL_HLS_INFO_REGEX = r'\(\* CORE_GENERATION_INFO\s*=\s*".*,\{(.*)\}" \*\)'
+
 
 class RtlHlsInfo:
   def __init__(self, rtl_file: TextIO):
