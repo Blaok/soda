@@ -1262,6 +1262,9 @@ def print_code(stencil, host_file):
   println()
 
   print_define('BURST_WIDTH', stencil.burst_width)
+  for i in range(len(stencil.tile_size)-1):
+    util.print_define(printer, 'TILE_SIZE_DIM_%d' % i, stencil.tile_size[i])
+  util.print_define(printer, 'UNROLL_FACTOR', stencil.unroll_factor)
 
   if stencil.preserve_border:
     overall_stencil_window = core.get_overall_stencil_window(
