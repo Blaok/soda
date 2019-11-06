@@ -18,7 +18,7 @@ def print_header(printer):
   printer.println()
 
   # C++ headers
-  for header in ('algorithm', 'array', 'string', 'unordered_map'):
+  for header in ('algorithm', 'array', 'random', 'string', 'unordered_map'):
     printer.println('#include <%s>' % header)
   printer.println()
 
@@ -1049,6 +1049,11 @@ def print_test(printer, stencil):
     println('%s.host = (uint8_t*)%s_img;' % (param.name, param.name))
     println()
 
+  if any(map(util.is_float, stencil.input_types)):
+    println('std::default_random_engine generator;')
+    println('std::uniform_real_distribution<double> distribution(0.0, 1.0);')
+    println()
+
   for name in stencil.input_names:
     println('// initialization can be parallelized with -fopenmp')
     println('#pragma omp parallel for', 0)
@@ -1058,10 +1063,8 @@ def print_test(printer, stencil):
           dim, var=util.COORDS_IN_ORIG[dim]))
       do_scope()
     init_val = '+'.join(util.COORDS_IN_ORIG[0:input_dim])
-    if util.is_float(stencil.input_types[0]):
-      init_val = '{0}({1})/{0}({2})'.format(
-          stencil.tensors[name].c_type, init_val,
-          '+'.join('dims[%d]' % d for d in range(stencil.dim)))
+    if util.is_float(stencil.symbol_table[name]):
+      init_val = 'distribution(generator)'
     println('%s_img[%s] = %s;' % (
         name, '+'.join('%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], name, d)
                        for d in range(input_dim)), init_val))
@@ -1147,7 +1150,9 @@ def print_test(printer, stencil):
         println('threshold = atof(getenv("THRESHOLD"));')
         un_scope()
         println('threshold *= threshold;')
-        println('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double'
+        println('if(double(val_fpga-val_cpu)*double(val_fpga-val_cpu) > '
+                'threshold && '
+                'double(val_fpga-val_cpu)*double(val_fpga-val_cpu)/(double'
                 '(val_cpu)*double(val_cpu)) > threshold)')
         do_scope()
         params = (', '.join(['%d']*stencil.dim),
