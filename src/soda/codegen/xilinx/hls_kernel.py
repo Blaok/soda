@@ -709,6 +709,7 @@ def _print_reinterpret(printer):
   println('template<typename To, typename From>')
   println('inline To Reinterpret(const From& val)')
   printer.do_scope()
+  println('#pragma HLS inline', indent=0)
   println('return reinterpret_cast<const To&>(val);')
   printer.un_scope()
 
