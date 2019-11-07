@@ -5,6 +5,7 @@ from typing import (
 )
 import collections
 import concurrent.futures
+import io
 import json
 import logging
 import os
@@ -88,16 +89,25 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
     with open(kernel_file, 'w') as kernel_fileobj:
       hls_kernel.print_code(stencil, kernel_fileobj)
 
+    args = []
+    for module_trait_id, module_trait in enumerate(stencil.module_traits):
+      sio = io.StringIO()
+      hls_kernel._print_module_definition(util.Printer(sio),
+                                          module_trait,
+                                          module_trait_id,
+                                          burst_width=stencil.burst_width)
+      args.append((len(sio.getvalue()), synthesis_module, tmpdir, [kernel_file],
+                   util.get_func_name(module_trait_id), device_info))
+    sio = io.StringIO()
+    print_dataflow_hls_interface(util.Printer(sio), top_name, inputs, outputs)
+    args.append((len(sio.getvalue()), synthesis_module, tmpdir,
+                 [dataflow_kernel], top_name, device_info))
+    args.sort(key=lambda x: x[0], reverse=True)
+
     super_source = stencil.dataflow_super_source
     job_server = util.release_job_slot()
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
-      threads = []
-      for module_id in range(len(super_source.module_traits)):
-        threads.append(executor.submit(
-            synthesis_module, tmpdir, [kernel_file],
-            util.get_func_name(module_id), device_info))
-      threads.append(executor.submit(
-          synthesis_module, tmpdir, [dataflow_kernel], top_name, device_info))
+      threads = [executor.submit(*x[1:]) for x in args]
       for future in concurrent.futures.as_completed(threads):
         returncode, stdout, stderr = future.result()
         log_func = _logger.error if returncode != 0 else _logger.debug
