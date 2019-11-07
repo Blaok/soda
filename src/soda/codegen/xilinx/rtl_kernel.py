@@ -204,7 +204,7 @@ FIFO_PORT_SUFFIXES = dict(
 def print_top_module(printer, super_source, inputs, outputs):
   println = printer.println
   println('`timescale 1 ns / 1 ps')
-  args = ['ap_clk', 'ap_rst', 'ap_start', 'ap_done', 'ap_continue', 'ap_idle',
+  args = ['ap_clk', 'ap_rst_n', 'ap_start', 'ap_done', 'ap_continue', 'ap_idle',
           'ap_ready']
   for port_name, _, _, _ in outputs:
     args.append('{}_V_V{data_in}'.format(port_name, **FIFO_PORT_SUFFIXES))
@@ -217,7 +217,7 @@ def print_top_module(printer, super_source, inputs, outputs):
   printer.module('Dataflow', args)
   println()
 
-  input_args = 'ap_clk', 'ap_rst', 'ap_start', 'ap_continue'
+  input_args = 'ap_clk', 'ap_rst_n', 'ap_start', 'ap_continue'
   output_args = 'ap_done', 'ap_idle', 'ap_ready'
 
   for arg in input_args:
@@ -249,13 +249,9 @@ def print_top_module(printer, super_source, inputs, outputs):
     println('wire {port_name}_V_V{write_enable};'.format(**kwargs))
   for port_name, _, haoda_type, _ in inputs:
     println('wire {}_V_V{read_enable};'.format(port_name, **FIFO_PORT_SUFFIXES))
-  println('reg ap_rst_n_inv;')
-  with printer.always('*'):
-    println('ap_rst_n_inv = ap_rst;')
-  println()
 
   with printer.always('posedge ap_clk'):
-    with printer.if_('ap_rst'):
+    with printer.if_("ap_rst_n == 1'b0"):
       println("ap_done <= 1'b0;")
       println("ap_idle <= 1'b1;")
       println("ap_ready <= 1'b0;")
@@ -293,7 +289,7 @@ def print_top_module(printer, super_source, inputs, outputs):
 
       args = collections.OrderedDict((
           ('clk', 'ap_clk'),
-          ('reset', 'ap_rst_n_inv'),
+          ('reset', '~ap_rst_n'),
           ('if_read_ce', "1'b1"),
           ('if_write_ce', "1'b1"),
           ('if{data_in}'.format(**kwargs),
@@ -316,7 +312,7 @@ def print_top_module(printer, super_source, inputs, outputs):
   for module in super_source.tpo_node_gen():
     module_trait, module_trait_id = super_source.module_table[module]
     args = collections.OrderedDict((('ap_clk', 'ap_clk'),
-                        ('ap_rst', 'ap_rst_n_inv'),
+                        ('ap_rst_n', 'ap_rst_n'),
                         ('ap_start', "1'b1")))
     for dram_ref, bank in module.dram_writes:
       kwargs = dict(port=dram_ref.dram_fifo_name(bank),
