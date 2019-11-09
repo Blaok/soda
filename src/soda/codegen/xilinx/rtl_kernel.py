@@ -180,7 +180,7 @@ def synthesis_module(tmpdir, kernel_files, module_name, device_info):
   with tempfile.TemporaryFile(mode='w+b') as tarfileobj:
     with backend.RunHls(
         tarfileobj, kernel_files, module_name, device_info['clock_period'],
-        device_info['part_num']) as proc:
+        device_info['part_num'], reset_low=False) as proc:
       stdout, stderr = proc.communicate()
     if proc.returncode == 0:
       tarfileobj.seek(0)

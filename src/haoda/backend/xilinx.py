@@ -147,7 +147,7 @@ set_part {{{part_num}}}
 create_clock -period {clock_period} -name default
 config_compile -name_max_length 253
 config_interface -m_axi_addr64
-config_rtl -disable_start_propagation -reset_level low
+config_rtl -disable_start_propagation -reset_level {reset_level}
 csynth_design
 exit
 '''
@@ -164,8 +164,13 @@ class RunHls(VivadoHls):
     part_num: target part number.
   """
 
-  def __init__(self, tarfileobj, kernel_files, top_name, clock_period,
-               part_num):
+  def __init__(self,
+               tarfileobj,
+               kernel_files,
+               top_name,
+               clock_period,
+               part_num,
+               reset_low: bool = True):
     self.project_dir = tempfile.TemporaryDirectory(prefix='hls-')
     self.project_name = 'project'
     self.solution_name = top_name
@@ -186,7 +191,9 @@ class RunHls(VivadoHls):
         'part_num':
             part_num,
         'clock_period':
-            clock_period
+            clock_period,
+        'reset_level':
+            'low' if reset_low else 'high',
     }
     super().__init__(HLS_COMMANDS.format(**kwargs))
 
