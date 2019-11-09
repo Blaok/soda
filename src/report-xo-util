@@ -12,8 +12,12 @@ logging.basicConfig(level=logging.WARNING,
 _logger = logging.getLogger().getChild(os.path.basename(__file__))
 
 if __name__ == '__main__':
+  top_name = 'Dataflow'
+  if len(sys.argv) > 1:
+    top_name = sys.argv[1]
   try:
-    with rtl.ReportXoUtil(sys.stdin.buffer, sys.stdout) as proc:
+    with rtl.ReportXoUtil(sys.stdin.buffer, sys.stdout,
+                          top_name=top_name) as proc:
       stdout, stderr = proc.communicate()
   except util.InternalError:
     _logger.error(stdout.decode())
