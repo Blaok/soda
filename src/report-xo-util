@@ -15,9 +15,14 @@ if __name__ == '__main__':
   top_name = 'Dataflow'
   if len(sys.argv) > 1:
     top_name = sys.argv[1]
+  part_num = None
+  if len(sys.argv) > 2:
+    part_num = sys.argv[2]
   try:
-    with rtl.ReportXoUtil(sys.stdin.buffer, sys.stdout,
-                          top_name=top_name) as proc:
+    with rtl.ReportXoUtil(sys.stdin.buffer,
+                          sys.stdout,
+                          top_name=top_name,
+                          part_num=part_num) as proc:
       stdout, stderr = proc.communicate()
   except util.InternalError:
     _logger.error(stdout.decode())
