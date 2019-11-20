@@ -1,3 +1,7 @@
+from typing import (
+    Iterable,
+)
+
 import contextlib
 import collections
 import logging
@@ -83,7 +87,6 @@ set_property sdx_kernel true [ipx::current_core]
 set_property sdx_kernel_type rtl [ipx::current_core]
 ipx::create_xgui_files [ipx::current_core]
 {bus_ifaces}
-ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk [ipx::current_core]
 set_property xpm_libraries {{XPM_CDC XPM_MEMORY XPM_FIFO}} [ipx::current_core]
 set_property supported_families {{ }} [ipx::current_core]
 set_property auto_family_support_level level_2 [ipx::current_core]
@@ -92,6 +95,10 @@ ipx::save_core [ipx::current_core]
 close_project -delete
 
 package_xo -force -xo_path "{xo_file}" -kernel_name {top_name} -ip_directory ${{tmp_ip_dir}} -kernel_xml {kernel_xml}{cpp_kernels}
+'''
+
+BUS_IFACE = r'''
+ipx::associate_bus_interfaces -busif {} -clock ap_clk [ipx::current_core]
 '''
 
 
@@ -104,6 +111,7 @@ class PackageXo(Vivado):
     kernel_xml: xml description of the kernel.
     hdl_dir: directory of all HDL files.
     m_axi_names: variable names connected to the m_axi bus.
+    iface_names: other interface names, default to ('s_axi_control').
     cpp_kernels: sequence of file names of C++ kernels.
   """
 
@@ -112,21 +120,22 @@ class PackageXo(Vivado):
                top_name,
                kernel_xml,
                hdl_dir,
-               m_axi_names,
+               m_axi_names: Iterable[str] = (),
+               iface_names: Iterable[str] = ('s_axi_control',),
                cpp_kernels=()):
     self.tmpdir = tempfile.TemporaryDirectory(prefix='package-xo-')
     if _logger.isEnabledFor(logging.INFO):
       for _, _, files in os.walk(hdl_dir):
         for filename in files:
           _logger.info('packing: %s', filename)
-    bus_iface_template = ('ipx::associate_bus_interfaces -busif m_axi_{} '
-                          '-clock ap_clk [ipx::current_core]')
+    iface_names = list(iface_names)
+    iface_names.extend(map('m_axi_{}'.format, m_axi_names))
     kwargs = {
         'top_name': top_name,
         'kernel_xml': kernel_xml,
         'hdl_dir': hdl_dir,
         'xo_file': xo_file,
-        'bus_ifaces': '\n'.join(map(bus_iface_template.format, m_axi_names)),
+        'bus_ifaces': '\n'.join(map(BUS_IFACE.format, iface_names)),
         'tmpdir': self.tmpdir.name,
         'cpp_kernels': ''.join(map(' -kernel_files {}'.format, cpp_kernels))
     }
