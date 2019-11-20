@@ -399,6 +399,7 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
     lp_status_str = pulp.LpStatus[lp_status]
     total_distance = int(pulp.value(lp_problem.objective))
     _logger.debug('ILP status: %s %s', lp_status_str, total_distance)
+    _logger.info('total reuse distance: %d', total_distance)
 
     if lp_status != pulp.LpStatusOptimal:
       _logger.error('ILP error: %s\n%s', lp_status_str, lp_problem)

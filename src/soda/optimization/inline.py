@@ -257,8 +257,8 @@ def rebalance(stencil):
       stencil.__dict__.pop('local_names', None)
       stencil.__dict__.pop('local_types', None)
 
-      _logger.info('stencil after rebalancing: \n  %s',
-                   str(stencil).replace('\n', '\n  '))
+      _logger.debug('stencil after rebalancing: \n  %s',
+                    str(stencil).replace('\n', '\n  '))
 
       return rebalance(stencil)
   return stencil
