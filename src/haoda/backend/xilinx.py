@@ -1,16 +1,14 @@
-from typing import (
-    Iterable,
-)
-
-import contextlib
 import collections
+import contextlib
 import logging
 import os
 import subprocess
 import tarfile
 import tempfile
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils
 import zipfile
+from typing import Iterable, TextIO, Tuple
 
 from haoda import util
 
@@ -251,10 +249,9 @@ def get_device_info(platform_path):
 
 KERNEL_XML_TEMPLATE = r'''
 <?xml version="1.0" encoding="UTF-8"?>
-<root versionMajor="1" versionMinor="5">
-  <kernel name="{top_name}" language="ip" vlnv="xilinx.com:RTLKernel:{top_name}:1.0" attributes="" preferredWorkGroupSizeMultiple="0" workGroupSize="1" debug="true" compileOptions=" -g" profileType="none">
-    <ports>{m_axi_ports}
-      <port name="s_axi_control" mode="slave" range="0x1000" dataWidth="32" portType="addressable" base="0x0"/>
+<root versionMajor="1" versionMinor="6">
+  <kernel name="{top_name}" language="ip_c" vlnv="xilinx.com:RTLKernel:{top_name}:1.0" attributes="" preferredWorkGroupSizeMultiple="0" workGroupSize="1" interrupt="true">
+    <ports>{ports}
     </ports>
     <args>{args}
     </args>
@@ -262,8 +259,16 @@ KERNEL_XML_TEMPLATE = r'''
 </root>
 '''
 
-PORT_TEMPLATE = r'''
+S_AXI_PORT = r'''
+      <port name="s_axi_control" mode="slave" range="0x1000" dataWidth="32" portType="addressable" base="0x0"/>
+'''
+
+M_AXI_PORT_TEMPLATE = r'''
       <port name="m_axi_{name}" mode="master" range="0xFFFFFFFF" dataWidth="{width}" portType="addressable" base="0x0"/>
+'''
+
+AXIS_PORT_TEMPLATE = r'''
+      <port name="{name}" mode="{mode}" dataWidth="{width}" portType="stream"/>
 '''
 
 ARG_TEMPLATE = r'''
@@ -271,48 +276,42 @@ ARG_TEMPLATE = r'''
 '''
 
 
-def print_kernel_xml(top_name, ports, kernel_xml):
+def print_kernel_xml(top_name: str,
+                     axis_inputs: Iterable[Tuple[str, str, str, str]],
+                     axis_outputs: Iterable[Tuple[str, str, str, str]],
+                     kernel_xml: TextIO):
   """Generate kernel.xml file.
 
   Args:
     top_name: name of the top-level kernel function.
-    ports: sequence of (port_name, bundle_name, haoda_type, _) of m_axi ports
+    axis_inputs: sequence of (port_name, _, haoda_type, _) of input axis ports
+    axis_outputs: sequence of (port_name, _, haoda_type, _) of output axis ports
     kernel_xml: file object to write to.
   """
-  m_axi_ports = ''
+  ports = ''
   args = ''
-  offset = 0x10
+  offset = 0
   arg_id = 0
-  bundle_set = set()
-  for port_name, bundle_name, haoda_type, _ in ports:
-    size = host_size = 8
-    if bundle_name not in bundle_set:
-      m_axi_ports += PORT_TEMPLATE.format(
-          name=bundle_name,
-          width=util.get_width_in_bits(haoda_type)).rstrip('\n')
-      bundle_set.add(bundle_name)
-    args += ARG_TEMPLATE.format(name=port_name,
-                                addr_qualifier=1,
-                                arg_id=arg_id,
-                                port_name='m_axi_' + bundle_name,
-                                c_type=util.get_c_type(haoda_type),
-                                size=size,
-                                offset=offset,
-                                host_size=host_size).rstrip('\n')
-    offset += size + 4
+  size = host_size = 8
+  for mode, axis_ports in (('read_only', axis_inputs), ('write_only',
+                                                        axis_outputs)):
+    for port_name, _, haoda_type, _ in axis_ports:
+      width = util.get_width_in_bits(haoda_type)
+      c_type = xml.sax.saxutils.escape('stream<ap_axiu<%d, 0, 0, 0>>&' % width)
+      width += 8 + width // 8 * 2
+      ports += AXIS_PORT_TEMPLATE.format(name=port_name, mode=mode,
+                                         width=width).rstrip('\n')
+      args += ARG_TEMPLATE.format(name=port_name,
+                                  addr_qualifier=4,
+                                  arg_id=arg_id,
+                                  port_name=port_name,
+                                  c_type=c_type,
+                                  size=size,
+                                  offset=offset,
+                                  host_size=host_size).rstrip('\n')
     arg_id += 1
-  args += ARG_TEMPLATE.format(name='coalesced_data_num',
-                              addr_qualifier=0,
-                              arg_id=arg_id,
-                              port_name='s_axi_control',
-                              c_type='uint64_t',
-                              size=size,
-                              offset=offset,
-                              host_size=host_size).rstrip('\n')
   kernel_xml.write(
-      KERNEL_XML_TEMPLATE.format(top_name=top_name,
-                                 m_axi_ports=m_axi_ports,
-                                 args=args))
+      KERNEL_XML_TEMPLATE.format(top_name=top_name, ports=ports, args=args))
 
 
 BRAM_FIFO_TEMPLATE = r'''
@@ -709,7 +708,7 @@ class VerilogPrinter(util.Printer):
         BRAM_FIFO_TEMPLATE.format(width=width,
                                   depth=depth,
                                   name=name,
-                                  addr_width=(depth - 1).bit_length()))
+                                  addr_width=max(1, (depth - 1).bit_length())))
 
   def srl_fifo_module(self, width, depth, name='fifo'):
     """Generate SRL FIFO with the given parameters.
@@ -722,6 +721,7 @@ class VerilogPrinter(util.Printer):
       depth: FIFO depth
       name: Optionally give the fifo a name prefix, default to 'fifo'.
     """
+    depth = max(depth, 2)
     addr_width = (depth - 1).bit_length()
     self._out.write(
         SRL_FIFO_TEMPLATE.format(width=width,

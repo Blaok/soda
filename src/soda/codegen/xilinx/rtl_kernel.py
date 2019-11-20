@@ -76,14 +76,9 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
   device_info = backend.get_device_info(platform)
 
   with tempfile.TemporaryDirectory(prefix='sodac-xrtl-') as tmpdir:
-    dataflow_kernel = os.path.join(tmpdir, 'dataflow_kernel.cpp')
-    with open(dataflow_kernel, 'w') as dataflow_kernel_obj:
-      print_dataflow_hls_interface(
-          util.Printer(dataflow_kernel_obj), top_name, inputs, outputs)
-
     kernel_xml = os.path.join(tmpdir, 'kernel.xml')
     with open(kernel_xml, 'w') as kernel_xml_obj:
-      backend.print_kernel_xml(top_name, outputs + inputs, kernel_xml_obj)
+      backend.print_kernel_xml(top_name, inputs, outputs, kernel_xml_obj)
 
     kernel_file = os.path.join(tmpdir, 'kernel.cpp')
     with open(kernel_file, 'w') as kernel_fileobj:
@@ -98,10 +93,6 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
                                           burst_width=stencil.burst_width)
       args.append((len(sio.getvalue()), synthesis_module, tmpdir, [kernel_file],
                    util.get_func_name(module_trait_id), device_info))
-    sio = io.StringIO()
-    print_dataflow_hls_interface(util.Printer(sio), top_name, inputs, outputs)
-    args.append((len(sio.getvalue()), synthesis_module, tmpdir,
-                 [dataflow_kernel], top_name, device_info))
     args.sort(key=lambda x: x[0], reverse=True)
 
     super_source = stencil.dataflow_super_source
@@ -122,10 +113,7 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
 
     # generate HLS report
     depths = {}   # type: Dict[int, int]
-    hls_resources = hls_report.resources(
-        os.path.join(tmpdir, 'report', top_name + '_csynth.xml'))
-    hls_resources -= hls_report.resources(
-        os.path.join(tmpdir, 'report', 'Dataflow_csynth.xml'))
+    hls_resources = hls_report.HlsResources()
     _logger.info(hls_resources)
     for module_id, nodes in enumerate(super_source.module_trait_table.values()):
       module_name = util.get_func_name(module_id)
@@ -161,8 +149,12 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
     util.pause_for_debugging()
 
     xo_filename = os.path.join(tmpdir, stencil.app_name + '.xo')
-    with backend.PackageXo(xo_filename, top_name, kernel_xml, hdl_dir,
-                           m_axi_names, [dataflow_kernel]) as proc:
+    with backend.PackageXo(
+        xo_filename,
+        top_name,
+        kernel_xml,
+        hdl_dir,
+        iface_names=(x[0] for x in inputs + outputs)) as proc:
       stdout, stderr = proc.communicate()
     log_func = _logger.error if proc.returncode != 0 else _logger.debug
     log_func(stdout.decode())
@@ -200,81 +192,150 @@ FIFO_PORT_SUFFIXES = dict(
     read_enable='_read',
     not_block='_blk_n')
 
+AXIS_PORT_SUFFIXES = collections.OrderedDict(
+    data='_TDATA',  # producer -> consumer
+    keep='_TKEEP',  # producer -> consumer
+    strb='_TSTRB',  # producer -> consumer
+    last='_TLAST',  # producer -> consumer
+    valid='_TVALID',  # producer -> consumer
+    ready='_TREADY',  # producer <- consumer
+)
+
 
 def print_top_module(printer, super_source, inputs, outputs):
   println = printer.println
   println('`timescale 1 ns / 1 ps')
-  args = ['ap_clk', 'ap_rst', 'ap_start', 'ap_done', 'ap_continue', 'ap_idle',
-          'ap_ready']
-  for port_name, _, _, _ in outputs:
-    args.append('{}_V_V{data_in}'.format(port_name, **FIFO_PORT_SUFFIXES))
-    args.append('{}_V_V{not_full}'.format(port_name, **FIFO_PORT_SUFFIXES))
-    args.append('{}_V_V{write_enable}'.format(port_name, **FIFO_PORT_SUFFIXES))
-  for port_name, _, _, _ in inputs:
-    args.append('{}_V_V{data_out}'.format(port_name, **FIFO_PORT_SUFFIXES))
-    args.append('{}_V_V{not_empty}'.format(port_name, **FIFO_PORT_SUFFIXES))
-    args.append('{}_V_V{read_enable}'.format(port_name, **FIFO_PORT_SUFFIXES))
+
+  input_args = 'ap_clk', 'ap_rst'
+  output_args = ()
+  args = list(input_args + output_args)
+  for port_name, _, _, _ in inputs + outputs:
+    args.extend(port_name + suffix for suffix in AXIS_PORT_SUFFIXES.values())
   printer.module('Dataflow', args)
   println()
-
-  input_args = 'ap_clk', 'ap_rst', 'ap_start', 'ap_continue'
-  output_args = 'ap_done', 'ap_idle', 'ap_ready'
 
   for arg in input_args:
     println('input  %s;' % arg)
   for arg in output_args:
     println('output %s;' % arg)
   for port_name, _, haoda_type, _ in outputs:
-    kwargs = dict(port_name=port_name, **FIFO_PORT_SUFFIXES)
-    println('output [{}:0] {port_name}_V_V{data_in};'.format(
-        util.get_width_in_bits(haoda_type) - 1, **kwargs))
-    println('input  {port_name}_V_V{not_full};'.format(**kwargs))
-    println('output {port_name}_V_V{write_enable};'.format(**kwargs))
+    width = util.get_width_in_bits(haoda_type)
+    kwargs = dict(port_name=port_name,
+                  **FIFO_PORT_SUFFIXES,
+                  **AXIS_PORT_SUFFIXES)
+    println('output [{}:0] {port_name}{data};'.format(width - 1, **kwargs))
+    println('output [{}:0] {port_name}{keep};'.format(width // 8 - 1, **kwargs))
+    println('output [{}:0] {port_name}{strb};'.format(width // 8 - 1, **kwargs))
+    println('output {port_name}{last};'.format(**kwargs))
+    println('output {port_name}{valid};'.format(**kwargs))
+    println('input {port_name}{ready};'.format(**kwargs))
+    println('wire {port_name}{data_in};'.format(**kwargs))
+    println('wire {port_name}{not_full};'.format(**kwargs))
+    println('wire {port_name}{write_enable};'.format(**kwargs))
   for port_name, _, haoda_type, _ in inputs:
-    kwargs = dict(port_name=port_name, **FIFO_PORT_SUFFIXES)
-    println('input  [{}:0] {port_name}_V_V{data_out};'.format(
-        util.get_width_in_bits(haoda_type) - 1, **kwargs))
-    println('input  {port_name}_V_V{not_empty};'.format(**kwargs))
-    println('output {port_name}_V_V{read_enable};'.format(**kwargs))
+    width = util.get_width_in_bits(haoda_type)
+    kwargs = dict(port_name=port_name,
+                  **FIFO_PORT_SUFFIXES,
+                  **AXIS_PORT_SUFFIXES)
+    println('input [{}:0] {port_name}{data};'.format(width - 1, **kwargs))
+    println('input [{}:0] {port_name}{keep};'.format(width // 8 - 1, **kwargs))
+    println('input [{}:0] {port_name}{strb};'.format(width // 8 - 1, **kwargs))
+    println('input {port_name}{last};'.format(**kwargs))
+    println('input {port_name}{valid};'.format(**kwargs))
+    println('output {port_name}{ready};'.format(**kwargs))
+    println('wire {port_name}{data_out};'.format(**kwargs))
+    println('wire {port_name}{not_empty};'.format(**kwargs))
+    println('wire {port_name}{read_enable};'.format(**kwargs))
   println()
 
-  println("reg ap_done = 1'b0;")
-  println("reg ap_idle = 1'b1;")
-  println("reg ap_ready = 1'b0;")
+  fifos = set()
+  for port_name, _, haoda_type, _ in inputs + outputs:
+    width = util.get_width_in_bits(haoda_type)
+    kwargs = dict(port_name=port_name, **AXIS_PORT_SUFFIXES)
+    println('wire [{}:0] {port_name}{data};'.format(width - 1, **kwargs))
+    println('wire [{}:0] {port_name}{keep};'.format(width // 8 - 1, **kwargs))
+    println('wire [{}:0] {port_name}{strb};'.format(width // 8 - 1, **kwargs))
+    println('wire {port_name}{last};'.format(**kwargs))
+    println('wire {port_name}{valid};'.format(**kwargs))
+    println('wire {port_name}{ready};'.format(**kwargs))
+    fifos.add((width, 2))
+  println()
+
+  ap_rst_reg_level = 16
+  println('wire ap_rst_reg_0 = ap_rst;')
+  for i in range(ap_rst_reg_level):
+    println('(* shreg_extract = "no"%s *) reg ap_rst_reg_%d;' %
+            (', max_fanout = %d' %
+             4 ** (i + 1) if i + 1 < ap_rst_reg_level else '', i + 1))
+  if ap_rst_reg_level > 0:
+    with printer.initial():
+      for i in range(ap_rst_reg_level):
+        println("#0 ap_rst_reg_%d = 1'b1;" % (i + 1))
+    with printer.always('posedge ap_clk'):
+      for i in range(ap_rst_reg_level):
+        println('ap_rst_reg_%d <= ap_rst_reg_%d;' % (i + 1, i))
+  println('wire ap_rst_reg = ap_rst_reg_%d;' % ap_rst_reg_level)
 
   for port_name, _, haoda_type, _ in outputs:
-    kwargs = dict(port_name=port_name, **FIFO_PORT_SUFFIXES)
-    println('reg [{}:0] {port_name}{data_in};'.format(
-        util.get_width_in_bits(haoda_type) - 1, **kwargs))
-    println('wire {port_name}_V_V{write_enable};'.format(**kwargs))
+    width = util.get_width_in_bits(haoda_type)
+    kwargs = dict(port_name=port_name,
+                  width=width // 8,
+                  ones='1' * (width // 8),
+                  **AXIS_PORT_SUFFIXES)
+    println("assign {port_name}{keep} = {width}'b{ones};".format(**kwargs))
+    println("assign {port_name}{strb} = {width}'b{ones};".format(**kwargs))
+    println("assign {port_name}{last} = 1'b0;".format(**kwargs))
+
   for port_name, _, haoda_type, _ in inputs:
-    println('wire {}_V_V{read_enable};'.format(port_name, **FIFO_PORT_SUFFIXES))
-  println('reg ap_rst_n_inv;')
-  with printer.always('*'):
-    println('ap_rst_n_inv = ap_rst;')
-  println()
+    width = util.get_width_in_bits(haoda_type)
+    kwargs = dict(name=port_name, **FIFO_PORT_SUFFIXES, **AXIS_PORT_SUFFIXES)
+    args = collections.OrderedDict((
+        ('clk', 'ap_clk'),
+        ('reset', 'ap_rst_reg'),
+        ('if_read_ce', "1'b1"),
+        ('if_write_ce', "1'b1"),
+        ('if{data_in}'.format(**kwargs),
+          '{name}{data}'.format(**kwargs)),
+        ('if{not_full}'.format(**kwargs),
+          '{name}{ready}'.format(**kwargs)),
+        ('if{write_enable}'.format(**kwargs),
+          '{name}{valid}'.format(**kwargs)),
+        ('if{data_out}'.format(**kwargs),
+          '{name}{data_out}'.format(**kwargs)),
+        ('if{not_empty}'.format(**kwargs),
+          '{name}{not_empty}'.format(**kwargs)),
+        ('if{read_enable}'.format(**kwargs),
+          '{name}{read_enable}'.format(**kwargs))
+    ))
+    printer.module_instance('fifo_w{width}_d{depth}_A'.format(
+        width=width, depth=2), port_name + '_fifo', args)
+    println()
 
-  with printer.always('posedge ap_clk'):
-    with printer.if_('ap_rst'):
-      println("ap_done <= 1'b0;")
-      println("ap_idle <= 1'b1;")
-      println("ap_ready <= 1'b0;")
-      printer.else_()
-      println('ap_idle <= ~ap_start;')
 
-  for port_name, _, _, _ in outputs:
-    println('reg {}_V_V{not_block};'.format(port_name, **FIFO_PORT_SUFFIXES))
-  for port_name, _, _, _ in inputs:
-    println('reg {}_V_V{not_block};'.format(port_name, **FIFO_PORT_SUFFIXES))
-
-  with printer.always('*'):
-    for port_name, _, _, _ in outputs:
-      println('{port_name}_V_V{not_block} = {port_name}_V_V{not_full};'.format(
-          port_name=port_name, **FIFO_PORT_SUFFIXES))
-    for port_name, _, _, _ in inputs:
-      println('{port_name}_V_V{not_block} = {port_name}_V_V{not_empty};'.format(
-          port_name=port_name, **FIFO_PORT_SUFFIXES))
-  println()
+  for port_name, _, haoda_type, _ in outputs:
+    width = util.get_width_in_bits(haoda_type)
+    kwargs = dict(name=port_name, **FIFO_PORT_SUFFIXES, **AXIS_PORT_SUFFIXES)
+    args = collections.OrderedDict((
+        ('clk', 'ap_clk'),
+        ('reset', 'ap_rst_reg'),
+        ('if_read_ce', "1'b1"),
+        ('if_write_ce', "1'b1"),
+        ('if{data_in}'.format(**kwargs),
+          '{name}{data_in}'.format(**kwargs)),
+        ('if{not_full}'.format(**kwargs),
+          '{name}{not_full}'.format(**kwargs)),
+        ('if{write_enable}'.format(**kwargs),
+          '{name}{write_enable}'.format(**kwargs)),
+        ('if{data_out}'.format(**kwargs),
+          '{name}{data}'.format(**kwargs)),
+        ('if{not_empty}'.format(**kwargs),
+          '{name}{valid}'.format(**kwargs)),
+        ('if{read_enable}'.format(**kwargs),
+          '{name}{ready}'.format(**kwargs))
+    ))
+    printer.module_instance('fifo_w{width}_d{depth}_A'.format(
+        width=width, depth=2), port_name + '_fifo', args)
+    println()
 
   for module in super_source.tpo_node_gen():
     for fifo in module.fifos:
@@ -293,7 +354,7 @@ def print_top_module(printer, super_source, inputs, outputs):
 
       args = collections.OrderedDict((
           ('clk', 'ap_clk'),
-          ('reset', 'ap_rst_n_inv'),
+          ('reset', 'ap_rst_reg'),
           ('if_read_ce', "1'b1"),
           ('if_write_ce', "1'b1"),
           ('if{data_in}'.format(**kwargs),
@@ -315,19 +376,19 @@ def print_top_module(printer, super_source, inputs, outputs):
 
   for module in super_source.tpo_node_gen():
     module_trait, module_trait_id = super_source.module_table[module]
-    args = collections.OrderedDict((('ap_clk', 'ap_clk'),
-                        ('ap_rst', 'ap_rst_n_inv'),
-                        ('ap_start', "1'b1")))
+    args = collections.OrderedDict(
+        (('ap_clk', 'ap_clk'), ('ap_rst', 'ap_rst_reg'), ('ap_start', "1'b1")))
     for dram_ref, bank in module.dram_writes:
       kwargs = dict(port=dram_ref.dram_fifo_name(bank),
                     fifo=util.get_port_name(dram_ref.var, bank),
-                    **FIFO_PORT_SUFFIXES)
+                    **FIFO_PORT_SUFFIXES,
+                    **AXIS_PORT_SUFFIXES)
       args['{port}_V{data_in}'.format(**kwargs)] = \
-                       '{fifo}_V_V{data_in}'.format(**kwargs)
+                       '{fifo}{data_in}'.format(**kwargs)
       args['{port}_V{not_full}'.format(**kwargs)] = \
-                       '{fifo}_V_V{not_full}'.format(**kwargs)
+                       '{fifo}{not_full}'.format(**kwargs)
       args['{port}_V{write_enable}'.format(**kwargs)] = \
-                       '{fifo}_V_V{write_enable}'.format(**kwargs)
+                       '{fifo}{write_enable}'.format(**kwargs)
     for port, fifo in zip(module_trait.output_fifos, module.output_fifos):
       kwargs = dict(port=port, fifo=fifo, **FIFO_PORT_SUFFIXES)
       args['{port}_V{data_in}'.format(**kwargs)] = \
@@ -337,7 +398,9 @@ def print_top_module(printer, super_source, inputs, outputs):
       args['{port}_V{write_enable}'.format(**kwargs)] = \
                        '{fifo}{write_enable}'.format(**kwargs)
     for port, fifo in zip(module_trait.input_fifos, module.input_fifos):
-      kwargs = dict(port=port, fifo=fifo, **FIFO_PORT_SUFFIXES)
+      kwargs = dict(port=port,
+                    fifo=fifo,
+                    **FIFO_PORT_SUFFIXES)
       args['{port}_V{data_out}'.format(**kwargs)] = \
                        "{{1'b1, {fifo}{data_out}}}".format(**kwargs)
       args['{port}_V{not_empty}'.format(**kwargs)] = \
@@ -347,132 +410,21 @@ def print_top_module(printer, super_source, inputs, outputs):
     for dram_ref, bank in module.dram_reads:
       kwargs = dict(port=dram_ref.dram_fifo_name(bank),
                     fifo=util.get_port_name(dram_ref.var, bank),
-                    **FIFO_PORT_SUFFIXES)
+                    **FIFO_PORT_SUFFIXES,
+                    **AXIS_PORT_SUFFIXES)
       args['{port}_V{data_out}'.format(**kwargs)] = \
-                       "{{1'b1, {fifo}_V_V{data_out}}}".format(**kwargs)
+                       "{{1'b1, {fifo}{data_out}}}".format(**kwargs)
       args['{port}_V{not_empty}'.format(**kwargs)] = \
-                       '{fifo}_V_V{not_empty}'.format(**kwargs)
+                       '{fifo}{not_empty}'.format(**kwargs)
       args['{port}_V{read_enable}'.format(**kwargs)] = \
-                       '{fifo}_V_V{read_enable}'.format(**kwargs)
+                       '{fifo}{read_enable}'.format(**kwargs)
     printer.module_instance(util.get_func_name(module_trait_id), module.name,
                             args)
     println()
   printer.endmodule()
 
-  fifos = set()
   for module in super_source.tpo_node_gen():
     for fifo in module.fifos:
       fifos.add((fifo.width_in_bits, fifo.depth + 2))
   for fifo in fifos:
     printer.fifo_module(*fifo)
-
-def print_dataflow_hls_interface(printer, top_name, inputs, outputs):
-  println = printer.println
-  do_scope = printer.do_scope
-  un_scope = printer.un_scope
-  do_indent = printer.do_indent
-  un_indent = printer.un_indent
-  m_axi_ports = outputs + inputs
-  print_func = printer.print_func
-
-  println('#include <cstddef>')
-  println('#include <cstdint>')
-  println('#include <ap_int.h>')
-  println('#include <hls_stream.h>')
-
-  println('template<int kBurstWidth>')
-  print_func('void BurstRead', [
-      'hls::stream<ap_uint<kBurstWidth>>* to', 'ap_uint<kBurstWidth>* from',
-      'uint64_t data_num'], align=0)
-  do_scope()
-  println('load_epoch:', 0)
-  with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
-    println('#pragma HLS pipeline II=1', 0)
-    println('to->write(from[epoch]);')
-  un_scope()
-
-  println('template<typename T>')
-  print_func('void BurstRead', ['hls::stream<T>* to', 'T* from',
-                                'uint64_t data_num'], align=0)
-  do_scope()
-  println('burst_load_epoch:', 0)
-  with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
-    println('#pragma HLS pipeline II=1', 0)
-    println('to->write(from[epoch]);')
-  un_scope()
-
-  println('template<int kBurstWidth>')
-  print_func('void BurstWrite', [
-      'ap_uint<kBurstWidth>* to', 'hls::stream<ap_uint<kBurstWidth>>* from',
-      'uint64_t data_num'], align=0)
-  do_scope()
-  println('store_epoch:', 0)
-  with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
-    println('#pragma HLS pipeline II=1', 0)
-    println('to[epoch] = from->read();')
-  un_scope()
-
-  println('template<typename T>')
-  print_func('void BurstWrite', ['T* to', 'hls::stream<T>* from',
-                                 'uint64_t data_num'], align=0)
-  do_scope()
-  println('burst_store_epoch:', 0)
-  with printer.for_('uint64_t epoch = 0', 'epoch < data_num', '++epoch'):
-    println('#pragma HLS pipeline II=1', 0)
-    println('to[epoch] = from->read();')
-  un_scope()
-
-  params = ['hls::stream<{}>* {}'.format(util.get_c_type(haoda_type), name)
-            for name, _, haoda_type, _ in m_axi_ports]
-  print_func('void Dataflow', params, align=0)
-  do_scope()
-  for name, _, haoda_type, _ in inputs:
-    println('volatile {c_type} {name}_read;'.format(
-        c_type=util.get_c_type(haoda_type), name=name))
-  for name, _, haoda_type, _ in inputs:
-    println('{name}_read = {name}->read();'.format(name=name))
-  for name, _, haoda_type, _ in outputs:
-    println(
-        '{name}->write({c_type}());'.format(
-        c_type=util.get_c_type(haoda_type), name=name))
-  un_scope()
-
-  params = ['{}* {}'.format(util.get_c_type(haoda_type), name)
-            for name, _, haoda_type, _ in m_axi_ports]
-  params.append('uint64_t coalesced_data_num')
-  print_func('void %s' % top_name, params, align=0)
-  do_scope()
-
-  println('#pragma HLS dataflow', 0)
-
-  for port_name, bundle_name, _, _ in m_axi_ports:
-    println('#pragma HLS interface m_axi port={} offset=slave bundle={}'.format(
-        port_name, bundle_name), 0)
-  for port_name, _, _, _ in m_axi_ports:
-    println('#pragma HLS interface s_axilite port={} bundle=control'.format(
-        port_name), 0)
-  println('#pragma HLS interface s_axilite port=coalesced_data_num '
-          'bundle=control', 0)
-  println('#pragma HLS interface s_axilite port=return bundle=control', 0)
-  println()
-
-  for _, _, haoda_type, name in m_axi_ports:
-    println('hls::stream<{c_type}> {name}("{name}");'.format(
-        c_type=util.get_c_type(haoda_type), name=name))
-    println('#pragma HLS stream variable={name} depth=32'.format(name=name), 0)
-
-  for port_name, _, haoda_type, buf_name in inputs:
-    print_func('BurstRead', [
-        '&{name}'.format(name=buf_name), '{name}'.format(name=port_name),
-        'coalesced_data_num'], suffix=';', align=0)
-
-  params = ['&{}'.format(name) for _, _, _, name in m_axi_ports]
-  printer.print_func('Dataflow', params, suffix=';', align=0)
-
-  for port_name, _, haoda_type, buf_name in outputs:
-    print_func('BurstWrite', [
-        '{name}'.format(name=port_name), '&{name}'.format(name=buf_name),
-        'coalesced_data_num'],
-               suffix=';', align=0)
-
-  un_scope()
