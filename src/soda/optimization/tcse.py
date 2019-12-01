@@ -239,7 +239,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
 
   new_local_stmts = []
   cses = OrderedDict()  # type: Dict[ir.BinaryOp, ir.Ref]
-  seen = set()
+  seen = set()  # type: Set[ir.Expr]
   for stmt in itertools.chain(stencil.local_stmts, stencil.output_stmts):
     stmt.propagate_type(stencil.symbol_table)
     stmt.expr = stmt.expr.visit(visitor, cses)
@@ -247,8 +247,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
     for expr, ref in cses.items():
       if expr in seen:
         continue
-      else:
-        seen.add(expr)
+      seen.add(expr)
       expr = stencil.propagate_type(expr, stmt)
       new_local_stmts.append(
           grammar.LocalStmt(ref=ref,
@@ -1178,9 +1177,9 @@ class GreedySchedules(ScheduleBase):
       right_rattr, right_aattr = right
       distance = right_rattr - left_rattr
       new_aattr = left_aattr, right_aattr
-      operation = CommSchedule(  # type: ignore
-          left_aattr, right_aattr, distance, (left_rattr, right_rattr),
-          new_aattr)
+      operation = CommSchedule(left_aattr, right_aattr, distance,
+                               (left_rattr, right_rattr),
+                               new_aattr)  # type: ignore
       if operation in reuses:
         continue
       #_logger.debug('look for operation: %s', operation)
@@ -1369,9 +1368,9 @@ class BeamSchedules(ScheduleBase):
       right_rattr, right_aattr = right
       distance = right_rattr - left_rattr
       new_aattr = left_aattr, right_aattr
-      operation = CommSchedule(  # type: ignore
-          left_aattr, right_aattr, distance, (left_rattr, right_rattr),
-          new_aattr)
+      operation = CommSchedule(left_aattr, right_aattr, distance,
+                               (left_rattr, right_rattr),
+                               new_aattr)  # type: ignore
       if operation in reuses:
         continue
       #_logger.debug('look for operation: %s', operation)
@@ -1757,7 +1756,7 @@ class ExternalSchedules(ScheduleBase):
 
 
 Schedule = CommSchedule
-Schedules = Union[CommSchedules, GreedySchedules, GloreSchedules,
+Schedules = Union[CommSchedules, GreedySchedules, GloreSchedules, BeamSchedules,
                   ExternalSchedules]
 
 

@@ -327,7 +327,7 @@ def print_code(stencil, output_file):
   _print_burst_write(printer)
 
   for module_trait_id, module_trait in enumerate(stencil.module_traits):
-    _print_module_definition(printer, module_trait, module_trait_id,
+    print_module_definition(printer, module_trait, module_trait_id,
                            burst_width=stencil.burst_width)
 
 
@@ -405,7 +405,7 @@ def _print_module_func_call(printer, node, module_trait_id, **kwargs):
   print_func(func_name, params, suffix=';', align=0)
 
 # pylint: disable=too-many-branches,too-many-statements
-def _print_module_definition(printer, module_trait, module_trait_id, **kwargs):
+def print_module_definition(printer, module_trait, module_trait_id, **kwargs):
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope
