@@ -17,7 +17,7 @@ def _print_interface(printer, kernel_name, inputs, outputs, super_source):
   Currently only streaming applications are supported.
 
   Args:
-    printer: Printer to which the code is emitted.
+    printer: CppPrinter to which the code is emitted.
     kernel_name: str, name of the kernel.
     inputs: Sequence of (name, c_type, bank, depth) tuples, specifies the m_axi
       input interfaces.
@@ -303,7 +303,7 @@ def _print_burst_write(printer):
 
 def print_code(stencil, output_file):
   _logger.info('generate kernel code as %s' % output_file.name)
-  printer = util.Printer(output_file)
+  printer = util.CppPrinter(output_file)
 
   print_header(printer)
 

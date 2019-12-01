@@ -87,7 +87,7 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
     args = []
     for module_trait_id, module_trait in enumerate(stencil.module_traits):
       sio = io.StringIO()
-      hls_kernel._print_module_definition(util.Printer(sio),
+      hls_kernel._print_module_definition(util.CppPrinter(sio),
                                           module_trait,
                                           module_trait_id,
                                           burst_width=stencil.burst_width)

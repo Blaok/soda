@@ -264,19 +264,19 @@ def print_wrapped(printer, stencil):
 
   def for_banks():
     return printer.for_('auto bank', '{{{}}}'.format(
-        ', '.join(map(str, range(util.MAX_DRAM_BANK)))))
+        ', '.join(map(str, range(soda_util.MAX_DRAM_BANK)))))
 
   println('// change #bank if there is a env var defined')
   println('unordered_map<string, array<bool, %d>> use_bank;' %
-          util.MAX_DRAM_BANK)
+          soda_util.MAX_DRAM_BANK)
   println('unordered_map<string, int> num_bank;')
   println('unordered_map<string, array<int, %d>> bank_vec;' %
-          util.MAX_DRAM_BANK)
+          soda_util.MAX_DRAM_BANK)
   for stmt in stencil.output_stmts + stencil.input_stmts + stencil.param_stmts:
     name = stmt.name
     println('use_bank["{}"] = {{{}}};'.format(
         name, ', '.join('true' if _ in stmt.dram else 'false'
-                        for _ in range(util.MAX_DRAM_BANK))))
+                        for _ in range(soda_util.MAX_DRAM_BANK))))
     println('num_bank["{}"] = {{{}}};'.format(name, len(stmt.dram)))
     println('bank_vec["{}"] = {{{}}};'.format(
         name, ', '.join(map(str, stmt.dram))))
@@ -363,7 +363,7 @@ def print_wrapped(printer, stencil):
   println()
 
   for name in stencil.input_names + stencil.output_names:
-    println('cl_mem var_%s_cl_bank[%d] = {};' % (name, util.MAX_DRAM_BANK))
+    println('cl_mem var_%s_cl_bank[%d] = {};' % (name, soda_util.MAX_DRAM_BANK))
   println()
 
   for name in stencil.param_names:
@@ -561,10 +561,10 @@ def print_wrapped(printer, stencil):
   println()
 
   println('const unsigned XCL_MEM_DDR_BANK[%d] = {%s};' % (
-      util.MAX_DRAM_BANK,
-      ', '.join('XCL_MEM_DDR_BANK%d' % _ for _ in range(util.MAX_DRAM_BANK))))
+      soda_util.MAX_DRAM_BANK,
+      ', '.join('XCL_MEM_DDR_BANK%d' % _ for _ in range(soda_util.MAX_DRAM_BANK))))
   println('unordered_map<string, array<cl_mem_ext_ptr_t, %d>> mem_ext_bank;' %
-          util.MAX_DRAM_BANK)
+          soda_util.MAX_DRAM_BANK)
   with printer.for_('const auto& use_bank_pair', 'use_bank'):
     with for_banks():
       with printer.if_('use_bank_pair.second[bank]'):
@@ -604,7 +604,7 @@ def print_wrapped(printer, stencil):
   println()
 
   println('cl_event write_events[%d];' % (
-      util.MAX_DRAM_BANK*len(stencil.input_stmts)+len(stencil.param_stmts)))
+      soda_util.MAX_DRAM_BANK*len(stencil.input_stmts)+len(stencil.param_stmts)))
   println('cl_event* write_event_ptr = write_events;')
   for param in stencil.param_stmts:
     println('%s* var_%s_buf = (%s*)clEnqueueMapBuffer(commands, var_%s_cl, '
@@ -614,7 +614,7 @@ def print_wrapped(printer, stencil):
                 '*'.join(map(str, param.size)), param.c_type))
   for stmt in stencil.input_stmts:
     println('{stmt.c_type}* var_{stmt.name}_buf_bank[{}] = {{}};'.format(
-        util.MAX_DRAM_BANK, stmt=stmt))
+        soda_util.MAX_DRAM_BANK, stmt=stmt))
   for stmt in stencil.input_stmts:
     with for_banks():
       with printer.if_('use_bank["{name}"][bank]'.format(name=stmt.name)):
@@ -638,21 +638,21 @@ def print_wrapped(printer, stencil):
 
   println('#pragma omp parallel for', 0)
   println('for(int32_t {0} = 0; {0} < {1}_size_dim_{2}; ++{0})'.format(
-      util.COORDS_IN_TILE[stencil.dim-1], stencil.input_names[0],
+      soda_util.COORDS_IN_TILE[stencil.dim-1], stencil.input_names[0],
       stencil.dim-1))
   do_scope()
   for dim in range(stencil.dim-2, -1, -1):
     println('for(int32_t {0} = 0; {0} < actual_tile_size_dim_{1}; '
-            '++{0})'.format(util.COORDS_IN_TILE[dim], dim))
+            '++{0})'.format(soda_util.COORDS_IN_TILE[dim], dim))
     do_scope()
 
   println('// (%s) is coordinates in tiled image' %
-          ', '.join(util.COORDS_TILED))
+          ', '.join(soda_util.COORDS_TILED))
   println('// (%s) is coordinates in original image' %
-          ', '.join(util.COORDS_IN_ORIG))
-  println('// (%s) is coordinates in a tile' % ', '.join(util.COORDS_IN_TILE))
+          ', '.join(soda_util.COORDS_IN_ORIG))
+  println('// (%s) is coordinates in a tile' % ', '.join(soda_util.COORDS_IN_TILE))
   offset_in_tile = '+'.join('%c%s' % (
-      util.COORDS_IN_TILE[x],
+      soda_util.COORDS_IN_TILE[x],
       ''.join('*TILE_SIZE_DIM_%d' % xx for xx in range(x)))
                             for x in range(stencil.dim))
   println('int32_t burst_index = ({}) / (BURST_WIDTH / {stmt.width_in_bits} * '
@@ -663,10 +663,10 @@ def print_wrapped(printer, stencil):
               offset_in_tile, stmt=stencil.input_stmts[0]))
   for dim in range(stencil.dim-1):
     println('int32_t {0} = tile_index_dim_{1}*(TILE_SIZE_DIM_{1}-STENCIL_DIM_'
-            '{1}+1)+{2};'.format(util.COORDS_IN_ORIG[dim], dim,
-                                 util.COORDS_IN_TILE[dim]))
-  println('int32_t %c = %c;' % (util.COORDS_IN_ORIG[stencil.dim-1],
-                                util.COORDS_IN_TILE[stencil.dim-1]))
+            '{1}+1)+{2};'.format(soda_util.COORDS_IN_ORIG[dim], dim,
+                                 soda_util.COORDS_IN_TILE[dim]))
+  println('int32_t %c = %c;' % (soda_util.COORDS_IN_ORIG[stencil.dim-1],
+                                soda_util.COORDS_IN_TILE[stencil.dim-1]))
   println('int64_t tiled_offset = ({}) * tile_size_linearized_i + burst_index *'
           ' (BURST_WIDTH / {stmt.width_in_bits} * num_bank["{stmt.name}"]) + bu'
           'rst_residue;'.format('+'.join(
@@ -674,7 +674,7 @@ def print_wrapped(printer, stencil):
                   'tile_num_dim_%d*'%xx for xx in range(x)), x)
               for x in range(stencil.dim-1)), stmt=stencil.input_stmts[0]))
   println('int64_t original_offset = %s;' % '+'.join(
-      '%c*var_%s_stride_%d' % (util.COORDS_IN_ORIG[x], stencil.input_names[0],
+      '%c*var_%s_stride_%d' % (soda_util.COORDS_IN_ORIG[x], stencil.input_names[0],
                                x) for x in range(stencil.dim)))
   for name in stencil.input_names:
     println('var_{name}_buf_bank[bank_vec["{name}"]'
@@ -804,11 +804,11 @@ def print_wrapped(printer, stencil):
   println()
 
   println('cl_event read_events[%d];' % (
-      util.MAX_DRAM_BANK*len(stencil.output_stmts)))
+      soda_util.MAX_DRAM_BANK*len(stencil.output_stmts)))
   println('cl_event* read_event_ptr = read_events;')
   for stmt in stencil.output_stmts:
     println('{stmt.c_type}* var_{stmt.name}_buf_bank[{}] = {{}};'.format(
-        util.MAX_DRAM_BANK, stmt=stmt))
+        soda_util.MAX_DRAM_BANK, stmt=stmt))
   for stmt in stencil.output_stmts:
     with for_banks():
       with printer.if_('use_bank["{name}"][bank]'.format(name=stmt.name)):
@@ -837,7 +837,7 @@ def print_wrapped(printer, stencil):
     overall_stencil_dim = util.get_stencil_dim(overall_stencil_window)
     println('for(int32_t {var} = 0; {var} < {0}_size_dim_{1}; ++{var})'.format(
         stencil.input.name, stencil.dim-1,
-        var=util.COORDS_IN_TILE[stencil.dim-1]))
+        var=soda_util.COORDS_IN_TILE[stencil.dim-1]))
     do_scope()
     for dim in range(stencil.dim-2, -1, -1):
       println('for(int32_t {var} = tile_index_dim_{dim}==0 ? 0 : {0}; {var} < a'
@@ -845,7 +845,7 @@ def print_wrapped(printer, stencil):
               'im}-1 ? 0 : {1}); ++{var})'.format(
                   overall_stencil_offset[dim],
                   overall_stencil_dim[dim]-1-overall_stencil_offset[dim],
-                  dim=dim, var=util.COORDS_IN_TILE[dim]))
+                  dim=dim, var=soda_util.COORDS_IN_TILE[dim]))
       do_scope()
   else:
     overall_stencil_window = core.get_overall_stencil_window(
@@ -860,35 +860,35 @@ def print_wrapped(printer, stencil):
                       stencil.output_names[0], stencil.dim-1,
                       overall_stencil_dim[stencil.dim-1]-1-
                       overall_stencil_offset[stencil.dim-1],
-                      var=util.COORDS_IN_TILE[stencil.dim-1]))
+                      var=soda_util.COORDS_IN_TILE[stencil.dim-1]))
     do_scope()
     for dim in range(stencil.dim-2, -1, -1):
       println('for(int32_t {var} = {}; {var} < actual_tile_size_dim_{}-{}; '
               '++{var})'.format(
           overall_stencil_offset[dim], dim,
           overall_stencil_dim[dim]-1-overall_stencil_offset[dim],
-          var=util.COORDS_IN_TILE[dim]))
+          var=soda_util.COORDS_IN_TILE[dim]))
       do_scope()
 
   println('// (%s) is coordinates in tiled image' %
-          ', '.join(util.COORDS_TILED))
+          ', '.join(soda_util.COORDS_TILED))
   println('// (%s) is coordinates in original image' %
-          ', '.join(util.COORDS_IN_ORIG))
+          ', '.join(soda_util.COORDS_IN_ORIG))
   println('// (%s) is coordinates in a tile' %
-          ', '.join(util.COORDS_IN_TILE))
+          ', '.join(soda_util.COORDS_IN_TILE))
   offset_in_tile = '+'.join(
-      '%c%s' % (util.COORDS_IN_TILE[x],
+      '%c%s' % (soda_util.COORDS_IN_TILE[x],
                 ''.join('*TILE_SIZE_DIM_%d'%xx for xx in range(x)))
       for x in range(stencil.dim))
   for dim in range(stencil.dim-1):
     println('int32_t {0} = tile_index_dim_{1}*(TILE_SIZE_DIM_{1}-STENCIL_DIM_{1'
-            '}+1)+{2};'.format(util.COORDS_IN_ORIG[dim], dim,
-                               util.COORDS_IN_TILE[dim]))
-  println('int32_t %c = %c;' % (util.COORDS_IN_ORIG[stencil.dim-1],
-                                util.COORDS_IN_TILE[stencil.dim-1]))
+            '}+1)+{2};'.format(soda_util.COORDS_IN_ORIG[dim], dim,
+                               soda_util.COORDS_IN_TILE[dim]))
+  println('int32_t %c = %c;' % (soda_util.COORDS_IN_ORIG[stencil.dim-1],
+                                soda_util.COORDS_IN_TILE[stencil.dim-1]))
   println('int64_t original_offset = %s;' % '+'.join(
       '%c*var_%s_stride_%d' % (
-          util.COORDS_IN_ORIG[x], stencil.output_names[0], x)
+          soda_util.COORDS_IN_ORIG[x], stencil.output_names[0], x)
       for x in range(stencil.dim)))
   for stmt in stencil.output_stmts:
     overall_stencil_window = core.get_overall_stencil_window(
@@ -1060,13 +1060,13 @@ def print_test(printer, stencil):
     for d in range(0, stencil.dim):
       dim = stencil.dim-d-1
       println('for(int32_t {var} = 0; {var}<dims[{}]; ++{var})'.format(
-          dim, var=util.COORDS_IN_ORIG[dim]))
+          dim, var=soda_util.COORDS_IN_ORIG[dim]))
       do_scope()
-    init_val = '+'.join(util.COORDS_IN_ORIG[0:input_dim])
+    init_val = '+'.join(soda_util.COORDS_IN_ORIG[0:input_dim])
     if util.is_float(stencil.symbol_table[name]):
       init_val = 'distribution(generator)'
     println('%s_img[%s] = %s;' % (
-        name, '+'.join('%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], name, d)
+        name, '+'.join('%c*%s.stride[%d]' % (soda_util.COORDS_IN_ORIG[d], name, d)
                        for d in range(input_dim)), init_val))
     for d in range(0, input_dim):
       un_scope()
@@ -1076,13 +1076,13 @@ def print_test(printer, stencil):
     println('#pragma omp parallel for', 0)
     for dim, size in enumerate(param.size):
       println('for(int32_t {var} = 0; {var}<{}; ++{var})'.format(
-          size, var=util.COORDS_IN_ORIG[dim]))
+          size, var=soda_util.COORDS_IN_ORIG[dim]))
       do_scope()
     println('%s_img%s = %s;' % (
         param.name,
-        sum(('[%c]' % (util.COORDS_IN_ORIG[d])
+        sum(('[%c]' % (soda_util.COORDS_IN_ORIG[d])
              for d in range(len(param.size))), ''),
-        '+'.join(util.COORDS_IN_ORIG[0:len(param.size)])))
+        '+'.join(soda_util.COORDS_IN_ORIG[0:len(param.size)])))
     for d in param.size:
       un_scope()
     println()
@@ -1109,7 +1109,7 @@ def print_test(printer, stencil):
       dim = stencil.dim-d-1
       println('for(int32_t {var} = {}; {var}<dims[{}]-{}; ++{var})'.format(
           output_idx[dim], dim, stencil_dim[dim]-output_idx[dim]-1,
-          var=util.COORDS_IN_ORIG[dim]))
+          var=soda_util.COORDS_IN_ORIG[dim]))
       do_scope()
 
     def mutate_load_for_host(obj, args):
@@ -1119,7 +1119,7 @@ def print_test(printer, stencil):
               obj.name, ''.join('[%d]' % _ for _ in obj.idx)))
         return ir.make_var('%s_img[%s]' % (
             obj.name, '+'.join('(%c%+d)*%s.stride[%d]' % (
-                util.COORDS_IN_ORIG[d], obj.idx[d] - tensor.st_ref.idx[d],
+                soda_util.COORDS_IN_ORIG[d], obj.idx[d] - tensor.st_ref.idx[d],
                 obj.name, d) for d in range(stencil.dim))))
       return obj
     def mutate_store_for_host(obj, args):
@@ -1127,7 +1127,7 @@ def print_test(printer, stencil):
         if obj.name in stencil.output_names:
           return ir.make_var('%s result_%s' % (obj.c_type, obj.name))
         return ir.make_var('%s_img[%s]' % (obj.name, '+'.join(
-            '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], obj.name, d)
+            '%c*%s.stride[%d]' % (soda_util.COORDS_IN_ORIG[d], obj.name, d)
             for d in range(stencil.dim))))
       return obj
     for let in tensor.lets:
@@ -1139,7 +1139,7 @@ def print_test(printer, stencil):
                               tensor.expr.visit(mutate_load_for_host).c_expr))
     if tensor.is_output():
       run_result = '%s_img[%s]' % (tensor.name, '+'.join(
-          '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d], tensor.name, d)
+          '%c*%s.stride[%d]' % (soda_util.COORDS_IN_ORIG[d], tensor.name, d)
           for d in range(stencil.dim)))
       println('%s val_fpga = %s;' % (tensor.c_type, run_result))
       println('%s val_cpu = result_%s;' % (tensor.c_type, tensor.name))
@@ -1156,14 +1156,14 @@ def print_test(printer, stencil):
                 '(val_cpu)*double(val_cpu)) > threshold)')
         do_scope()
         params = (', '.join(['%d']*stencil.dim),
-                  ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
+                  ', '.join(soda_util.COORDS_IN_ORIG[:stencil.dim]))
         println('fprintf(*error_report, "%%lf != %%lf @(%s)\\n", double'
                 '(val_fpga), double(val_cpu), %s);' % params)
       else:
         println('if(val_fpga!=val_cpu)')
         do_scope()
         params = (', '.join(['%d']*stencil.dim),
-                  ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
+                  ', '.join(soda_util.COORDS_IN_ORIG[:stencil.dim]))
         println('fprintf(*error_report, "%%ld != %%ld @(%s)\\n", int64_t'
                 '(val_fpga), int64_t(val_cpu), %s);' % params)
       println('++error_count;')
@@ -1184,16 +1184,16 @@ def print_test(printer, stencil):
       for d in range(0, stencil.dim):
         dim = stencil.dim-d-1
         println('for(int32_t {var} = 0; {var} < dims[{dim}]; ++{var})'.format(
-            var=util.COORDS_IN_ORIG[dim], dim=dim))
+            var=soda_util.COORDS_IN_ORIG[dim], dim=dim))
         do_scope()
       println('if(!(%s))' % ' && '.join(
           '{var} >= {} && {var}<dims[{}]-{}'.format(
               output_idx[d], d, stencil_dim[d]-output_idx[d]-1,
-              var=util.COORDS_IN_ORIG[d]) for d in range(stencil.dim)))
+              var=soda_util.COORDS_IN_ORIG[d]) for d in range(stencil.dim)))
       do_scope()
       GroudTruth = lambda c: '%s_img[%s + %d * %s.stride[%d]]' % (
           bb.name, '+'.join('%c*%s.stride[%d]' % (
-              util.COORDS_IN_ORIG[d], bb.name, d) for d in range(stencil.dim)),
+              soda_util.COORDS_IN_ORIG[d], bb.name, d) for d in range(stencil.dim)),
           c, bb.name, stencil.dim)
       for e in s.expr:
         println('%s = %s;' % (StorePrinter(e), GroudTruth(e.chan)))
@@ -1201,7 +1201,7 @@ def print_test(printer, stencil):
         for c in range(stencil.output.chan):
           run_result = '%s_img[%s+%d*%s.stride[%d]]' % (
               stencil.output.name, '+'.join(
-                  '%c*%s.stride[%d]' % (util.COORDS_IN_ORIG[d],
+                  '%c*%s.stride[%d]' % (soda_util.COORDS_IN_ORIG[d],
                                         stencil.output.name, d)
                   for d in range(stencil.dim)), c, stencil.output.name,
               stencil.dim)
@@ -1218,14 +1218,14 @@ def print_test(printer, stencil):
                     ') / (double(val_cpu) * double(val_cpu)) > threshold)')
             do_scope()
             params = (c, ', '.join(['%d']*stencil.dim),
-                      ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
+                      ', '.join(soda_util.COORDS_IN_ORIG[:stencil.dim]))
             println('fprintf(*error_report, "%%lf != %%lf @[%d](%s)\\n", double'
                     '(val_fpga), double(val_cpu), %s);' % params)
           else:
             println('if(val_fpga!=val_cpu)')
             do_scope()
             params = (c, ', '.join(['%d']*stencil.dim),
-                      ', '.join(util.COORDS_IN_ORIG[:stencil.dim]))
+                      ', '.join(soda_util.COORDS_IN_ORIG[:stencil.dim]))
             println('fprintf(*error_report, "%%ld != %%ld @[%d](%s)\\n", int64_'
                     't(val_fpga), int64_t(val_cpu), %s);' % params)
           println('++error_count;')
@@ -1256,7 +1256,7 @@ def print_test(printer, stencil):
 
 def print_code(stencil, host_file):
   logger.info('generate host source code as %s' % host_file.name)
-  printer = util.Printer(host_file)
+  printer = util.CppPrinter(host_file)
   println = printer.println
   do_scope = printer.do_scope
   un_scope = printer.un_scope

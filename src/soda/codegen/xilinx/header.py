@@ -6,7 +6,7 @@ logger = logging.getLogger().getChild(__name__)
 
 def print_code(stencil, header_file):
   logger.info('generate host header code as %s' % header_file.name)
-  printer = util.Printer(header_file)
+  printer = util.CppPrinter(header_file)
   println = printer.println
   do_indent = printer.do_indent
   un_indent = printer.un_indent

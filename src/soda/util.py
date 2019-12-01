@@ -1,6 +1,11 @@
 import functools
 import operator
 
+COORDS_TILED = 'xyzw'
+COORDS_IN_TILE = 'ijkl'
+COORDS_IN_ORIG = 'pqrs'
+MAX_DRAM_BANK = 4
+
 def serialize(vec, tile_size):
   return sum((vec[i]*functools.reduce(operator.mul, tile_size[:i])
         for i in range(1, len(tile_size))),
