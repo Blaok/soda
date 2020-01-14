@@ -13,6 +13,7 @@ ITERATE ?= 1
 CLUSTER ?= none
 BORDER ?= ignore
 SYNTHESIS_FLOW ?= hls
+BURST_WIDTH ?= 512
 
 ifneq ("$(REPLICATION_FACTOR)","")
 FACTOR_ARGUMENT := --replication-factor $(REPLICATION_FACTOR)
@@ -43,7 +44,7 @@ SRC ?= $(TMP)
 
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)$(shell git diff --exit-code --quiet 2>/dev/null || echo '-dirty')
 
-HOST_CFLAGS ?= -O2 -fopenmp -I$(TMP)
+HOST_CFLAGS ?= -O2 -fopenmp -I$(TMP) -Wno-deprecated-declarations
 HOST_LFLAGS ?= -fopenmp
 
 ifdef AWS_BUCKET
@@ -73,7 +74,7 @@ include sdaccel-examples/makefile
 ifeq ($(SYNTHESIS_FLOW),rtl)
 $(OBJ)/$(HW_XCLBIN:.xclbin=.xo): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP) $(OBJ)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse yes --border $(BORDER) --cluster $(CLUSTER) --xocl-hw-xo $@ $(SODA_SRC)/$(APP).soda
+	src/sodac $(FACTOR_ARGUMENT) --burst-width $(BURST_WIDTH) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse no --border $(BORDER) --cluster $(CLUSTER) --xocl-hw-xo $@ $(SODA_SRC)/$(APP).soda
 endif
 
 check-git-status:
@@ -83,15 +84,15 @@ kernel: $(TMP)/$(KERNEL_SRCS)
 
 $(TMP)/$(KERNEL_SRCS): $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse yes --border $(BORDER) --cluster $(CLUSTER) --xocl-kernel $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --burst-width $(BURST_WIDTH) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse no --border $(BORDER) --cluster $(CLUSTER) --xocl-kernel $@ $^
 
 $(TMP)/$(HOST_BIN).cpp: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse no --border $(BORDER) --cluster $(CLUSTER) --xocl-host $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --burst-width $(BURST_WIDTH) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse no --border $(BORDER) --cluster $(CLUSTER) --xocl-host $@ $^
 
 $(TMP)/$(APP).h: $(SODA_SRC)/$(APP).soda
 	@mkdir -p $(TMP)
-	src/sodac $(FACTOR_ARGUMENT) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse no --border $(BORDER) --cluster $(CLUSTER) --xocl-header $@ $^
+	src/sodac $(FACTOR_ARGUMENT) --burst-width $(BURST_WIDTH) --tile-size $(TILE_SIZE_DIM_0) $(TILE_SIZE_DIM_1) --dram-in $(DRAM_IN) --dram-out $(DRAM_OUT) --iterate $(ITERATE) --temporal-cse no --border $(BORDER) --cluster $(CLUSTER) --xocl-header $@ $^
 
 $(OBJ)/%.o: $(TMP)/%.cpp $(TMP)/$(APP).h
 	@mkdir -p $(OBJ)
