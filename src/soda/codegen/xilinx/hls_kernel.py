@@ -707,10 +707,10 @@ def _print_data_struct(printer):
 def _print_reinterpret(printer):
   println = printer.println
   println('template<typename To, typename From>')
-  println('inline To Reinterpret(const From& val)')
+  println('inline To Reinterpret(From val)')
   printer.do_scope()
   println('#pragma HLS inline', indent=0)
-  println('return reinterpret_cast<const To&>(val);')
+  println('return reinterpret_cast<To&>(val);')
   printer.un_scope()
 
 def _print_read_data(printer):
