@@ -9,6 +9,7 @@ import textx
 from haoda import util
 from soda import core
 from soda import grammar
+from soda.codegen.intel import opencl as iocl
 from soda.codegen.xilinx import opencl as xocl
 from soda.model import xilinx as model
 
@@ -93,6 +94,7 @@ def main():
             help='soda source code')
 
   xocl.add_arguments(parser.add_argument_group('Xilinx OpenCL backend'))
+  iocl.add_arguments(parser.add_argument_group('Intel OpenCL backend'))
 
   parser.add_argument('--model-file',
             type=str,
@@ -192,6 +194,7 @@ def main():
     logger.debug('stencil obtained: %s', stencil)
 
     xocl.print_code(stencil, args)
+    iocl.print_code(stencil, args)
 
     if args.estimation_file is not None:
       if args.model_file is None:
