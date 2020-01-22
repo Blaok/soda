@@ -70,9 +70,12 @@ def main():
             help='override iterate directive; '
             'repeat execution multiple times iteratively')
   parser.add_argument(
+    '--inline', type=str, metavar='(yes|no)', dest='inline', nargs='?',
+    const='yes', default='no')
+  parser.add_argument(
     '--temporal-cse', type=str, metavar=
     '(yes|no|greedy|optimal|glore|built-in|built-in:greedy|built-in:optimal)',
-    dest='temporal_cse', nargs='?', const='yes', default='yes',
+    dest='temporal_cse', nargs='?', const='yes', default='no',
     help='enable temporal common subexpression elimination or not')
   parser.add_argument('--border',
             type=str,
@@ -165,9 +168,11 @@ def main():
       unroll_factor = args.replication_factor
       replication_factor = args.replication_factor
 
-    optimizations = {'inline': ''}
+    optimizations = {}
     if args.temporal_cse != 'no':
       optimizations['tcse'] = args.temporal_cse
+    if args.inline != 'no':
+      optimizations['inline'] = args.inline
 
     stencil = core.Stencil(
       burst_width=args.burst_width if args.burst_width is not None
