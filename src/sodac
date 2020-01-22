@@ -7,11 +7,11 @@ import sys
 import textx
 
 from haoda import util
-from soda import core
-from soda import grammar
+from soda import core, grammar
 from soda.codegen.intel import opencl as iocl
 from soda.codegen.xilinx import opencl as xocl
 from soda.model import xilinx as model
+from soda.optimization import args as opt_args
 
 logging.basicConfig(level=logging.WARNING,
                     format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
@@ -69,14 +69,6 @@ def main():
             dest='iterate',
             help='override iterate directive; '
             'repeat execution multiple times iteratively')
-  parser.add_argument(
-    '--inline', type=str, metavar='(yes|no)', dest='inline', nargs='?',
-    const='yes', default='no')
-  parser.add_argument(
-    '--temporal-cse', type=str, metavar=
-    '(yes|no|greedy|optimal|glore|built-in|built-in:greedy|built-in:optimal)',
-    dest='temporal_cse', nargs='?', const='yes', default='no',
-    help='enable temporal common subexpression elimination or not')
   parser.add_argument('--border',
             type=str,
             metavar='(ignore|preserve)',
@@ -98,6 +90,7 @@ def main():
 
   xocl.add_arguments(parser.add_argument_group('Xilinx OpenCL backend'))
   iocl.add_arguments(parser.add_argument_group('Intel OpenCL backend'))
+  opt_args.add_arguments(parser.add_argument_group('SODA Optimizations'))
 
   parser.add_argument('--model-file',
             type=str,
@@ -168,12 +161,6 @@ def main():
       unroll_factor = args.replication_factor
       replication_factor = args.replication_factor
 
-    optimizations = {}
-    if args.temporal_cse != 'no':
-      optimizations['tcse'] = args.temporal_cse
-    if args.inline != 'no':
-      optimizations['inline'] = args.inline
-
     stencil = core.Stencil(
       burst_width=args.burst_width if args.burst_width is not None
                      else soda_model.burst_width,
@@ -194,7 +181,8 @@ def main():
       tile_size=tile_size,
       unroll_factor=unroll_factor,
       replication_factor=replication_factor,
-      optimizations=optimizations)
+      optimizations=opt_args.get_kwargs(args),
+    )
 
     logger.debug('stencil obtained: %s', stencil)
 
