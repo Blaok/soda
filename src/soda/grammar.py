@@ -8,7 +8,6 @@ import logging
 import toposort
 
 from haoda import ir
-from haoda import util as haoda_util
 from haoda.ir.arithmetic import base
 from soda import util
 
@@ -131,7 +130,7 @@ class LocalStmtOrOutputStmt(ir.Node):
     """
     symbol_table = self.symbol_table
     self.expr = base.propagate_type(self.expr, symbol_table)
-    if not haoda_util.same_type(self.expr.haoda_type, self.haoda_type):
+    if self.expr.haoda_type != self.haoda_type:
       self.expr = ir.Cast(expr=self.expr, haoda_type=self.haoda_type)
     self.let = tuple(base.propagate_type(let, symbol_table) for let in self.let)
 

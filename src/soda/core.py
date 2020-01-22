@@ -478,11 +478,11 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
 
   @cached_property.cached_property
   def pixel_width_i(self):
-    return list(map(util.get_width_in_bits, self.input_stmts))
+    return [x.width_in_bits for x in self.input_stmts]
 
   @cached_property.cached_property
   def pixel_width_o(self):
-    return list(map(util.get_width_in_bits, self.output_stmts))
+    return [x.width_in_bits for x in self.output_stmts]
 
   @cached_property.cached_property
   def producer_tensors(self):

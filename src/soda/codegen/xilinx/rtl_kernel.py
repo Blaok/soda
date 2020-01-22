@@ -14,7 +14,7 @@ import sys
 import tarfile
 import tempfile
 
-from haoda import util
+from haoda import ir, util
 from haoda.backend import xilinx as backend
 from haoda.report.xilinx import hls as hls_report
 from soda import core
@@ -44,20 +44,20 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
   outputs = []
   for stmt in stencil.output_stmts + stencil.input_stmts:
     for bank in stmt.dram:
-      haoda_type = 'uint%d' % stencil.burst_width
+      haoda_type = ir.Type('uint%d' % stencil.burst_width)
       bundle_name = util.get_bundle_name(stmt.name, bank)
       m_axi_names.append(bundle_name)
       m_axi_bundles.append((bundle_name, haoda_type))
 
   for stmt in stencil.output_stmts:
     for bank in stmt.dram:
-      haoda_type = 'uint%d' % stencil.burst_width
+      haoda_type = ir.Type('uint%d' % stencil.burst_width)
       bundle_name = util.get_bundle_name(stmt.name, bank)
       outputs.append((util.get_port_name(stmt.name, bank), bundle_name,
                       haoda_type, util.get_port_buf_name(stmt.name, bank)))
   for stmt in stencil.input_stmts:
     for bank in stmt.dram:
-      haoda_type = 'uint%d' % stencil.burst_width
+      haoda_type = ir.Type('uint%d' % stencil.burst_width)
       bundle_name = util.get_bundle_name(stmt.name, bank)
       inputs.append((util.get_port_name(stmt.name, bank), bundle_name,
                      haoda_type, util.get_port_buf_name(stmt.name, bank)))
@@ -219,7 +219,7 @@ def print_top_module(printer, super_source, inputs, outputs):
   for arg in output_args:
     println('output %s;' % arg)
   for port_name, _, haoda_type, _ in outputs:
-    width = util.get_width_in_bits(haoda_type)
+    width = haoda_type.width_in_bits
     kwargs = dict(port_name=port_name,
                   **FIFO_PORT_SUFFIXES,
                   **AXIS_PORT_SUFFIXES)
@@ -233,7 +233,7 @@ def print_top_module(printer, super_source, inputs, outputs):
     println('wire {port_name}{not_full};'.format(**kwargs))
     println('wire {port_name}{write_enable};'.format(**kwargs))
   for port_name, _, haoda_type, _ in inputs:
-    width = util.get_width_in_bits(haoda_type)
+    width = haoda_type.width_in_bits
     kwargs = dict(port_name=port_name,
                   **FIFO_PORT_SUFFIXES,
                   **AXIS_PORT_SUFFIXES)
@@ -250,7 +250,7 @@ def print_top_module(printer, super_source, inputs, outputs):
 
   fifos = set()
   for port_name, _, haoda_type, _ in inputs + outputs:
-    width = util.get_width_in_bits(haoda_type)
+    width = haoda_type.width_in_bits
     kwargs = dict(port_name=port_name, **AXIS_PORT_SUFFIXES)
     println('wire [{}:0] {port_name}{data};'.format(width - 1, **kwargs))
     println('wire [{}:0] {port_name}{keep};'.format(width // 8 - 1, **kwargs))
@@ -277,7 +277,7 @@ def print_top_module(printer, super_source, inputs, outputs):
   println('wire ap_rst_reg = ap_rst_reg_%d;' % ap_rst_reg_level)
 
   for port_name, _, haoda_type, _ in outputs:
-    width = util.get_width_in_bits(haoda_type)
+    width = haoda_type.width_in_bits
     kwargs = dict(port_name=port_name,
                   width=width // 8,
                   ones='1' * (width // 8),
@@ -287,7 +287,7 @@ def print_top_module(printer, super_source, inputs, outputs):
     println("assign {port_name}{last} = 1'b0;".format(**kwargs))
 
   for port_name, _, haoda_type, _ in inputs:
-    width = util.get_width_in_bits(haoda_type)
+    width = haoda_type.width_in_bits
     kwargs = dict(name=port_name, **FIFO_PORT_SUFFIXES, **AXIS_PORT_SUFFIXES)
     args = collections.OrderedDict((
         ('clk', 'ap_clk'),
@@ -313,7 +313,7 @@ def print_top_module(printer, super_source, inputs, outputs):
 
 
   for port_name, _, haoda_type, _ in outputs:
-    width = util.get_width_in_bits(haoda_type)
+    width = haoda_type.width_in_bits
     kwargs = dict(name=port_name, **FIFO_PORT_SUFFIXES, **AXIS_PORT_SUFFIXES)
     args = collections.OrderedDict((
         ('clk', 'ap_clk'),

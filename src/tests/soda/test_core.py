@@ -12,7 +12,7 @@ class TestStencil(unittest.TestCase):
 
   def setUp(self):
     self.tile_size = [233, 0]
-    self.haoda_type = 'uint16'
+    self.haoda_type = ir.Type('uint16')
     self.unroll_factor = 1
     self.expr_ref = ir.Ref(name='foo', idx=(233, 42), lat=None)
     self.expr = ir.Expr(operand=(self.expr_ref,), operator=())
@@ -73,7 +73,7 @@ cluster: none
   def test_haoda_type_of_input_stmts_different_with_output(self):
     args = {**self.blur.__dict__, **{'replication_factor': 1}}
     input_stmt = copy.copy(self.input_stmt)
-    input_stmt.haoda_type = 'half'
+    input_stmt.haoda_type = ir.Type('half')
     args['input_stmts'] = [input_stmt]
     with self.assertRaises(util.SemanticError) as context:
       core.Stencil(**args)

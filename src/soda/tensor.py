@@ -93,7 +93,7 @@ class Tensor():
 
   @property
   def c_type(self):
-    return util.get_c_type(self.haoda_type)
+    return self.haoda_type.c_type
 
   def propagate_type(self):
     if self.expr is None:

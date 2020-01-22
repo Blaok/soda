@@ -80,7 +80,7 @@ def print_kernel(name: str,
     params = [
         '__global {} {}* restrict {}'.format(
             '__attribute((buffer_location("HBM{}")))'.format(bank),
-            util.get_cl_vec_type(dram_ref.haoda_type, burst_width),
+            dram_ref.haoda_type.get_cl_vec_type(burst_width),
             util.get_port_name(dram_ref.var, bank))
         for dram_ref, bank in node.dram_reads or node.dram_writes
     ]

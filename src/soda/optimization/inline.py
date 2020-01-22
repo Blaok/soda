@@ -170,7 +170,7 @@ def inline2(stencil):
 
 
 REBALANCE_THRESHOLDS = {
-    'float': 32,
+    ir.Type('float'): 32,
 }
 
 

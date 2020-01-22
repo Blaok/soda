@@ -464,7 +464,7 @@ def print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         _logger.debug('dram reads: %s', dram_reads)
         assert tuple(sorted(dram_reads.keys())) == tuple(range(batch_size)), \
                'unexpected DRAM accesses pattern %s' % dram_reads
-        batch_width = sum(util.get_width_in_bits(_.haoda_type)
+        batch_width = sum(_.haoda_type.width_in_bits
                           for _ in dram_reads.values())
         del dram_reads
         if burst_width * num_banks >= batch_width:
@@ -509,7 +509,7 @@ def print_module_definition(printer, module_trait, module_trait_id, **kwargs):
         _logger.debug('dram writes: %s', dram_writes)
         assert tuple(sorted(dram_writes.keys())) == tuple(range(batch_size)), \
                'unexpected DRAM accesses pattern %s' % dram_writes
-        batch_width = sum(util.get_width_in_bits(_.haoda_type)
+        batch_width = sum(_.haoda_type.width_in_bits
                           for _ in dram_writes.values())
         del dram_writes
         if burst_width * num_banks >= batch_width:
@@ -610,7 +610,7 @@ def print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     if isinstance(obj, ir.DRAMRef):
       coalescing_idx = kwargs.pop('coalescing_idx')
       unroll_factor = kwargs.pop('unroll_factor')
-      type_width = util.get_width_in_bits(obj.haoda_type)
+      type_width = obj.haoda_type.width_in_bits
       elem_idx = coalescing_idx * unroll_factor + obj.offset
       num_banks = num_bank_map[obj.var]
       bank = obj.dram[elem_idx % num_banks]
@@ -644,7 +644,7 @@ def print_module_definition(printer, module_trait, module_trait_id, **kwargs):
                 dram_write_map[let.name.var][let.name.dram])})
         println('{} = Reinterpret<ap_uint<{width}>>({});'.format(
             let.name, let.expr.c_expr,
-            width=util.get_width_in_bits(let.expr.haoda_type)))
+            width=let.expr.haoda_type.width_in_bits))
     for var in dram_write_map:
       for dram in (next(iter(_.values()))
                    for _ in dram_write_map[var].values()):
@@ -659,7 +659,7 @@ def print_module_definition(printer, module_trait, module_trait_id, **kwargs):
     if isinstance(obj, ir.DRAMRef):
       coalescing_idx = kwargs.pop('coalescing_idx')
       unroll_factor = kwargs.pop('unroll_factor')
-      type_width = util.get_width_in_bits(obj.haoda_type)
+      type_width = obj.haoda_type.width_in_bits
       elem_idx = coalescing_idx * unroll_factor + obj.offset
       num_banks = num_bank_map[obj.var]
       bank = expr.dram[elem_idx % num_banks]

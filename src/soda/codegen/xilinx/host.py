@@ -222,7 +222,7 @@ def print_wrapped(printer, stencil):
       output_str[dim] = (', var_{0}_min_{1}, {0}_size_dim_{1}, {2}'.format(
           output_name, dim, stride))
     println('bool %s = halide_rewrite_buffer(var_%s_buffer, %d%s%s%s%s);' %
-            (new_var(), output_name, util.get_width_in_bytes(output_type),
+            (new_var(), output_name, output_type.width_in_bytes,
              *output_str))
     println('(void)%s;' % last_var())
     un_scope()
@@ -248,7 +248,7 @@ def print_wrapped(printer, stencil):
           ', var_%s_min_%d, %s, %s' %
           (stencil.output_names[0], dim, last_var(dim - stencil.dim), stride))
     println('bool %s = halide_rewrite_buffer(var_%s_buffer, %d%s%s%s%s);' %
-            (new_var(), input_name, util.get_width_in_bytes(input_type),
+            (new_var(), input_name, input_type.width_in_bytes,
              *input_str))
     println('(void)%s;' % last_var())
     un_scope()
@@ -347,8 +347,8 @@ def print_wrapped(printer, stencil):
            stencil.input_names[0], stencil.dim - 1))
   println('int64_t tile_burst_num = '
           '(tile_pixel_num-1)/(BURST_WIDTH/%d*num_bank["%s"])+1;' %
-          (util.get_width_in_bits(
-              stencil.input_stmts[0].haoda_type), stencil.input_names[0]))
+          (stencil.input_stmts[0].haoda_type.width_in_bits,
+           stencil.input_names[0]))
   println('int64_t tile_size_linearized_i = tile_burst_num*(BURST_WIDTH/'
           '{stmt.width_in_bits}*num_bank["{stmt.name}"]);'.format(
               stmt=stencil.input_stmts[0]))
@@ -1022,13 +1022,13 @@ def print_check_elem_size(printer, buffer_name, buffer_type):
   new_var = printer.new_var
   last_var = printer.last_var
   println('bool %s = var_%s_elem_size == %d;' %
-          (new_var(), buffer_name, util.get_width_in_bytes(buffer_type)))
+          (new_var(), buffer_name, buffer_type.width_in_bytes))
   println('if(!%s)' % last_var())
   printer.do_scope()
   println('int32_t %s = halide_error_bad_elem_size(nullptr, "Buffer %s", "%s",'
           ' var_%s_elem_size, %d);' %
           (new_var(), buffer_name, buffer_type, buffer_name,
-           util.get_width_in_bytes(buffer_type)))
+           buffer_type.width_in_bytes))
   println('return %s;' % last_var())
   printer.un_scope()
 
@@ -1082,7 +1082,7 @@ def print_test(printer, stencil):
     println('%s.host = (uint8_t*)%s_img;' % (param.name, param.name))
     println()
 
-  if any(map(util.is_float, stencil.input_types)):
+  if any(x.is_float for x in  stencil.input_types):
     println('std::default_random_engine generator;')
     println('std::uniform_real_distribution<double> distribution(0.0, 1.0);')
     println()
@@ -1096,7 +1096,7 @@ def print_test(printer, stencil):
           dim, var=soda_util.COORDS_IN_ORIG[dim]))
       do_scope()
     init_val = '+'.join(soda_util.COORDS_IN_ORIG[0:input_dim])
-    if util.is_float(stencil.symbol_table[name]):
+    if stencil.symbol_table[name].is_float:
       init_val = 'distribution(generator)'
     println('%s_img[%s] = %s;' %
             (name, '+'.join('%c*%s.stride[%d]' %
@@ -1187,7 +1187,7 @@ def print_test(printer, stencil):
           for d in range(stencil.dim)))
       println('%s val_fpga = %s;' % (tensor.c_type, run_result))
       println('%s val_cpu = result_%s;' % (tensor.c_type, tensor.name))
-      if util.is_float(tensor.haoda_type):
+      if tensor.haoda_type.is_float:
         println('double threshold = 0.00001;')
         println('if(nullptr!=getenv("THRESHOLD"))')
         do_scope()
