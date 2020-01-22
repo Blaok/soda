@@ -32,7 +32,7 @@ def print_code(stencil: core.Stencil, output_file: TextIO) -> None:
   super_source = stencil.dataflow_super_source
   for node in super_source.tpo_node_gen():
     for fifo in node.fifos:
-      println('channel {fifo.cl_type} {fifo.c_expr} '
+      println('channel {fifo.cl_type} {fifo.cl_expr} '
               '__attribute__((depth({depth})));'.format(fifo=fifo,
                                                         depth=fifo.depth + 2))
 
@@ -133,7 +133,7 @@ def print_kernel(name: str,
       )
     if isinstance(obj, ir.Let) and isinstance(obj.name, ir.DRAMRef):
       return ir.Var(name='{} = {};'.format(
-          obj.name.visit(mutate_dram_ref, kwargs), obj.expr.c_expr),
+          obj.name.visit(mutate_dram_ref, kwargs), obj.expr.cl_expr),
                     idx=())
     return obj
 
@@ -185,12 +185,12 @@ def print_kernel(name: str,
 
     # print Let (if any)
     for let in module_trait.lets:
-      println(let.visit(mutate_dram_ref, mutate_kwargs).c_expr)
+      println(let.visit(mutate_dram_ref, mutate_kwargs).cl_expr)
 
     for expr, arg in zip(module_trait.exprs, node.output_fifos):
       println('write_channel_intel({}, {});'.format(
           arg,
-          expr.visit(mutate_dram_ref, mutate_kwargs).c_expr))
+          expr.visit(mutate_dram_ref, mutate_kwargs).cl_expr))
 
     # update DelayedRef (if any)
     for delay in delays:
