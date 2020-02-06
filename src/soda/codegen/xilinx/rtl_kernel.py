@@ -1,8 +1,3 @@
-from typing import (
-    BinaryIO,
-    Dict,
-    Optional,
-)
 import collections
 import concurrent.futures
 import io
@@ -13,6 +8,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+from typing import BinaryIO, Dict, Iterable, List, Optional, TextIO, Tuple
 
 from haoda import ir, util
 from haoda.backend import xilinx as backend
@@ -78,7 +74,7 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
   with tempfile.TemporaryDirectory(prefix='sodac-xrtl-') as tmpdir:
     kernel_xml = os.path.join(tmpdir, 'kernel.xml')
     with open(kernel_xml, 'w') as kernel_xml_obj:
-      backend.print_kernel_xml(top_name, inputs, outputs, kernel_xml_obj)
+      print_kernel_xml(top_name, inputs, outputs, kernel_xml_obj)
 
     kernel_file = os.path.join(tmpdir, 'kernel.cpp')
     with open(kernel_file, 'w') as kernel_fileobj:
@@ -201,6 +197,27 @@ AXIS_PORT_SUFFIXES = collections.OrderedDict(
     ready='_TREADY',  # producer <- consumer
 )
 
+def print_kernel_xml(name: str, axis_inputs: Iterable[Tuple[str, str,
+                                                                ir.Type, str]],
+                     axis_outputs: Iterable[Tuple[str, str, ir.Type,
+                                                  str]], kernel_xml: TextIO):
+  """Generate kernel.xml file.
+
+  Args:
+    name: Name of the kernel.
+    axis_inputs: Sequence of (port_name, _, haoda_type, _) of input axis ports
+    axis_outputs: Sequence of (port_name, _, haoda_type, _) of output axis ports
+    kernel_xml: File object to write to.
+  """
+  args: List[backend.Arg] = []
+  for cat, axis_ports in ((backend.Cat.ISTREAM, axis_inputs),
+                          (backend.Cat.OSTREAM, axis_outputs)):
+    for port_name, _, haoda_type, _ in axis_ports:
+      ctype = f'stream<ap_axiu<{haoda_type.width_in_bits}, 0, 0, 0>>&'
+      width = 8 + haoda_type.width_in_bits // 8 * 2
+      args.append(backend.Arg(cat=cat, name=port_name, port=port_name,
+                             ctype=ctype, width=width))
+  backend.print_kernel_xml(name=name, args=args, kernel_xml=kernel_xml)
 
 def print_top_module(printer, super_source, inputs, outputs):
   println = printer.println
