@@ -117,9 +117,8 @@ def print_kernel(name: str,
       dram_throughput = len(obj.dram) * burst_width // obj.width_in_bits
       fifo_throughput = len(node.input_fifos) or len(node.output_fifos)
       if dram_throughput != fifo_throughput:
-        raise NotImplementedError(
-            "input throughput {} != output throughput {}".format(
-                dram_throughput, fifo_throughput))
+        raise NotImplementedError(f'memory throughput {dram_throughput} != '
+                                  f'processing throughput {fifo_throughput}')
 
       coalescing_idx = kwargs['coalescing_idx']
       unroll_factor = kwargs['unroll_factor']
