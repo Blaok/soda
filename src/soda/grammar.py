@@ -71,8 +71,10 @@ class InputStmt(ir.Node):
     return result
 
 class LocalStmtOrOutputStmt(ir.Node):
-  SCALAR_ATTRS = 'haoda_type', 'ref', 'expr' # type: Tuple[str, ...]
-  LINEAR_ATTRS = ('let',) # type: Tuple[str, ...]
+  SCALAR_ATTRS: Tuple[str, ...]
+  LINEAR_ATTRS: Tuple[str, ...]
+  SCALAR_ATTRS = 'haoda_type', 'ref', 'expr'
+  LINEAR_ATTRS = ('let',)
   def __init__(self, **kwargs):
     # inform mypy of the attributes
     self.haoda_type = None

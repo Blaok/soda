@@ -108,7 +108,7 @@ def print_code(stencil: core.Stencil, xo_file: BinaryIO,
     util.acquire_job_slot(job_server)
 
     # generate HLS report
-    depths = {}   # type: Dict[int, int]
+    depths: Dict[int, int] = {}
     hls_resources = hls_report.HlsResources()
     _logger.info(hls_resources)
     for module_id, nodes in enumerate(super_source.module_trait_table.values()):
