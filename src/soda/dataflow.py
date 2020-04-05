@@ -13,6 +13,7 @@ from haoda import util
 
 _logger = logging.getLogger().getChild(__name__)
 
+
 class SuperSourceNode(ir.Module):
   """A node representing the super source in the dataflow graph.
 
@@ -30,7 +31,7 @@ class SuperSourceNode(ir.Module):
       self._paths = {self: [(self,)]}
       for src_node, dst_node in self.dfs_edge_generator():
         self._paths.setdefault(dst_node, []).extend(
-          path+(dst_node,) for path in self._paths[src_node])
+            path + (dst_node,) for path in self._paths[src_node])
     return self._paths[node]
 
   # TODO: make this general and move it to haoda.ir
@@ -41,10 +42,11 @@ class SuperSourceNode(ir.Module):
       for node in self.tpo_node_gen():
         node_heights[node] = max(
             (node_heights[parent] + parent.get_latency(node)
-             for parent in node.parents), default=0)
+             for parent in node.parents),
+            default=0)
         for parent in node.parents:
-          extra_depth = node_heights[node] - (
-            node_heights[parent] + parent.get_latency(node))
+          extra_depth = node_heights[node] - (node_heights[parent] +
+                                              parent.get_latency(node))
           if extra_depth > 0:
             self._extra_depths[(parent, node)] = extra_depth
             _logger.debug('\033[31moops\033[0m, need to add %d to %s',
@@ -69,8 +71,8 @@ class SuperSourceNode(ir.Module):
         new_depth = self.get_extra_depth((src_node, dst_node))
         fifo = src_node.fifo(dst_node)
         if fifo.depth != new_depth:
-          _logger.debug('%s depth changed %d -> %d',
-                        fifo, fifo.depth, new_depth)
+          _logger.debug('%s depth changed %d -> %d', fifo, fifo.depth,
+                        new_depth)
           fifo.depth = new_depth
 
   @property
@@ -84,10 +86,11 @@ class SuperSourceNode(ir.Module):
     Returns:
       A dict mapping an IR node to (module_trait, module_id) tuple.
     """
-    self._module_traits = collections.OrderedDict() \
-        # type: Dict[ir.ModuleTrait, List[ir.Node]]
-    module_table = collections.OrderedDict() \
-        # type: Dict[ir.Node, Tuple[ir.ModuleTrait, int]]
+    self._module_traits: Dict[ir.ModuleTrait,
+                              List[ir.Node]] = collections.OrderedDict()
+    module_table: Dict[ir.Node, Tuple[ir.ModuleTrait,
+                                      int]] = collections.OrderedDict()
+
     for node in self.tpo_node_gen():
       self._module_traits.setdefault(ir.ModuleTrait(node), []).append(node)
     for idx, module_trait in enumerate(self._module_traits):
@@ -105,11 +108,13 @@ class SuperSourceNode(ir.Module):
     self.module_table
     return self._module_traits
 
+
 class SuperSinkNode(ir.Module):
   """A node representing the super sink in the dataflow graph.
 
   A super sink doesn't have child nodes.
   """
+
   @property
   def name(self):
     return 'super_sink'
@@ -122,6 +127,7 @@ class ForwardNode(ir.Module):
     tensor: Tensor corresponding to this node.
     offset: Int representing the offset of this tensor.
   """
+
   def __init__(self, **kwargs):
     super().__init__()
     self.tensor = kwargs.pop('tensor')
@@ -134,6 +140,7 @@ class ForwardNode(ir.Module):
   def name(self):
     return '{}_offset_{}'.format(self.tensor.name, self.offset)
 
+
 class ComputeNode(ir.Module):
   """A node representing a compute module in the dataflow graph.
 
@@ -142,6 +149,7 @@ class ComputeNode(ir.Module):
     pe_id: Int representing the PE id.
     fifo_map: {str: {idx: Node}}
   """
+
   def __init__(self, **kwargs):
     super().__init__()
     self.tensor = kwargs.pop('tensor')
@@ -154,6 +162,7 @@ class ComputeNode(ir.Module):
   @property
   def name(self):
     return '{}_pe_{}'.format(self.tensor.name, self.pe_id)
+
 
 # pylint: disable=too-many-branches,too-many-statements
 def create_dataflow_graph(stencil):
@@ -183,8 +192,8 @@ def create_dataflow_graph(stencil):
   def color_attr(node):
     result = []
     for k, v in node.__dict__.items():
-      if (node.__class__, k) in ((SuperSourceNode, 'parents'),
-                                 (SuperSinkNode, 'children')):
+      if (node.__class__, k) in ((SuperSourceNode, 'parents'), (SuperSinkNode,
+                                                                'children')):
         continue
       if k in ('parents', 'children'):
         result.append('%s: [%s]' % (k, ', '.join(map(color_id, v))))
@@ -211,24 +220,21 @@ def create_dataflow_graph(stencil):
           if (src_name, offset) in super_source.fwd_nodes:
             continue
           fwd_node = ForwardNode(
-            tensor=stencil.tensors[src_name],
-            offset=offset,
-            depth=stencil.get_replicated_reuse_buffer_length(
-              src_name, offset))
+              tensor=stencil.tensors[src_name],
+              offset=offset,
+              depth=stencil.get_replicated_reuse_buffer_length(
+                  src_name, offset))
           _logger.debug('create %s', print_node(fwd_node))
-          init_offsets = [start
-            for start, end in reuse_buffer if start == end]
+          init_offsets = [start for start, end in reuse_buffer if start == end]
           if offset in init_offsets:
             if src_name in [stencil.input.name]:
               super_source.add_child(fwd_node)
             else:
-              (super_source.cpt_nodes[(src_name, 0)]
-                .add_child(fwd_node))
+              (super_source.cpt_nodes[(src_name, 0)].add_child(fwd_node))
           super_source.fwd_nodes[(src_name, offset)] = fwd_node
           if offset in replicated_next_fifo[src_name]:
             nodes_to_add.append(
-              (fwd_node, (src_name,
-                replicated_next_fifo[src_name][offset])))
+                (fwd_node, (src_name, replicated_next_fifo[src_name][offset])))
       for src_node, key in nodes_to_add:
         src_node.add_child(super_source.fwd_nodes[key])
 
@@ -240,10 +246,9 @@ def create_dataflow_graph(stencil):
       super_source.cpt_nodes[(stage.name, 0)] = cpt_node
       for input_name, input_window in stage.window.items():
         for i in range(len(input_window)):
-          offset = next(offset for offset, points in
-            (replicated_all_points[input_name][stage.name]
-              .items())
-            if points == i)
+          offset = next(offset for offset, points in (
+              replicated_all_points[input_name][stage.name].items())
+                        if points == i)
           fwd_node = super_source.fwd_nodes[(input_name, offset)]
           _logger.debug('  access %s', print_node(fwd_node))
           fwd_node.add_child(cpt_node)
@@ -265,14 +270,17 @@ def create_dataflow_graph(stencil):
         for offset in dst_point_dicts:
           if (src_name, offset) in super_source.fwd_nodes:
             continue
-          fwd_node = ForwardNode(
-            tensor=stencil.tensors[src_name], offset=offset)
+          fwd_node = ForwardNode(tensor=stencil.tensors[src_name],
+                                 offset=offset)
           #depth=stencil.get_reuse_buffer_length(src_name, offset))
           _logger.debug('create %s', print_node(fwd_node))
           # init_offsets is the start of each reuse chain
           init_offsets = [
-            next(end for start, end in reuse_buffer if start == unroll_idx)
-            for unroll_idx in reversed(range(stencil.unroll_factor))]
+              next(end
+                   for start, end in reuse_buffer
+                   if start == unroll_idx)
+              for unroll_idx in reversed(range(stencil.unroll_factor))
+          ]
           _logger.debug('reuse buffer: %s', reuse_buffer)
           _logger.debug('init offsets: %s', init_offsets)
           if offset in init_offsets:
@@ -282,15 +290,15 @@ def create_dataflow_graph(stencil):
             else:
               # fwd from output of last stage
               # tensor name and offset are used to find the cpt node
-              cpt_offset = next(unroll_idx
-                for unroll_idx in range(stencil.unroll_factor)
-                if init_offsets[unroll_idx] == offset)
+              cpt_offset = next(
+                  unroll_idx for unroll_idx in range(stencil.unroll_factor)
+                  if init_offsets[unroll_idx] == offset)
               cpt_node = super_source.cpt_nodes[(src_name, cpt_offset)]
               cpt_node.add_child(fwd_node)
           super_source.fwd_nodes[(src_name, offset)] = fwd_node
           if offset in next_fifo[src_name]:
             nodes_to_add.append(
-              (fwd_node, (src_name, next_fifo[src_name][offset])))
+                (fwd_node, (src_name, next_fifo[src_name][offset])))
       for src_node, key in nodes_to_add:
         # fwd from another fwd node
         src_node.add_child(super_source.fwd_nodes[key])
@@ -302,15 +310,14 @@ def create_dataflow_graph(stencil):
       if tensor.is_input():
         continue
       for unroll_index in range(stencil.unroll_factor):
-        pe_id = stencil.unroll_factor-1-unroll_index
+        pe_id = stencil.unroll_factor - 1 - unroll_index
         cpt_node = ComputeNode(tensor=tensor, pe_id=pe_id)
         _logger.debug('create %s', print_node(cpt_node))
         super_source.cpt_nodes[(tensor.name, pe_id)] = cpt_node
         for input_name, input_window in tensor.ld_indices.items():
           for i in range(len(input_window)):
-            offset = next(offset for offset, points in
-              all_points[input_name][tensor.name].items()
-              if pe_id in points and points[pe_id] == i)
+            offset = next(offset for offset, points in all_points[input_name][
+                tensor.name].items() if pe_id in points and points[pe_id] == i)
             fwd_node = super_source.fwd_nodes[(input_name, offset)]
             _logger.debug('  access %s', print_node(fwd_node))
             fwd_node.add_child(cpt_node)
@@ -349,11 +356,12 @@ def create_dataflow_graph(stencil):
         else:
           raise util.InternalError('cannot find tensor %s' %
                                    dst_node.tensor.name)
-        expr = ir.DRAMRef(haoda_type=dst_node.tensor.haoda_type,
-                          # pylint: disable=undefined-loop-variable
-                          dram=stmt.dram,
-                          var=dst_node.tensor.name,
-                          offset=stencil.unroll_factor-1-dst_node.offset)
+        expr = ir.DRAMRef(
+            haoda_type=dst_node.tensor.haoda_type,
+            # pylint: disable=undefined-loop-variable
+            dram=stmt.dram,
+            var=dst_node.tensor.name,
+            offset=stencil.unroll_factor - 1 - dst_node.offset)
       elif isinstance(src_node, ForwardNode):
         if isinstance(dst_node, ComputeNode):
           dst = src_node.tensor.children[dst_node.tensor.name]
@@ -369,7 +377,7 @@ def create_dataflow_graph(stencil):
         delay = stencil.reuse_buffer_lengths[src_node.tensor.name]\
                                             [src_node.offset]
         offset = src_node.offset - delay
-        for parent in src_node.parents: # fwd node has only 1 parent
+        for parent in src_node.parents:  # fwd node has only 1 parent
           for fifo_r in parent.fifos:
             if fifo_r.edge == (parent, src_node):
               break
@@ -385,22 +393,27 @@ def create_dataflow_graph(stencil):
             var_name = 'let_%d' % len(src_node.lets)
             # pylint: disable=undefined-loop-variable
             var_type = fifo_r.haoda_type
-            lets.append(ir.Let(
-              haoda_type=var_type, name=var_name,
-              expr=ir.DelayedRef(delay=delay, ref=fifo_r)))
+            lets.append(
+                ir.Let(haoda_type=var_type,
+                       name=var_name,
+                       expr=ir.DelayedRef(delay=delay, ref=fifo_r)))
           expr = ir.Var(name=var_name, idx=[])
           expr.haoda_type = var_type
         else:
-          expr = fifo_r   # pylint: disable=undefined-loop-variable
+          expr = fifo_r  # pylint: disable=undefined-loop-variable
       elif isinstance(src_node, ComputeNode):
+
         def replace_refs_callback(obj, args):
           if isinstance(obj, ir.Ref):
-            _logger.debug('replace %s with %s', obj,
-            # pylint: disable=cell-var-from-loop,undefined-loop-variable
-                          src_node.fifo_map[obj.name][obj.idx])
+            _logger.debug(
+                'replace %s with %s',
+                obj,
+                # pylint: disable=cell-var-from-loop,undefined-loop-variable
+                src_node.fifo_map[obj.name][obj.idx])
             # pylint: disable=cell-var-from-loop,undefined-loop-variable
             return src_node.fifo_map[obj.name][obj.idx]
           return obj
+
         _logger.debug('lets: %s', src_node.tensor.lets)
         lets = [_.visit(replace_refs_callback) for _ in src_node.tensor.lets]
         _logger.debug('replaced lets: %s', lets)
@@ -415,12 +428,14 @@ def create_dataflow_graph(stencil):
           else:
             raise util.InternalError('cannot find tensor %s' %
                                      src_node.tensor.name)
-          dram_ref = ir.DRAMRef(haoda_type=src_node.tensor.haoda_type,
-                                # pylint: disable=undefined-loop-variable
-                                dram=stmt.dram, var=src_node.tensor.name,
-                                offset=src_node.pe_id)
-          dst_node.lets.append(ir.Let(
-            haoda_type=None, name=dram_ref, expr=fifo))
+          dram_ref = ir.DRAMRef(
+              haoda_type=src_node.tensor.haoda_type,
+              # pylint: disable=undefined-loop-variable
+              dram=stmt.dram,
+              var=src_node.tensor.name,
+              offset=src_node.pe_id)
+          dst_node.lets.append(ir.Let(haoda_type=None, name=dram_ref,
+                                      expr=fifo))
       else:
         raise util.InternalError('unexpected node of type %s' % type(src_node))
 
