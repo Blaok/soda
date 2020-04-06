@@ -324,12 +324,12 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
   printer.do_scope()
   for dim in range(stencil.dim - 2, -1, -1):
     printer.println(
-        'for(int32_t {var} = {}; {var} < actual_tile_size_dim_{}-{}; '
-        '++{var})'.format(overall_stencil_offset[dim],
-                          dim,
-                          overall_stencil_dim[dim] - 1 -
-                          overall_stencil_offset[dim],
-                          var=soda_util.COORDS_IN_TILE[dim]))
+        'for(int32_t {var} = {}; {var} < actual_tile_size_dim_{} - {}; '
+        '++{var})'.format(
+            max(0, overall_stencil_offset[dim]),
+            dim,
+            max(0, overall_stencil_dim[dim] - 1 - overall_stencil_offset[dim]),
+            var=soda_util.COORDS_IN_TILE[dim]))
     printer.do_scope()
 
   printer.printlns(
