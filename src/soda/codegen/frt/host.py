@@ -522,7 +522,8 @@ def print_test(printer, stencil):
                     tensor.name)
     printer.println('#pragma omp parallel for', 0)
     stencil_window = core.get_overall_stencil_window(
-        tuple(map(stencil.tensors.get, stencil.input_names)), tensor)
+        tuple(map(stencil.tensors.get, stencil.input_names))
+        if tensor.is_output else tensor.parents.values(), tensor)
     stencil_dim = core.get_stencil_dim(stencil_window)
     output_idx = core.get_stencil_window_offset(stencil_window)
     for d in range(0, stencil.dim):
