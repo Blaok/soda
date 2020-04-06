@@ -115,7 +115,12 @@ def print_kernel(name: str,
   def mutate_dram_ref(obj: ir.Node, kwargs: Dict[str, int]) -> ir.Node:
     if isinstance(obj, ir.DRAMRef):
       dram_throughput = len(obj.dram) * burst_width // obj.width_in_bits
-      fifo_throughput = len(node.input_fifos) or len(node.output_fifos)
+      if node.dram_reads:
+        output_count = len({x[0].var for x in node.dram_reads})
+        fifo_throughput = len(node.output_fifos) // output_count
+      else:
+        input_count = len({x[0].var for x in node.dram_writes})
+        fifo_throughput = len(node.input_fifos) // input_count
       if dram_throughput != fifo_throughput:
         raise NotImplementedError(f'memory throughput {dram_throughput} != '
                                   f'processing throughput {fifo_throughput}')
