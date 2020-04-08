@@ -18,11 +18,18 @@ function prepare() {
 }
 
 function log() {
-  echo "$@"
-  if [ "$1" = "-n" ]; then
-    shift
-  fi
+  echo -n "$@"
   echo "$@" >&2
+}
+
+function pass() {
+  echo -e "\x1B[0;32mPASS\x1B[0m"
+  echo -e "PASS\n" >&2
+}
+
+function fail() {
+  echo -e "\x1B[0;31mFAIL\x1B[0m"
+  echo -e "FAIL\n" >&2
 }
 
 function cleanup() {
