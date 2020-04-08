@@ -314,13 +314,13 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
       overall_stencil_window)
   overall_stencil_dim = core.get_stencil_dim(overall_stencil_window)
   printer.println('#pragma omp parallel for', 0)
-  var = soda_util.COORDS_IN_TILE[stencil.dim - 1]
-  margin = (overall_stencil_dim[stencil.dim - 1] - 1 -
-            overall_stencil_offset[stencil.dim - 1])
-  printer.println(
-      f'for(int32_t {var} = {overall_stencil_offset[stencil.dim - 1]}; '
-      f'{var} < {extent_fmt[stencil.output_names[0]]}[{stencil.dim - 1}] - '
-      f'{margin}; ++{var})')
+  printer.println('for(int32_t {var} = {}; {var} < '
+                  f'{extent_fmt[stencil.output_names[0]]}[{stencil.dim - 1}]'
+                  ' - {}; ++{var})'.format(
+                      max(0, overall_stencil_offset[stencil.dim - 1]),
+                      max(0, (overall_stencil_dim[stencil.dim - 1] - 1 -
+                              overall_stencil_offset[stencil.dim - 1])),
+                      var=soda_util.COORDS_IN_TILE[stencil.dim - 1]))
   printer.do_scope()
   for dim in range(stencil.dim - 2, -1, -1):
     printer.println(
