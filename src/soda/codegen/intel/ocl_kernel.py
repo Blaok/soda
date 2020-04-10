@@ -30,7 +30,7 @@ def print_code(stencil: core.Stencil, output_file: TextIO) -> None:
 
   # internal fifos
   super_source = stencil.dataflow_super_source
-  for node in super_source.tpo_node_gen():
+  for node in super_source.tpo_valid_node_gen():
     for fifo in node.fifos:
       println('channel {fifo.cl_type} {fifo.cl_expr} '
               '__attribute__((depth({depth})));'.format(fifo=fifo,
@@ -39,7 +39,7 @@ def print_code(stencil: core.Stencil, output_file: TextIO) -> None:
   println()
 
   instance_count = collections.defaultdict(int)  # type: Dict[int, int]
-  for node in super_source.tpo_node_gen():
+  for node in super_source.tpo_valid_node_gen():
     module_trait, module_trait_id = super_source.module_table[node]
     print_kernel('{}_module_{}_instance_{}'.format(
         stencil.app_name, module_trait_id, instance_count[module_trait_id]),

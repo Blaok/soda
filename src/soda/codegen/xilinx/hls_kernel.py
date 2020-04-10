@@ -73,7 +73,7 @@ def _print_interface(printer, kernel_name, inputs, outputs, super_source):
   println()
 
   # internal fifos
-  for node in super_source.tpo_node_gen():
+  for node in super_source.tpo_valid_node_gen():
     for fifo in node.fifos:
       println('hls::stream<Data<{0}>> {1}("{1}");'.format(fifo.c_type,
                                                           fifo.c_expr))
@@ -245,7 +245,7 @@ def _print_interface(printer, kernel_name, inputs, outputs, super_source):
     println('BurstRead(&{}, {}, coalesced_data_num);'.format(
         get_port_buf_name(name, bank), get_port_name(name, bank)))
 
-  for node in super_source.tpo_node_gen():
+  for node in super_source.tpo_valid_node_gen():
     module_trait_id = super_source.module_table[node][1]
     _print_module_func_call(printer, node, module_trait_id)
 
@@ -374,11 +374,11 @@ def print_code(stencil, output_file):
   outputs = []
   inputs = []
   for stmt in stencil.output_stmts:
-    for bank in sorted(stmt.dram):
+    for bank in stmt.dram:
       outputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
                       65536))
   for stmt in stencil.input_stmts:
-    for bank in sorted(stmt.dram):
+    for bank in stmt.dram:
       inputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
                      65536))
   for stmt in stencil.param_stmts:

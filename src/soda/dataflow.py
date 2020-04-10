@@ -1,15 +1,12 @@
-from typing import (
-    Dict,
-    List,
-    Tuple,
-)
 import collections
+import itertools
 import logging
+from typing import Dict, Iterator, List, Set, Tuple
 
 import cached_property
+import pulp
 
-from haoda import ir
-from haoda import util
+from haoda import ir, util
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -20,64 +17,187 @@ class SuperSourceNode(ir.Module):
   A super source doesn't have parent nodes.
 
   Attributes:
-    fwd_nodes: {(tensor_name, offset): node}
-    cpt_nodes: {(stage_name, pe_id): node}
-    _paths: {node: [(src, ... dst), ... ]}
-    _extra_depths: {(src_node, dst_node): extra_depth)}
+      fwd_nodes (Dict[Tuple[str, int], ForwardNode]): Dict mapping tuples of
+        (tensor name, offset) to nodes.
+      cpt_nodes (Dict[Tuple[str, int], ComputeNode]): Dict mapping tuples of
+        (stage_name, pe_id) to nodes.
+      super_sink (SuperSinkNode): The super sink node of this DAG.
   """
 
-  def find_paths(self, node):
-    if not hasattr(self, '_paths'):
-      self._paths = {self: [(self,)]}
-      for src_node, dst_node in self.dfs_edge_generator():
-        self._paths.setdefault(dst_node, []).extend(
-            path + (dst_node,) for path in self._paths[src_node])
-    return self._paths[node]
+  def __init__(
+      self,
+      fwd_nodes: Dict[Tuple[str, int], 'ForwardNode'],
+      cpt_nodes: Dict[Tuple[str, int], 'ComputeNode'],
+      super_sink: 'SuperSinkNode',
+  ):
+    super().__init__()
+    self.fwd_nodes = fwd_nodes
+    self.cpt_nodes = cpt_nodes
+    self.super_sink = super_sink
 
-  # TODO: make this general and move it to haoda.ir
-  def get_extra_depth(self, edge):
-    if not hasattr(self, '_extra_depths'):
-      self._extra_depths = collections.OrderedDict()
-      node_heights = collections.OrderedDict()
-      for node in self.tpo_node_gen():
-        node_heights[node] = max(
-            (node_heights[parent] + parent.get_latency(node)
-             for parent in node.parents),
-            default=0)
-        for parent in node.parents:
-          extra_depth = node_heights[node] - (node_heights[parent] +
-                                              parent.get_latency(node))
-          if extra_depth > 0:
-            self._extra_depths[(parent, node)] = extra_depth
-            _logger.debug('\033[31moops\033[0m, need to add %d to %s',
-                          extra_depth, (parent, node))
-    return self._extra_depths.get(edge, 0)
+  def update_module_depths(
+      self,
+      depths: Dict[int, int],
+      min_depth: int = 2,
+  ) -> None:
+    """Update module pipeline depths and FIFO depths.
 
-  def update_module_depths(self, depths: Dict[str, int]):
-    for src_node in self.tpo_node_gen():
+    The FIFO depths are determined by solving an ILP problem:
+
+    + Optimization objective: minimize the sum (weighted by FIFO width) of all
+    FIFO depths.
+    + Constraints: the whole DAG can be fully pipelined without artificial
+    stalls.
+
+    For every non-overlapping path between a pair of nodes,
+    the latency of each token is the maximum minimum latency among all paths.
+    To enable full pipelining,
+    this latency must not exceed the maximum latency of any path.
+    The minimum latency of each path is the sum of the FIFO write latency in
+    each module and the number of edges (FIFOs),
+    since the minimum latency of a FIFO is 1.
+    The maximum latency of each path is the sum of the FIFO write latency in
+    each module and the total depth of FIFOs.
+
+    Args:
+        depths (Dict[int, int]): Dict mapping module ids to pipeline depths.
+        min_depth (int): Minimum possible FIFO depth, default to 2.
+    """
+    # update module pipeline depths
+    for src_node in self.tpo_valid_node_gen():
       for dst_node in src_node.children:
         module_id = self.module_table[src_node][1]
-        if module_id in depths:
+        depth = depths.get(module_id)
+        if depth is not None:
           fifo = src_node.fifo(dst_node)
-          if fifo.write_lat != depths[module_id]:
+          if fifo.write_lat != depth:
             _logger.debug('%s write latency changed %s -> %d', fifo,
-                          fifo.write_lat, depths[module_id])
-            fifo.write_lat = depths[module_id]
+                          fifo.write_lat, depth)
+            fifo.write_lat = depth
 
-    if hasattr(self, '_extra_depths'):
-      del self._extra_depths
-    for src_node in self.tpo_node_gen():
-      for dst_node in src_node.children:
-        new_depth = self.get_extra_depth((src_node, dst_node))
-        fifo = src_node.fifo(dst_node)
-        if fifo.depth != new_depth:
-          _logger.debug('%s depth changed %d -> %d', fifo, fifo.depth,
-                        new_depth)
-          fifo.depth = new_depth
+    # set up ILP problem, variables, and objective
+    lp_problem = pulp.LpProblem('optimal_fifo_depths', pulp.LpMinimize)
+    lp_vars = {}
+    for src_node, dst_node in self.bfs_valid_edge_gen():
+      lp_vars[(src_node, dst_node)] = pulp.LpVariable(
+          name=f'depth_{src_node.fifo(dst_node).c_expr}',
+          lowBound=min_depth,
+          cat='Integer',
+      )
+    lp_problem += sum(
+        x.fifo(y).haoda_type.width_in_bits * v for (x, y), v in lp_vars.items())
+
+    # DFS to traverse all paths from super source to super sink
+    path_list: List[Tuple[ir.Module, ...]]
+    path_list = []
+
+    def dfs(node: ir.Module, path: Tuple[ir.Module, ...] = ()) -> None:
+      path = path + (node,)
+      if isinstance(node, SuperSinkNode):
+        path_list.append(path)
+      for child in node.children:
+        dfs(child, path)
+
+    dfs(self)
+
+    # extract non-overlapping multi-path pairs
+    path_table: Dict[Tuple[ir.Module, ir.Module], Set[Tuple[ir.Module, ...]]]
+    path_table = collections.defaultdict(set)
+    for path1, path2 in itertools.combinations(path_list, 2):
+      path_pairs: List[Tuple[List[ir.Module], List[ir.Module]]]
+      path_pairs = [([], [])]
+      common_nodes = set(path1) & set(path2)
+      i1 = i2 = 0
+      while i1 < len(path1) or i2 < len(path2):
+        if path1[i1] in common_nodes and path2[i2] in common_nodes:
+          path_pairs[-1][0].append(path1[i1])
+          path_pairs[-1][1].append(path2[i2])
+          if path_pairs[-1][0] == path_pairs[-1][1]:
+            # throw away identical paths
+            path_pairs[-1] = [path1[i1]], [path2[i2]]
+          else:
+            path_pairs.append(([path1[i1]], [path2[i2]]))
+          i1 += 1
+          i2 += 1
+        elif path1[i1] in common_nodes:
+          path_pairs[-1][1].append(path2[i2])
+          i2 += 1
+        elif path2[i2] in common_nodes:
+          path_pairs[-1][0].append(path1[i1])
+          i1 += 1
+        else:
+          path_pairs[-1][0].append(path1[i1])
+          path_pairs[-1][1].append(path2[i2])
+          i1 += 1
+          i2 += 1
+      # last multi-path pair must be a pair of singleton lists, throw it away
+      path_pairs.pop()
+      for path_list1, path_list2 in path_pairs:
+        path_table[(path_list1[0], path_list1[-1])].update(
+            (tuple(path_list1), tuple(path_list2)))
+
+    # apply ILP constraints
+    for paths in path_table.values():
+      min_latency_list = []
+      max_latency_list = []
+      for path in paths:
+        module_latency = sum(
+            x.get_latency(y)
+            for x, y in zip(path[:-1], path[1:])
+            if is_valid_edge((x, y)))
+        min_fifo_latency = len(path) - 1
+        max_fifo_latency = sum(lp_vars[edge]
+                               for edge in zip(path[:-1], path[1:])
+                               if is_valid_edge(edge))
+        min_latency_list.append(module_latency + min_fifo_latency)
+        max_latency_list.append(module_latency + max_fifo_latency)
+      max_min_latency = max(min_latency_list)
+      lp_problem.extend(max_min_latency <= x for x in max_latency_list)
+
+    # solve ILP
+    lp_status = lp_problem.solve()
+    if lp_status != pulp.LpStatusOptimal:
+      lp_status_str = pulp.LpStatus[lp_status]
+      _logger.error('ILP error: %s\n%s', lp_status_str, lp_problem)
+      raise util.InternalError('unexpected ILP status: %s' % lp_status_str)
+
+    # update FIFO depths
+    for (src_node, dst_node), lp_var in lp_vars.items():
+      depth = int(pulp.value(lp_var))
+      fifo = src_node.fifo(dst_node)
+      if fifo.depth != depth:
+        _logger.debug('%s * depth %d -> %d', fifo, fifo.depth, depth)
+        fifo.depth = depth
+
+    if _logger.isEnabledFor(logging.DEBUG):
+      for (first, last), paths in path_table.items():
+        _logger.debug('multiple paths from %s to %s', repr(first), repr(last))
+        for path in paths:
+          module_latency = sum(
+              x.get_latency(y)
+              for x, y in zip(path[:-1], path[1:])
+              if is_valid_edge((x, y)))
+          min_fifo_latency = len(path) - 1
+          max_fifo_latency = sum(
+              x.fifo(y).depth
+              for x, y in zip(path[:-1], path[1:])
+              if is_valid_edge((x, y)))
+          _logger.debug(
+              '  latency: [%d, %d] = %d + [%d, %d] path: %s',
+              module_latency + min_fifo_latency,
+              module_latency + max_fifo_latency,
+              module_latency,
+              min_fifo_latency,
+              max_fifo_latency,
+              path,
+          )
 
   @property
   def name(self):
     return 'super_source'
+
+  def __repr__(self) -> str:
+    return '\033[35msuper source\033[0m'
 
   @cached_property.cached_property
   def module_table(self) -> Dict[ir.Node, Tuple[ir.ModuleTrait, int]]:
@@ -91,7 +211,7 @@ class SuperSourceNode(ir.Module):
     module_table: Dict[ir.Node, Tuple[ir.ModuleTrait,
                                       int]] = collections.OrderedDict()
 
-    for node in self.tpo_node_gen():
+    for node in self.tpo_valid_node_gen():
       self._module_traits.setdefault(ir.ModuleTrait(node), []).append(node)
     for idx, module_trait in enumerate(self._module_traits):
       for node in self._module_traits[module_trait]:
@@ -108,6 +228,33 @@ class SuperSourceNode(ir.Module):
     self.module_table
     return self._module_traits
 
+  def tpo_valid_node_gen(self) -> Iterator[ir.Module]:
+    """Traverse valid descendant nodes in tpological order.
+
+    Load and store nodes are ordered in the same way as they are specified in
+    soda files.
+
+    Yields:
+        Iterator[ir.Module]: Nodes that are not super source or super sink.
+    """
+    yield from self.load_nodes
+    yield from filter(
+        lambda x: not isinstance(x, MemoryNode) and is_valid_node(x),
+        super().tpo_node_gen(),
+    )
+    yield from self.store_nodes
+
+  def bfs_valid_edge_gen(self) -> Iterator[ir.Module]:
+    return filter(is_valid_edge, self.bfs_edge_gen())
+
+  @property
+  def load_nodes(self) -> Tuple['LoadNode', ...]:
+    return self.children
+
+  @property
+  def store_nodes(self) -> Tuple['StoreNode', ...]:
+    return self.super_sink.parents
+
 
 class SuperSinkNode(ir.Module):
   """A node representing the super sink in the dataflow graph.
@@ -118,6 +265,9 @@ class SuperSinkNode(ir.Module):
   @property
   def name(self):
     return 'super_sink'
+
+  def __repr__(self) -> str:
+    return '\033[34msuper sink\033[0m'
 
 
 class ForwardNode(ir.Module):
@@ -164,29 +314,75 @@ class ComputeNode(ir.Module):
     return '{}_pe_{}'.format(self.tensor.name, self.pe_id)
 
 
+class MemoryNode(ir.Module):
+
+  def __init__(self, var: str, bank: int):
+    super().__init__()
+    self.var = var
+    self.bank = bank
+
+  @property
+  def name(self) -> str:
+    return f'{self.var}_bank_{self.bank}'
+
+  def __str__(self) -> str:
+    return f'dram<bank {self.bank} {self.var}>'
+
+
+class LoadNode(MemoryNode):
+
+  def __repr__(self) -> str:
+    return f'\033[33mload {self.var} bank {self.bank}\033[0m'
+
+
+class StoreNode(MemoryNode):
+
+  def __repr__(self) -> str:
+    return f'\033[36mstore {self.var} bank {self.bank}\033[0m'
+
+
+def is_valid_node(node: ir.Module) -> bool:
+  return not isinstance(node, (SuperSourceNode, SuperSinkNode))
+
+
+def is_valid_edge(edge: Tuple[ir.Module, ir.Module]) -> bool:
+  return all(map(is_valid_node, edge))
+
+
 # pylint: disable=too-many-branches,too-many-statements
 def create_dataflow_graph(stencil):
   chronological_tensors = stencil.chronological_tensors
-  super_source = SuperSourceNode()
-  super_sink = SuperSinkNode()
+  super_source = SuperSourceNode(
+      fwd_nodes={},
+      cpt_nodes={},
+      super_sink=SuperSinkNode(),
+  )
 
-  # {(tensor_name, offset): node}
-  super_source.fwd_nodes = collections.OrderedDict()
+  load_nodes = {
+      stmt.name:
+      tuple(LoadNode(var=stmt.name, bank=bank) for bank in stmt.dram)
+      for stmt in stencil.input_stmts
+  }
+  store_nodes = {
+      stmt.name:
+      tuple(StoreNode(var=stmt.name, bank=bank) for bank in stmt.dram)
+      for stmt in stencil.output_stmts
+  }
 
-  # {(stage_name, pe_id): node}
-  super_source.cpt_nodes = collections.OrderedDict()
+  for mem_node in itertools.chain(*load_nodes.values()):
+    super_source.add_child(mem_node)
+  for mem_node in itertools.chain(*store_nodes.values()):
+    mem_node.add_child(super_source.super_sink)
 
   def color_id(node):
-    if node.__class__ is (ir.Module):
-      return repr(node)
-    if node.__class__ is SuperSourceNode:
-      return '\033[33msuper source\033[0m'
-    if node.__class__ is SuperSinkNode:
-      return '\033[36msuper sink\033[0m'
-    if node.__class__ is ForwardNode:
-      return '\033[32mforward %s @%d\033[0m' % (node.tensor.name, node.offset)
-    if node.__class__ is ComputeNode:
-      return '\033[31mcompute %s #%d\033[0m' % (node.tensor.name, node.pe_id)
+    if isinstance(node, LoadNode):
+      return f'\033[33mload {node.var}[bank{node.bank}]\033[0m'
+    if isinstance(node, StoreNode):
+      return f'\033[36mstore {node.var}[bank{node.bank}]\033[0m'
+    if isinstance(node, ForwardNode):
+      return f'\033[32mforward {node.tensor.name} @{node.offset}\033[0m'
+    if isinstance(node, ComputeNode):
+      return f'\033[31mcompute {node.tensor.name} #{node.pe_id}\033[0m'
     return 'unknown node'
 
   def color_attr(node):
@@ -228,7 +424,9 @@ def create_dataflow_graph(stencil):
           init_offsets = [start for start, end in reuse_buffer if start == end]
           if offset in init_offsets:
             if src_name in [stencil.input.name]:
-              super_source.add_child(fwd_node)
+              load_node_count = len(load_nodes[src_name])
+              load_nodes[src_name][load_node_count - 1 -
+                                   offset % load_node_count].add_child(fwd_node)
             else:
               (super_source.cpt_nodes[(src_name, 0)].add_child(fwd_node))
           super_source.fwd_nodes[(src_name, offset)] = fwd_node
@@ -253,7 +451,8 @@ def create_dataflow_graph(stencil):
           _logger.debug('  access %s', print_node(fwd_node))
           fwd_node.add_child(cpt_node)
       if stage.is_output():
-        super_source.cpt_nodes[stage.name, 0].add_child(super_sink)
+        super_source.cpt_nodes[stage.name,
+                               0].add_child(store_nodes[stage.name][0])
       else:
         add_fwd_nodes(stage.name)
 
@@ -286,7 +485,9 @@ def create_dataflow_graph(stencil):
           if offset in init_offsets:
             if src_name in stencil.input_names:
               # fwd from external input
-              super_source.add_child(fwd_node)
+              load_node_count = len(load_nodes[src_name])
+              load_nodes[src_name][load_node_count - 1 -
+                                   offset % load_node_count].add_child(fwd_node)
             else:
               # fwd from output of last stage
               # tensor name and offset are used to find the cpt node
@@ -323,20 +524,21 @@ def create_dataflow_graph(stencil):
             fwd_node.add_child(cpt_node)
       if tensor.is_output():
         for pe_id in range(stencil.unroll_factor):
-          super_source.cpt_nodes[tensor.name, pe_id].add_child(super_sink)
+          super_source.cpt_nodes[tensor.name, pe_id].add_child(
+              store_nodes[tensor.name][pe_id % len(store_nodes[tensor.name])])
       else:
         add_fwd_nodes(tensor.name)
 
   # pylint: disable=too-many-nested-blocks
-  for src_node in super_source.tpo_node_gen():
-    for dst_node in src_node.children:
+  for src_node in super_source.tpo_valid_node_gen():
+    for dst_node in filter(is_valid_node, src_node.children):
       # 5 possible edge types:
-      # 1. src => fwd
+      # 1. load => fwd
       # 2. fwd => fwd
       # 3. fwd => cpt
       # 4. cpt => fwd
-      # 5. cpt => sink
-      if isinstance(src_node, SuperSourceNode):
+      # 5. cpt => store
+      if isinstance(src_node, LoadNode):
         write_lat = 0
       elif isinstance(src_node, ForwardNode):
         write_lat = 2
@@ -345,23 +547,16 @@ def create_dataflow_graph(stencil):
       else:
         raise util.InternalError('unexpected source node: %s' % repr(src_node))
 
-      depth = 0
-      fifo = ir.FIFO(src_node, dst_node, depth, write_lat)
-      if isinstance(src_node, SuperSourceNode):
-        lets = []
-        # TODO: build an index somewhere
-        for stmt in stencil.input_stmts:
-          if stmt.name == dst_node.tensor.name:
-            break
-        else:
-          raise util.InternalError('cannot find tensor %s' %
-                                   dst_node.tensor.name)
+      fifo = ir.FIFO(src_node, dst_node, depth=0, write_lat=write_lat)
+      lets: List[ir.Let] = []
+      if isinstance(src_node, LoadNode):
         expr = ir.DRAMRef(
             haoda_type=dst_node.tensor.haoda_type,
-            # pylint: disable=undefined-loop-variable
-            dram=stmt.dram,
+            dram=(src_node.bank,),
             var=dst_node.tensor.name,
-            offset=stencil.unroll_factor - 1 - dst_node.offset)
+            offset=(stencil.unroll_factor - 1 - dst_node.offset) //
+            len(stencil.stmt_table[dst_node.tensor.name].dram),
+        )
       elif isinstance(src_node, ForwardNode):
         if isinstance(dst_node, ComputeNode):
           dst = src_node.tensor.children[dst_node.tensor.name]
@@ -373,7 +568,6 @@ def create_dataflow_graph(stencil):
                         src_name, util.idx2str(idx), dst.name, unroll_idx,
                         print_node(src_node))
           dst_node.fifo_map[src_name][idx] = fifo
-        lets = []
         delay = stencil.reuse_buffer_lengths[src_node.tensor.name]\
                                             [src_node.offset]
         offset = src_node.offset - delay
@@ -420,20 +614,14 @@ def create_dataflow_graph(stencil):
         _logger.debug('expr: %s', src_node.tensor.expr)
         expr = src_node.tensor.expr.visit(replace_refs_callback)
         _logger.debug('replaced expr: %s', expr)
-        # TODO: build an index somewhere
-        if isinstance(dst_node, SuperSinkNode):
-          for stmt in stencil.output_stmts:
-            if stmt.name == src_node.tensor.name:
-              break
-          else:
-            raise util.InternalError('cannot find tensor %s' %
-                                     src_node.tensor.name)
+        if isinstance(dst_node, StoreNode):
           dram_ref = ir.DRAMRef(
               haoda_type=src_node.tensor.haoda_type,
-              # pylint: disable=undefined-loop-variable
-              dram=stmt.dram,
+              dram=(dst_node.bank,),
               var=src_node.tensor.name,
-              offset=src_node.pe_id)
+              offset=(src_node.pe_id) //
+              len(stencil.stmt_table[src_node.tensor.name].dram),
+          )
           dst_node.lets.append(ir.Let(haoda_type=None, name=dram_ref,
                                       expr=fifo))
       else:
@@ -447,9 +635,4 @@ def create_dataflow_graph(stencil):
 
   super_source.update_module_depths({})
 
-  for src_node, dst_node in super_source.bfs_edge_gen():
-    fifo = src_node.fifo(dst_node)
-    _logger.debug('fifo [%d]: %s%s => %s', fifo.depth, color_id(src_node),
-                  '' if fifo.write_lat is None else ' ~%d' % fifo.write_lat,
-                  color_id(dst_node))
   return super_source

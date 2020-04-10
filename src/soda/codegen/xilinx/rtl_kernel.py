@@ -354,7 +354,7 @@ def print_top_module(printer, super_source, inputs, outputs):
         width=width, depth=2), port_name + '_fifo', args)
     println()
 
-  for module in super_source.tpo_node_gen():
+  for module in super_source.tpo_valid_node_gen():
     for fifo in module.fifos:
       kwargs = {
           'name' : fifo.c_expr,
@@ -391,7 +391,7 @@ def print_top_module(printer, super_source, inputs, outputs):
           width=fifo.width_in_bits, depth=fifo.depth+2), fifo.c_expr, args)
       println()
 
-  for module in super_source.tpo_node_gen():
+  for module in super_source.tpo_valid_node_gen():
     module_trait, module_trait_id = super_source.module_table[module]
     args = collections.OrderedDict(
         (('ap_clk', 'ap_clk'), ('ap_rst', 'ap_rst_reg'), ('ap_start', "1'b1")))
@@ -440,7 +440,7 @@ def print_top_module(printer, super_source, inputs, outputs):
     println()
   printer.endmodule()
 
-  for module in super_source.tpo_node_gen():
+  for module in super_source.tpo_valid_node_gen():
     for fifo in module.fifos:
       fifos.add((fifo.width_in_bits, fifo.depth + 2))
   for fifo in fifos:

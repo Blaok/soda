@@ -1,27 +1,19 @@
-from typing import (
-    Dict,
-    List,
-    Tuple,
-)
-
 import collections
 import itertools
 import logging
 import operator
+from typing import Dict, List, Tuple, Union
 
 import cached_property
 import pulp
 import toposort
 
-from haoda import ir
-from haoda import util
-from haoda.ir import arithmetic
-from soda import dataflow
-from soda import visitor
-from soda.optimization import inline
-from soda.optimization import tcse
-import soda.util
 import soda.tensor
+import soda.util
+from haoda import ir, util
+from haoda.ir import arithmetic
+from soda import dataflow, visitor
+from soda.optimization import inline, tcse
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -193,6 +185,16 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
         return var
 
   @cached_property.cached_property
+  def stmt_table(
+      self
+  ) -> Dict[str, Union[soda.grammar.InputStmt, soda.grammar.LocalStmt,
+                       soda.grammar.OutputStmt, soda.grammar.ParamStmt]]:
+    return {
+        stmt.name: stmt for stmt in self.input_stmts + self.local_stmts +
+        self.output_stmts + self.param_stmts
+    }
+
+  @cached_property.cached_property
   def input_types(self):
     return tuple(tensor.haoda_type for tensor in self.input_stmts)
 
@@ -238,7 +240,7 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
     Raises:
       util.InputError if names conflict.
     """
-    symbol_table = {}   # type: Dict[str, str]
+    symbol_table: Dict[str, str] = {}
     for name, haoda_type in zip(
         itertools.chain(self.input_names, self.local_names, self.output_names),
         itertools.chain(self.input_types, self.local_types, self.output_types)):
@@ -256,19 +258,18 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
           argument of stmt, used for propagating types including the local
           variables (ir.Let).
     """
+
     def propagate_type(node, stmt=None):
       symbol_table = self.symbol_table
       if stmt is not None:
         symbol_table = stmt.symbol_table
       return arithmetic.base.propagate_type(node, symbol_table)
+
     return propagate_type
 
   @cached_property.cached_property
   def norm_refs(self):
     norm_refs = {}
-    stmt_table = {}
-    for stmt in self.local_stmts:
-      stmt_table[stmt.name] = stmt
 
     def get_norm_idx(stmt) -> Tuple[int, ...]:
       norm_idx = norm_refs.get(stmt.name)
@@ -283,7 +284,7 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
               yield load.idx
             else:
               yield tuple(x + y for x, y in zip(
-                  load.idx, get_norm_idx(stmt_table[load.name])))
+                  load.idx, get_norm_idx(self.stmt_table[load.name])))
 
         norm_idx = tuple(x - y for x, y in zip(
             min(all_indices(), key=lambda idx: tuple(reversed(tuple(idx)))),
