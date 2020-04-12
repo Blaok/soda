@@ -1,13 +1,11 @@
-from typing import (
-    Tuple,)
-
 import cProfile
+import logging
 import os
 import pstats
+import shutil
 import tracemalloc
 import unittest
-
-import logging
+from typing import Tuple
 
 from soda.optimization import tcse
 
@@ -337,6 +335,8 @@ class TestGreedySchedules(TestCommSchedules):
     self.assertEqual(8, schedule.num_ops)
 
 
+@unittest.skipIf(
+    shutil.which('tcse') is None, 'external computation reuse unavailable')
 class TestExternalSchedules(TestCommSchedules):
 
   def setUp(self):
