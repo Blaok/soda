@@ -10,11 +10,11 @@ https://github.com/Blaok/soda
 
 from setuptools import find_packages, setup
 
-with open('README.md', encoding='utf-8') as f:
+with open('../README.md', encoding='utf-8') as f:
   long_description = f.read()
 
 setup(
-    name='soda',
+    name='sodac',
     version='0.0.20200411.dev1',
     description='Stencil with optimized dataflow architecture',
     long_description=long_description,
@@ -34,8 +34,7 @@ setup(
         'Programming Language :: Python :: 3.9',
         'Topic :: System :: Hardware',
     ],
-    package_dir={'': 'src'},
-    packages=find_packages('src', exclude=('tests',)),
+    packages=find_packages(exclude=('tests', 'tests.*')),
     python_requires='>=3.6',
     install_requires=[
         'cached_property',
