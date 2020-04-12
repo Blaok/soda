@@ -38,17 +38,26 @@ def print_code(stencil: core.Stencil, output_file: TextIO) -> None:
 
   println()
 
-  instance_count = collections.defaultdict(int)  # type: Dict[int, int]
+  # in generated bitstream, kernels are sorted in alphabetical order
+  # SODA relies on the correct ordering for memory channels of each tensor
+  # so here we make sure the kernel names in alphabetical order
+  width = len(str(sum(1 for _ in super_source.tpo_valid_node_gen()) - 1))
+  instance_idx: Dict[int, int] = collections.defaultdict(int)
+  overall_idx = 0
   for node in super_source.tpo_valid_node_gen():
     module_trait, module_trait_id = super_source.module_table[node]
-    print_kernel('{}_module_{}_instance_{}'.format(
-        stencil.app_name, module_trait_id, instance_count[module_trait_id]),
-                 printer,
-                 node,
-                 module_trait,
-                 module_trait_id,
-                 burst_width=stencil.burst_width)
-    instance_count[module_trait_id] += 1
+    print_kernel(
+        f'{stencil.app_name}_{overall_idx:0{width}}_'
+        f'module_{module_trait_id}_'
+        f'instance_{instance_idx[module_trait_id]}',
+        printer,
+        node,
+        module_trait,
+        module_trait_id,
+        burst_width=stencil.burst_width,
+    )
+    instance_idx[module_trait_id] += 1
+    overall_idx += 1
     println()
 
 
