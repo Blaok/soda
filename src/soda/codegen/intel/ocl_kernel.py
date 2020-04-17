@@ -32,9 +32,7 @@ def print_code(stencil: core.Stencil, output_file: TextIO) -> None:
   super_source = stencil.dataflow_super_source
   for node in super_source.tpo_valid_node_gen():
     for fifo in node.fifos:
-      println('channel {fifo.cl_type} {fifo.cl_expr} '
-              '__attribute__((depth({depth})));'.format(fifo=fifo,
-                                                        depth=fifo.depth + 2))
+      println(f'channel {fifo.cl_type} {fifo.cl_expr};')
 
   println()
 
