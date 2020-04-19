@@ -43,4 +43,7 @@ setup(
         'textx',
         'toposort',
     ],
+    entry_points={
+        'console_scripts': ['sodac=soda.sodac:main'],
+    },
 )
