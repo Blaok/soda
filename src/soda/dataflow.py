@@ -1,7 +1,7 @@
 import collections
 import itertools
 import logging
-from typing import Dict, Iterator, List, Set, Tuple
+from typing import Dict, Iterator, List, Tuple
 
 import cached_property
 import pulp
@@ -95,54 +95,31 @@ class SuperSourceNode(ir.Module):
     lp_problem += sum(
         x.fifo(y).haoda_type.width_in_bits * v for (x, y), v in lp_vars.items())
 
-    # DFS to traverse all paths from super source to super sink
-    path_list: List[Tuple[ir.Module, ...]]
-    path_list = []
+    # memorize last visited path from super source to each node
+    prev_path_table: Dict[ir.Module, List[ir.Module]] = {}
 
-    def dfs(node: ir.Module, path: Tuple[ir.Module, ...] = ()) -> None:
-      path = path + (node,)
-      if isinstance(node, SuperSinkNode):
-        path_list.append(path)
-      for child in node.children:
-        dfs(child, path)
+    # extract non-overlapping reconvergent paths
+    path_table: Dict[Tuple[ir.Module, ir.Module], List[List[ir.Module]]] = {}
 
-    dfs(self)
-
-    # extract non-overlapping multi-path pairs
-    path_table: Dict[Tuple[ir.Module, ir.Module], Set[Tuple[ir.Module, ...]]]
-    path_table = collections.defaultdict(set)
-    for path1, path2 in itertools.combinations(path_list, 2):
-      path_pairs: List[Tuple[List[ir.Module], List[ir.Module]]]
-      path_pairs = [([], [])]
-      common_nodes = set(path1) & set(path2)
-      i1 = i2 = 0
-      while i1 < len(path1) or i2 < len(path2):
-        if path1[i1] in common_nodes and path2[i2] in common_nodes:
-          path_pairs[-1][0].append(path1[i1])
-          path_pairs[-1][1].append(path2[i2])
-          if path_pairs[-1][0] == path_pairs[-1][1]:
-            # throw away identical paths
-            path_pairs[-1] = [path1[i1]], [path2[i2]]
+    def dfs(node: ir.Module, path: List[ir.Module]) -> None:
+      path.append(node)
+      prev_path = prev_path_table.get(node)
+      prev_path_table[node] = path[:]
+      if prev_path is not None:
+        idx = 0
+        for node1, node2 in zip(prev_path[1:], path[1:]):
+          if node1 is node2:
+            idx += 1
           else:
-            path_pairs.append(([path1[i1]], [path2[i2]]))
-          i1 += 1
-          i2 += 1
-        elif path1[i1] in common_nodes:
-          path_pairs[-1][1].append(path2[i2])
-          i2 += 1
-        elif path2[i2] in common_nodes:
-          path_pairs[-1][0].append(path1[i1])
-          i1 += 1
-        else:
-          path_pairs[-1][0].append(path1[i1])
-          path_pairs[-1][1].append(path2[i2])
-          i1 += 1
-          i2 += 1
-      # last multi-path pair must be a pair of singleton lists, throw it away
-      path_pairs.pop()
-      for path_list1, path_list2 in path_pairs:
-        path_table[(path_list1[0], path_list1[-1])].update(
-            (tuple(path_list1), tuple(path_list2)))
+            break
+        key = path[idx], path[-1]
+        path_table.setdefault(key, [prev_path[idx:]]).append(path[idx:])
+      else:
+        for child in node.children:
+          dfs(child, path)
+      path.pop()
+
+    dfs(self, [])
 
     # apply ILP constraints
     for paths in path_table.values():
@@ -179,7 +156,7 @@ class SuperSourceNode(ir.Module):
 
     if _logger.isEnabledFor(logging.DEBUG):
       for (first, last), paths in path_table.items():
-        _logger.debug('multiple paths from %s to %s', repr(first), repr(last))
+        _logger.debug('reconvergent paths %s ==> %s', repr(first), repr(last))
         for path in paths:
           module_latency = sum(
               x.get_latency(y)
