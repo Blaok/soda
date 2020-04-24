@@ -35,6 +35,14 @@ class SuperSourceNode(ir.Module):
     self.cpt_nodes = cpt_nodes
     self.super_sink = super_sink
 
+  @property
+  def graphviz(self) -> str:
+    output = 'digraph {\n'
+    for src, dst in self.dfs_edge_gen():
+      output += f'  "{repr(src)}" -> "{repr(dst)}"\n'
+    output += '}\n'
+    return output
+
   def update_module_depths(
       self,
       depths: Dict[int, int],
