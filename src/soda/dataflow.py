@@ -72,16 +72,15 @@ class SuperSourceNode(ir.Module):
         min_depth (int): Minimum possible FIFO depth, default to 2.
     """
     # update module pipeline depths
-    for src_node in self.tpo_valid_node_gen():
-      for dst_node in src_node.children:
-        module_id = self.module_table[src_node][1]
-        depth = depths.get(module_id)
-        if depth is not None:
-          fifo = src_node.fifo(dst_node)
-          if fifo.write_lat != depth:
-            _logger.debug('%s write latency changed %s -> %d', fifo,
-                          fifo.write_lat, depth)
-            fifo.write_lat = depth
+    for src_node, dst_node in self.bfs_valid_edge_gen():
+      module_id = self.module_table[src_node][1]
+      depth = depths.get(module_id)
+      if depth is not None:
+        fifo = src_node.fifo(dst_node)
+        if fifo.write_lat != depth:
+          _logger.debug('%s write latency changed %s -> %d', fifo,
+                        fifo.write_lat, depth)
+          fifo.write_lat = depth
 
     # set up ILP problem, variables, and objective
     lp_problem = pulp.LpProblem('optimal_fifo_depths', pulp.LpMinimize)
