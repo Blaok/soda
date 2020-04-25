@@ -9,7 +9,7 @@ function prepare() {
   tmp_dir="$(mktemp /tmp/soda-${script_name}.XXXXXXXX --directory)"
   pushd "${tmp_dir}" >/dev/null
 
-  log_file="${log_dir}/$(date +%y%m%d-%H%M%S).log"
+  log_file="${log_dir}/${script_name}.$(date +%y%m%d-%H%M%S).log"
   exec {log_fd}>${log_file}
   ln --symbolic --force "$(basename "${log_file}")" \
     "${log_dir}/${script_name}.log"
