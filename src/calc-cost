@@ -2,12 +2,12 @@
 import json
 import sys
 
-from soda.optimization import tcse
+from soda.optimization import computation_reuse as cr
 
 
 def main():
   j = json.load(sys.stdin)
-  schedule = tcse.make_schedule_from_json(j, j.get('rattrs'), j.get('aattrs'))
+  schedule = cr.make_schedule_from_json(j, j.get('rattrs'), j.get('aattrs'))
   j["num_ops"] = schedule.num_ops
   j["total_distance"] = schedule.total_distance
   print(json.dumps(j, indent=2))

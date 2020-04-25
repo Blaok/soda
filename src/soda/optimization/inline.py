@@ -2,12 +2,10 @@ import collections
 import itertools
 import logging
 
-from haoda import ir
-from haoda import util
+from haoda import ir, util
 from haoda.ir import arithmetic
-from soda import grammar
-from soda import mutator
-from soda import visitor
+
+from soda import grammar, mutator, visitor
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -237,7 +235,7 @@ def rebalance(stencil):
                 ir.AddSub(operator=tuple(new_operators[1:]),
                           operand=tuple(new_operands))))
       for new_expr in new_exprs[:-1]:
-        new_stmt_name = stencil.new_tcse_var()
+        new_stmt_name = stencil.new_cr_var()
         new_stmts.append(
             grammar.LocalStmt(ref=ir.Ref(name=new_stmt_name,
                                          lat=None,

@@ -7,7 +7,7 @@ import tracemalloc
 import unittest
 from typing import Tuple
 
-from soda.optimization import tcse
+from soda.optimization import computation_reuse as cr
 
 logging.basicConfig(level=logging.FATAL,
                     format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
@@ -20,12 +20,12 @@ if 'DEBUG' in os.environ:
 class TestHelpers(unittest.TestCase):
 
   def test_range_from_middle(self):
-    self.assertTupleEqual((1, 0, 2), tuple(tcse.range_from_middle(3)))
-    self.assertTupleEqual((1, 2, 0, 3), tuple(tcse.range_from_middle(4)))
-    self.assertTupleEqual((2, 1, 3, 0, 4), tuple(tcse.range_from_middle(5)))
-    self.assertTupleEqual((2, 3, 1, 4, 0, 5), tuple(tcse.range_from_middle(6)))
+    self.assertTupleEqual((1, 0, 2), tuple(cr.range_from_middle(3)))
+    self.assertTupleEqual((1, 2, 0, 3), tuple(cr.range_from_middle(4)))
+    self.assertTupleEqual((2, 1, 3, 0, 4), tuple(cr.range_from_middle(5)))
+    self.assertTupleEqual((2, 3, 1, 4, 0, 5), tuple(cr.range_from_middle(6)))
     for n in range(100):
-      self.assertCountEqual(range(n), tcse.range_from_middle(n))
+      self.assertCountEqual(range(n), cr.range_from_middle(n))
 
 
 class TestLinearizer(unittest.TestCase):
@@ -33,7 +33,7 @@ class TestLinearizer(unittest.TestCase):
   def test_3x3_linearizer(self):
     rattrs = ((-1, -1), (-1, 0), (-1, 1), (-1, 0), (0, 0), (1, 0), (-1, 1),
               (0, 1), (1, 1))
-    linearizer = tcse.Linearizer(rattrs)
+    linearizer = cr.Linearizer(rattrs)
     self.assertEqual(linearizer.num_dim, 2)
     self.assertSequenceEqual(linearizer.maxs, (1, 1))
     self.assertSequenceEqual(linearizer.mins, (-1, -1))
@@ -95,9 +95,9 @@ class TestCommSchedule(unittest.TestCase):
   def test_norm_attrs(self):
     rattrs, _ = self.get_int_attrs(9)
     # 0 + ((1 + 3) + 2)
-    schedule = tcse.CommSchedule(None, None, rattrs[3] - rattrs[1], rattrs)
-    schedule = tcse.CommSchedule(schedule, None, rattrs[2] - rattrs[1], rattrs)
-    schedule = tcse.CommSchedule(None, schedule, rattrs[1] - rattrs[0], rattrs)
+    schedule = cr.CommSchedule(None, None, rattrs[3] - rattrs[1], rattrs)
+    schedule = cr.CommSchedule(schedule, None, rattrs[2] - rattrs[1], rattrs)
+    schedule = cr.CommSchedule(None, schedule, rattrs[1] - rattrs[0], rattrs)
     self.assertSequenceEqual(tuple(sorted(schedule.norm_attrs)),
                              (rattrs[0], rattrs[1], rattrs[2], rattrs[3]))
 
@@ -106,17 +106,17 @@ class TestCommSchedule(unittest.TestCase):
     uniq_expr_dict = {}
 
     # 1 + 3
-    schedule = tcse.CommSchedule(None, None, rattrs[3] - rattrs[1], rattrs)
+    schedule = cr.CommSchedule(None, None, rattrs[3] - rattrs[1], rattrs)
     expr = [0, rattrs[3] - rattrs[1]]
     uniq_expr_dict[frozenset(expr)] = [schedule]
 
     # (1 + 3) + 2
-    schedule = tcse.CommSchedule(schedule, None, rattrs[2] - rattrs[1], rattrs)
+    schedule = cr.CommSchedule(schedule, None, rattrs[2] - rattrs[1], rattrs)
     expr.append(rattrs[2] - rattrs[1])
     uniq_expr_dict[frozenset(expr)] = [schedule]
 
     # 0 + ((1 + 3) + 2)
-    schedule = tcse.CommSchedule(None, schedule, rattrs[1] - rattrs[0], rattrs)
+    schedule = cr.CommSchedule(None, schedule, rattrs[1] - rattrs[0], rattrs)
     uniq_expr_dict[frozenset(rattrs[:4])] = [schedule]
 
     self.assertDictEqual(schedule.uniq_expr_dict, uniq_expr_dict)
@@ -125,23 +125,23 @@ class TestCommSchedule(unittest.TestCase):
     uniq_expr_dict.clear()
 
     # 0 + 1
-    schedule1 = tcse.CommSchedule(None, None, rattrs[1] - rattrs[0], rattrs)
+    schedule1 = cr.CommSchedule(None, None, rattrs[1] - rattrs[0], rattrs)
     # 3 + 4
-    schedule2 = tcse.CommSchedule(None, None, rattrs[4] - rattrs[3], rattrs)
+    schedule2 = cr.CommSchedule(None, None, rattrs[4] - rattrs[3], rattrs)
     expr = [0, rattrs[1] - rattrs[0]]
     self.assertEqual(rattrs[4] - rattrs[3], expr[-1])
     uniq_expr_dict[frozenset(expr)] = [schedule1, schedule2]
 
     # (0 + 1) + (3 + 4)
-    schedule = tcse.CommSchedule(schedule1, schedule2, rattrs[3] - rattrs[0],
-                                 rattrs)
+    schedule = cr.CommSchedule(schedule1, schedule2, rattrs[3] - rattrs[0],
+                               rattrs)
     uniq_expr_dict[frozenset(rattrs[0:2] + rattrs[3:5])] = [schedule]
     self.assertDictEqual(schedule.uniq_expr_dict, uniq_expr_dict)
     self.assertSetEqual(schedule.uniq_expr_set, set(uniq_expr_dict))
 
 
 class TestCommSchedules(unittest.TestCase):
-  """Test temporal common sub-expression elimination.
+  """Test computation reuse.
 
   Attributes:
     caching: Boolean value of whether to enabling caching.
@@ -154,10 +154,9 @@ class TestCommSchedules(unittest.TestCase):
     return None
 
   def setUp(self):
-    self.Schedules = tcse.CommSchedules
+    self.Schedules = cr.CommSchedules
     self.Schedules.set_optimizations(
-        ('reorder-exploration', 'skip-with-partial-cost',
-         'lazy-cartesian-product', 'no-c-temporal-cse'))
+        ('reorder-exploration', 'skip-with-partial-cost'))
     self.caching = True
     if 'PROFILING' in os.environ:
       self.pr = cProfile.Profile()
@@ -172,8 +171,8 @@ class TestCommSchedules(unittest.TestCase):
       p.print_stats()
       print('\n--- %s --->>>' % self._testMethodName)
 
-  def test_simple_tcse(self):
-    """Test a simple temporal CSE case.
+  def test_simple_cr(self):
+    """Test a simple computation reuse case.
 
     Expression: x[0] + 2 * x[1] + x[2] + 2 * x[3]
     Expected result: y[0] = x[0] + 2 * x[1]; y[0] + y[2]
@@ -183,8 +182,8 @@ class TestCommSchedules(unittest.TestCase):
     schedule = self.Schedules(rattrs, aattrs, cache=self.cache).best
     self.assertEqual(2, schedule.num_ops)
 
-  def test_3x2_tcse(self):
-    """Test a 3x2 temporal CSE case."""
+  def test_3x2_cr(self):
+    """Test a 3x2 computation reuse case."""
     rattrs = (0, 1, 2, 10, 11, 12)
     schedules = self.Schedules(rattrs, None, cache=self.cache)
     schedule = schedules.best
@@ -196,7 +195,7 @@ class TestCommSchedules(unittest.TestCase):
     schedules.print_stats()
     self.assertEqual(4, schedule.num_ops)
 
-  def test_jacobi2d_tcse(self):
+  def test_jacobi2d_cr(self):
     rattrs = (1, 10, 11, 12, 21)
     schedules = self.Schedules(rattrs, None, cache=self.cache)
     schedule = schedules.best
@@ -245,12 +244,12 @@ class TestGreedySchedules(TestCommSchedules):
 
   def setUp(self):
     super().setUp()
-    self.Schedules = tcse.GreedySchedules
+    self.Schedules = cr.GreedySchedules
 
-  def test_3x3_tcse(self):
-    """Test a 3x3 temporal CSE case."""
+  def test_3x3_cr(self):
+    """Test a 3x3 computation reuse case."""
     rattrs = [(x, y) for y in range(3) for x in range(3)]
-    linearizer = tcse.Linearizer(rattrs)
+    linearizer = cr.Linearizer(rattrs)
     rattrs = tuple(map(linearizer, rattrs))
     _logger.debug('rattrs: %s', rattrs)
 
@@ -278,18 +277,18 @@ class TestGreedySchedules(TestCommSchedules):
     test((1, 1, 1, 0, 1, 1, 1, 0, 3), num_ops=6, total_distance=18)
     test((1, 2, 1, 2, 3, 2, 1, 2, 1), num_ops=6, total_distance=13)
 
-  def test_5x5_tcse(self):
-    """Test a 5x5 temporal CSE case."""
+  def test_5x5_cr(self):
+    """Test a 5x5 computation reuse case."""
     m, n = 5, 5
     rattrs = [(x, y) for y in range(n) for x in range(m)]
-    linearizer = tcse.Linearizer(rattrs)
+    linearizer = cr.Linearizer(rattrs)
     schedule = self.Schedules(tuple(map(linearizer, rattrs)),
                               linearizer=linearizer,
                               cache=self.cache).best
     self.assertEqual(6, schedule.num_ops)
 
-  def test_more_tcse(self):
-    """Test a more complicated temporal CSE case.
+  def test_more_cr(self):
+    """Test a more complicated computation reuse case.
 
     Expression: x[0, 0] + 2 * x[1, 0] + 3 * x[2, 0] + 4 * x[4, 0] +
                 x[0, 1] + 2 * x[1, 1] + 3 * x[2, 1] + 4 * x[4, 1] +
@@ -305,7 +304,7 @@ class TestGreedySchedules(TestCommSchedules):
     self.assertEqual(5, schedule.num_ops)
 
   @unittest.skipIf(os.environ.get('GIT_DIR'), 'too slow')
-  def test_11x11_tcse(self):
+  def test_11x11_cr(self):
     m, n = 11, 11
     rattrs = [0] * m * n
     aattrs = [0] * m * n
@@ -313,7 +312,7 @@ class TestGreedySchedules(TestCommSchedules):
       for x in range(m):
         rattrs[y * m + x] = (x, y)
         aattrs[y * m + x] = (x - m // 2)**2 + (y - n // 2)**2
-    linearizer = tcse.Linearizer(rattrs)
+    linearizer = cr.Linearizer(rattrs)
     rattrs = tuple(map(linearizer, rattrs))
     schedule = self.Schedules(rattrs, aattrs, linearizer=linearizer).best
     self.assertEqual(70, schedule.num_ops)
@@ -323,28 +322,28 @@ class TestGreedySchedules(TestCommSchedules):
     self.assertGreaterEqual(220, schedule.total_distance)
 
   @unittest.skipIf(os.environ.get('GIT_DIR'), 'too slow')
-  def test_16x16_tcse(self):
+  def test_16x16_cr(self):
     m, n = 16, 16
     rattrs = [0] * m * n
     for y in range(n):
       for x in range(m):
         rattrs[y * m + x] = x, y
-    linearizer = tcse.Linearizer(rattrs)
+    linearizer = cr.Linearizer(rattrs)
     rattrs = tuple(map(linearizer, rattrs))
     schedule = self.Schedules(rattrs, linearizer=linearizer).best
     self.assertEqual(8, schedule.num_ops)
 
 
 @unittest.skipIf(
-    shutil.which('tcse') is None, 'external computation reuse unavailable')
+    shutil.which('soda-cr') is None, 'external computation reuse unavailable')
 class TestExternalSchedules(TestCommSchedules):
 
   def setUp(self):
     super().setUp()
-    self.Schedules = tcse.ExternalSchedules
+    self.Schedules = cr.ExternalSchedules
 
-  def test_3x3_tcse(self):
-    """Test a 3x3 temporal CSE case."""
+  def test_3x3_cr(self):
+    """Test a 3x3 computation reuse case."""
     rattrs = (0, 1, 2, 10, 11, 12, 20, 21, 22)
     aattrs = (1, 1, 1, 1, 2, 1, 1, 1, 1)
     schedules = self.Schedules(rattrs, aattrs, cache=self.cache)

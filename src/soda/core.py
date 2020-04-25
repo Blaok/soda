@@ -7,13 +7,14 @@ from typing import Dict, List, Tuple, Union
 import cached_property
 import pulp
 import toposort
+from haoda import ir, util
+from haoda.ir import arithmetic
 
 import soda.tensor
 import soda.util
-from haoda import ir, util
-from haoda.ir import arithmetic
 from soda import dataflow, visitor
-from soda.optimization import inline, tcse
+from soda.optimization import computation_reuse as cr
+from soda.optimization import inline
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -127,8 +128,8 @@ class Stencil():
       stmt.expr = arithmetic.simplify(stmt.expr)
       stmt.let = arithmetic.simplify(stmt.let)
 
-    self._temporal_cse_counter = 0
-    tcse.temporal_cse(self)
+    self._cr_counter = 0
+    cr.computation_reuse(self)
     if 'inline' in self.optimizations:
       inline.inline(self)
     inline.rebalance(self)
@@ -174,10 +175,10 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
   def module_traits(self):
     return self.dataflow_super_source.module_traits
 
-  def new_tcse_var(self) -> str:
+  def new_cr_var(self) -> str:
     while True:
-      var = 'tcse_var_%d' % (self._temporal_cse_counter)
-      self._temporal_cse_counter += 1
+      var = 'cr_var_%d' % (self._cr_counter)
+      self._cr_counter += 1
       if var not in {
           stmt.name
           for stmt in self.input_stmts + self.local_stmts + self.output_stmts

@@ -1,21 +1,4 @@
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    FrozenSet,
-    Iterator,
-    List,
-    MutableMapping,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-    overload,
-)
-
 import collections
-from ctypes import util as ctypes_util
 import heapq
 import itertools
 import json
@@ -25,17 +8,19 @@ import os
 import random
 import shutil
 import subprocess
+from ctypes import util as ctypes_util
+from typing import (Any, Callable, Dict, FrozenSet, Iterator, List,
+                    MutableMapping, Optional, Sequence, Set, Tuple, Union,
+                    overload)
 
 import cached_property
 import pulp
-
-from haoda import ir
-from haoda import util
+from haoda import ir, util
 from haoda.ir import arithmetic
 from haoda.ir.arithmetic import base
-from soda import grammar
-from soda import mutator
+
 import soda.visitor
+from soda import grammar, mutator
 
 RelativeAttr = int
 AbsoluteAttr = int
@@ -199,11 +184,12 @@ def set_optimizations(optimizations: Sequence[str]) -> None:
   Expression.set_optimizations(optimizations)
 
 
-def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
-                ) -> 'soda.core.Stencil':  # type: ignore
-  """Eliminate temporal common subexpressions.
+def computation_reuse(
+    stencil: 'soda.core.Stencil'  # type: ignore
+) -> 'soda.core.Stencil':  # type: ignore
+  """Reuse computation by eliminating common subexpressions.
 
-  Eliminate temporal common subexpressions. The stencil object will be modified.
+  The stencil object will be modified.
 
   Args:
     stencil: soda.core.Stencil object to work on.
@@ -211,28 +197,28 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
   Returns:
     Modified stencil object.
   """
-  method = stencil.optimizations.get('tcse')
+  method = stencil.optimizations.get('computation-reuse')
   if method is None or method == 'no':
     return stencil
-  _logger.debug('invoke stencil temporal common subexpression elimination')
+  _logger.debug('invoke stencil computation reuse')
 
   # pylint: disable=unsubscriptable-object
-  def visitor(node: ir.Node,
-              cses: MutableMapping[ir.BinaryOp, ir.Ref]) -> ir.Node:
-    """Visitor for temporal common subexpression elimination.
+  def visitor(node: ir.Node, cses: MutableMapping[ir.BinaryOp,
+                                                  ir.Ref]) -> ir.Node:
+    """Visitor for computation reuse.
 
     Args:
       csel: A dict mapping expressions to the new ir.Refs.
 
     Returns:
-      Optimized ir.Node with temporal common subexpressions eliminated.
+      Optimized ir.Node with computation reused.
     """
     try:
       expression = Expression(node, stencil)
       if expression.best_schedule is not None:
         _logger.debug('best schedule: (cost: %s)',
                       expression.best_schedule.cost)
-        return expression.best_schedule.get_ir_node_with_tcse(stencil, cses)
+        return expression.best_schedule.get_ir_node_with_cr(stencil, cses)
     except Expression.CannotHandle:
       pass
     return node
@@ -255,7 +241,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
                             expr=expr,
                             let=stmt.let,
                             stencil=stencil))
-      _logger.debug('temporal cse stmt: %s', new_local_stmts[-1])
+      _logger.debug('computation reuse stmt: %s', new_local_stmts[-1])
   stencil.local_stmts.extend(new_local_stmts)
 
   # invalidate cached_property
@@ -268,7 +254,7 @@ def temporal_cse(stencil: 'soda.core.Stencil'  # type: ignore
     stmt.expr = arithmetic.simplify(stmt.expr)
     stmt.let = arithmetic.simplify(stmt.let)
     _logger.debug('simplified: %s', stmt)
-  _logger.info('stencil after TCSE: \n  %s', str(stencil).replace('\n', '\n  '))
+  _logger.info('stencil after CR: \n  %s', str(stencil).replace('\n', '\n  '))
   return stencil
 
 
@@ -457,14 +443,14 @@ class CommSchedule(ScheduleBase):
         else:
           yield offset, 0
 
-    tcse_vars = OrderedDict([(self, 1)])
-    tcse_vars_table = {1: self}
+    cr_vars = OrderedDict([(self, 1)])
+    cr_vars_table = {1: self}
     # var_0 is input, var_1 is output
     for child, count in OrderedCounter(self.children).items():
       if count > 1:
-        tcse_vars[child] = len(tcse_vars) + 1
-        tcse_vars_table[len(tcse_vars)] = child
-    for schedule, vid in tcse_vars.items():
+        cr_vars[child] = len(cr_vars) + 1
+        cr_vars_table[len(cr_vars)] = child
+    for schedule, vid in cr_vars.items():
       _logger.debug('var_%d: %s', vid, schedule)
 
     vars_to_process = collections.deque([self])
@@ -473,9 +459,9 @@ class CommSchedule(ScheduleBase):
     dependees = OrderedDict()  # type: Dict[int, Dict[int, Tuple[int, int]]]
     while vars_to_process:
       schedule = vars_to_process.popleft()
-      dst_vid = tcse_vars[schedule]
+      dst_vid = cr_vars[schedule]
       vars_processed.add(dst_vid)
-      for offset, src_vid in get_attrs(schedule, tcse_vars):
+      for offset, src_vid in get_attrs(schedule, cr_vars):
         _logger.debug('var_%d accesses var_%d @ %d', dst_vid, src_vid, offset)
         dependers.setdefault(src_vid, OrderedDict()).setdefault(dst_vid, None)
         dependees.setdefault(dst_vid,
@@ -485,8 +471,8 @@ class CommSchedule(ScheduleBase):
         dependees[dst_vid][src_vid] = (min(offset,
                                            min_offset), max(offset, max_offset))
         if (src_vid not in vars_processed and
-            tcse_vars_table[src_vid] not in vars_to_process):
-          vars_to_process.append(tcse_vars_table[src_vid])
+            cr_vars_table[src_vid] not in vars_to_process):
+          vars_to_process.append(cr_vars_table[src_vid])
 
     def inline() -> Iterator[Tuple[int, int]]:
       """Inline a variable if it is only accessed once by another variable.
@@ -548,9 +534,9 @@ class CommSchedule(ScheduleBase):
       del dependers[src_vid]
       del dependees[dst_vid][src_vid]
       del dependees[src_vid]
-      del tcse_vars_table[src_vid]
+      del cr_vars_table[src_vid]
     self._dependers, self._dependees = dependers, dependees
-    self._tcse_vars_table = tcse_vars_table
+    self._cr_vars_table = cr_vars_table
 
   @property
   def dependers(self) -> Dict[int, Dict[int, None]]:
@@ -577,10 +563,10 @@ class CommSchedule(ScheduleBase):
     return self._dependees
 
   @property
-  def tcse_vars_table(self) -> Dict[int, 'CommSchedule']:
-    if not hasattr(self, '_tcse_vars_table'):
+  def cr_vars_table(self) -> Dict[int, 'CommSchedule']:
+    if not hasattr(self, '_cr_vars_table'):
       self._calc_dependency()
-    return self._tcse_vars_table
+    return self._cr_vars_table
 
   @cached_property.cached_property
   def total_distance(self) -> int:
@@ -746,7 +732,7 @@ class CommSchedule(ScheduleBase):
     return self.get_ir_node_with_offset(self.rattrs[0])
 
   @cached_property.cached_property
-  def _rtcse_write_idx_table(self) -> Dict[ir.BinaryOp, Tuple[int, ...]]:
+  def _rcr_write_idx_table(self) -> Dict[ir.BinaryOp, Tuple[int, ...]]:
     """Returns the CSE write index table.
 
     Returns:
@@ -757,22 +743,22 @@ class CommSchedule(ScheduleBase):
     for vid in self.dependers:
       if vid == 0:  # 0 is the input
         continue
-      expr = mutator.normalize(self.tcse_vars_table[vid].ir_node)
-      # okay not to add references because expr does not contain tcse vars
+      expr = mutator.normalize(self.cr_vars_table[vid].ir_node)
+      # okay not to add references because expr does not contain cr vars
       # TODO: support multi-stage input
       table[mutator.normalize(expr)] = util.add_inv(
           soda.visitor.get_normalize_index(expr))
     return table
 
-  def get_ir_node_with_rtcse(self,
-                             stencil,
-                             rtcses: MutableMapping[ir.BinaryOp, ir.Ref],
-                             write_idx_table=None) -> ir.Node:
-    """Returns an ir.Node with relative temporal CSE.
+  def get_ir_node_with_rcr(self,
+                           stencil,
+                           rcrs: MutableMapping[ir.BinaryOp, ir.Ref],
+                           write_idx_table=None) -> ir.Node:
+    """Returns an ir.Node with relative computation reuse.
 
     Args:
       stencil: soda.core.Stencil object, whose symbol table will be updated.
-      rtcses: Dict mapping common subexpressions to the ir.Ref representing the
+      rcrs: Dict mapping common subexpressions to the ir.Ref representing the
         write access to the new variable. This dict is used as both an input and
         an output. If the keys contain other common subexpressions, they should
         be replaced with the new variables.
@@ -780,7 +766,7 @@ class CommSchedule(ScheduleBase):
         subexpressions.
     """
     if write_idx_table is None:
-      write_idx_table = self._rtcse_write_idx_table
+      write_idx_table = self._rcr_write_idx_table
     operands = []  # type: List[ir.Node]
     _logger.debug('get ir node with cse for %s', self)
     if _logger.isEnabledFor(logging.DEBUG):
@@ -792,28 +778,28 @@ class CommSchedule(ScheduleBase):
       # replace the aattr with proper normalized node
       if isinstance(aattr, CommSchedule):
         # node_without_cse is used for key-ing write_idx_table
-        # okay not to add references because expr does not contain tcse vars
+        # okay not to add references because expr does not contain cr vars
         # TODO: support multi-stage input
         node_without_cse = mutator.shift(
             aattr.ir_node, soda.visitor.get_normalize_index(aattr.ir_node))
-        node_with_cse = aattr.get_ir_node_with_rtcse(stencil, rtcses,
-                                                     write_idx_table)
-        # node_with_cse_norm is used for key-ing rtcses
+        node_with_cse = aattr.get_ir_node_with_rcr(stencil, rcrs,
+                                                   write_idx_table)
+        # node_with_cse_norm is used for key-ing rcrs
         node_with_cse_norm = mutator.normalize(
-            node_with_cse, {ref.name: ref.idx for ref in rtcses.values()})
+            node_with_cse, {ref.name: ref.idx for ref in rcrs.values()})
         idx = write_idx_table.get(node_without_cse)
         if idx is not None:
           # this aattr is a common subexpression, need to be replaced
           # cses is key-ed by expressions with recursive CSE applied
-          if node_with_cse_norm not in rtcses:
+          if node_with_cse_norm not in rcrs:
             # this is the first time we see this aattr, allocate a new name
-            node = ir.Ref(name=stencil.new_tcse_var(), idx=idx, lat=None)
+            node = ir.Ref(name=stencil.new_cr_var(), idx=idx, lat=None)
             _logger.debug('  replace %s with %s', node_without_cse, node)
             stencil.symbol_table[node.name] = node_without_cse.haoda_type
-            rtcses[node_with_cse_norm] = node
+            rcrs[node_with_cse_norm] = node
           else:
             # we have seen this aattr, replace with the known
-            node = rtcses[node_with_cse_norm]
+            node = rcrs[node_with_cse_norm]
         else:
           # this aattr is not a common subexpression
           node = mutator.shift(node_with_cse, self.linearizer(rattr))
@@ -824,11 +810,11 @@ class CommSchedule(ScheduleBase):
     return arithmetic.simplify(ir.from_reduction(self.operator,
                                                  tuple(operands)))
 
-  def get_ir_node_with_tcse(self, stencil,
-                            tcses: Dict[ir.BinaryOp, ir.Ref]) -> ir.Node:
-    rtcses = tcses.copy()
-    ir_node_with_rtcse = self.get_ir_node_with_rtcse(stencil, rtcses)
-    norm_refs = {getattr(ref, 'name'): ref.idx for ref in rtcses.values()}
+  def get_ir_node_with_cr(self, stencil, crs: Dict[ir.BinaryOp,
+                                                   ir.Ref]) -> ir.Node:
+    rcrs = crs.copy()
+    ir_node_with_rcr = self.get_ir_node_with_rcr(stencil, rcrs)
+    norm_refs = {getattr(ref, 'name'): ref.idx for ref in rcrs.values()}
 
     # try to apply absolute CSE
     binary_aattrs = collections.defaultdict(
@@ -848,36 +834,36 @@ class CommSchedule(ScheduleBase):
     _logger.debug('counting complex aattrs')
     norm_idx = soda.visitor.get_normalize_index(self.ir_node,
                                                 references=norm_refs)
-    add_to_count(ir_node_with_rtcse, norm_idx)  # not normalized; need norm_idx
-    for tcs in rtcses:
+    add_to_count(ir_node_with_rcr, norm_idx)  # not normalized; need norm_idx
+    for tcs in rcrs:
       add_to_count(tcs)  # all normalized
     _logger.debug('complex aattrs count')
-    atcses = {}
+    acrs = {}
     for op, indices in binary_aattrs.items():
       count = len(indices)
       _logger.debug(' %s x%d', op, count)
       if count > 1:
-        new_name = stencil.new_tcse_var()
+        new_name = stencil.new_cr_var()
         # select the least index to minimize buffer size required
         min_idx = min(indices, key=lambda x: tuple(reversed(x)))
-        atcses[op] = ir.Ref(name=new_name, idx=util.add_inv(min_idx), lat=None)
+        acrs[op] = ir.Ref(name=new_name, idx=util.add_inv(min_idx), lat=None)
         stencil.symbol_table[new_name] = getattr(op, 'haoda_type')
 
-    do_atcse = lambda op: mutator.replace_expressions(
-        op, atcses, references=norm_refs)
-    rtcses = OrderedDict((do_atcse(k), v) for k, v in rtcses.items())
-    tcses.update(rtcses)
-    tcses.update(atcses)
+    do_acr = lambda op: mutator.replace_expressions(
+        op, acrs, references=norm_refs)
+    rcrs = OrderedDict((do_acr(k), v) for k, v in rcrs.items())
+    crs.update(rcrs)
+    crs.update(acrs)
     if _logger.isEnabledFor(logging.INFO):
-      for tcs, ref in rtcses.items():
-        _logger.info('rtcse: %s => %s', ir.unparenthesize(tcs), ref)
-      for tcs, ref in atcses.items():
-        _logger.info('atcse: %s => %s', ir.unparenthesize(tcs), ref)
+      for tcs, ref in rcrs.items():
+        _logger.info('rcr: %s => %s', ir.unparenthesize(tcs), ref)
+      for tcs, ref in acrs.items():
+        _logger.info('acr: %s => %s', ir.unparenthesize(tcs), ref)
 
-    reduction = ir.to_reduction(ir_node_with_rtcse)
+    reduction = ir.to_reduction(ir_node_with_rcr)
     assert reduction is not None
     return arithmetic.simplify(
-        ir.from_reduction(reduction[0], tuple(map(do_atcse, reduction[1]))))
+        ir.from_reduction(reduction[0], tuple(map(do_acr, reduction[1]))))
 
 
 def make_schedule_from_json(j: Dict[str, Any], offset: int,
@@ -1152,8 +1138,8 @@ class GreedySchedules(ScheduleBase):
 
   def __init__(self,
                rattrs: Tuple[RelativeAttr, ...],
-               aattrs: Optional[
-                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               aattrs: Optional[Tuple[Union[AbsoluteAttr, CommSchedule, None],
+                                      ...]] = None,
                linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
     self.linearizer = linearizer
@@ -1337,8 +1323,8 @@ class BeamSchedules(ScheduleBase):
 
   def __init__(self,
                rattrs: Tuple[RelativeAttr, ...],
-               aattrs: Optional[
-                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               aattrs: Optional[Tuple[Union[AbsoluteAttr, CommSchedule, None],
+                                      ...]] = None,
                linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
     self.linearizer = linearizer
@@ -1538,8 +1524,8 @@ class GloreSchedules(ScheduleBase):
 
   def __init__(self,
                rattrs: Tuple[RelativeAttr, ...],
-               aattrs: Optional[
-                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               aattrs: Optional[Tuple[Union[AbsoluteAttr, CommSchedule, None],
+                                      ...]] = None,
                linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
     if linearizer is None:
@@ -1592,9 +1578,9 @@ class GloreSchedules(ScheduleBase):
 
       # step 3: find inner-group redundancy
       InnerGroupReuseKeyType = Tuple[int, Index, Index, Tuple[Any, ...]]
-      InnerGroupReuseValueType = List[
-          Tuple[List[Tuple[Index, Any]], Index, Optional[CommSchedule], List[
-              Tuple[int, Any]]]]
+      InnerGroupReuseValueType = List[Tuple[List[Tuple[Index, Any]], Index,
+                                            Optional[CommSchedule],
+                                            List[Tuple[int, Any]]]]
 
       # dict mappping (stride, reused_distances, not_reused_distances, aattrs)
       # to list of (attrs, line_id, reused_schedule, new_attrs)
@@ -1707,13 +1693,13 @@ class ExternalSchedules(ScheduleBase):
 
   def __init__(self,
                rattrs: Tuple[RelativeAttr, ...],
-               aattrs: Optional[
-                   Tuple[Union[AbsoluteAttr, CommSchedule, None], ...]] = None,
+               aattrs: Optional[Tuple[Union[AbsoluteAttr, CommSchedule, None],
+                                      ...]] = None,
                linearizer: Optional[Linearizer] = None,
                cache: Optional[Dict] = None) -> None:
     self.linearizer = linearizer
     super().__init__(rattrs, aattrs)  # type: ignore
-    self.cmd = ['tcse']
+    self.cmd = ['soda-cr']
 
   def from_json(self, j: Dict[str, Any]) -> CommSchedule:
     return make_schedule_from_json(j, j['rattrs'][0], self.aattrs is None)
@@ -1761,7 +1747,7 @@ Schedules = Union[CommSchedules, GreedySchedules, GloreSchedules, BeamSchedules,
 
 
 class Expression:
-  """An expression suitable for temporal CSE.
+  """An expression suitable for computation reuse.
 
   Attributes:
     operator: String of the operator.
@@ -1774,10 +1760,9 @@ class Expression:
   """
 
   @staticmethod
-  def set_optimizations(
-      optimizations: Sequence[str] = ('reorder-exploration',
-                                      'skip-with-partial-cost',
-                                      'lazy-evaluation')) -> None:
+  def set_optimizations(optimizations: Sequence[str] = (
+      'reorder-exploration', 'skip-with-partial-cost',
+      'lazy-evaluation')) -> None:
     CommSchedules.set_optimizations(optimizations)
 
   class CannotHandle(Exception):
@@ -1787,9 +1772,9 @@ class Expression:
       super().__init__('cannot handle ' + str(msg) + ' yet' + str(details))
 
   def __init__(self, polynomial: ir.Node, stencil) -> None:
-    """Figure out whether a ir.Node is suitable for temporal CSE.
+    """Figure out whether a ir.Node is suitable for computation reuse.
 
-    Construct a TCSE Expression of the input polynomial. If it cannot be handled
+    Construct a CR Expression of the input polynomial. If it cannot be handled
     but is a valid ir.Node instance, it raises Expression.CannotHandle so that
     the recursive visitor can continue to find polynomials.
 
@@ -1801,7 +1786,7 @@ class Expression:
       Expression.CannotHandle: If the input cannot be handled but is not error.
       TypeError: If the input is not an instance of ir.Node.
     """
-    self.method = stencil.optimizations.get('tcse') or 'greedy'
+    self.method = stencil.optimizations.get('computation-reuse') or 'greedy'
     reduction = ir.to_reduction(polynomial)
     if reduction is not None:
       self.operator = reduction[0]
@@ -1850,11 +1835,11 @@ class Expression:
 
   @cached_property.cached_property
   def schedules(self) -> Schedules:
-    external_tcse = shutil.which('tcse')
+    external_cr = shutil.which('soda-cr')
     args = self.rattrs, self.aattrs, self.linearizer
     if self.method == 'glore':
       return GloreSchedules(*args)
-    if external_tcse is None or self.method.startswith('built-in'):
+    if external_cr is None or self.method.startswith('built-in'):
       if self.method.endswith('optimal'):
         return CommSchedules(self.rattrs, self.aattrs, cache={})
       if self.method.endswith('greedy'):
