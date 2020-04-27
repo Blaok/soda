@@ -11,7 +11,7 @@ import tempfile
 from typing import (BinaryIO, Dict, Iterable, List, Optional, Sequence, Set,
                     TextIO, Tuple)
 
-from haoda import ir, util
+from haoda import util
 from haoda.backend import xilinx as backend
 from haoda.report.xilinx import hls as hls_report
 from soda import core, dataflow
@@ -48,21 +48,19 @@ def print_code(
 
   for stmt in stencil.output_stmts:
     for bank in stmt.dram:
-      haoda_type = ir.Type('uint%d' % stencil.burst_width)
       port_name = util.get_port_name(stmt.name, bank)
       bundle_name = util.get_bundle_name(stmt.name, bank)
       iface_names.append(port_name)
       m_axi_names.append(bundle_name)
-      outputs.append((port_name, bundle_name, haoda_type,
+      outputs.append((port_name, bundle_name, stencil.burst_width,
                       util.get_port_buf_name(stmt.name, bank)))
   for stmt in stencil.input_stmts:
     for bank in stmt.dram:
-      haoda_type = ir.Type('uint%d' % stencil.burst_width)
       port_name = util.get_port_name(stmt.name, bank)
       bundle_name = util.get_bundle_name(stmt.name, bank)
       iface_names.append(port_name)
       m_axi_names.append(bundle_name)
-      inputs.append((port_name, bundle_name, haoda_type,
+      inputs.append((port_name, bundle_name, stencil.burst_width,
                      util.get_port_buf_name(stmt.name, bank)))
 
   top_name = stencil.app_name + '_kernel'
@@ -234,8 +232,8 @@ AXIS_PORT_SUFFIXES = collections.OrderedDict(
 
 def print_kernel_xml(
     name: str,
-    inputs: Iterable[Tuple[str, str, ir.Type, str]],
-    outputs: Iterable[Tuple[str, str, ir.Type, str]],
+    inputs: Iterable[Tuple[str, str, int, str]],
+    outputs: Iterable[Tuple[str, str, int, str]],
     kernel_xml: TextIO,
     interface: str = 'm_axi',
 ) -> None:
@@ -243,23 +241,22 @@ def print_kernel_xml(
 
   Args:
     name: Name of the kernel.
-    inputs: Iterable of (port_name, bundle_name, haoda_type, _) of input ports.
-    outputs: Iterable of (port_name, bundle_name, haoda_type, _) of output
-        ports.
+    inputs: Iterable of (port_name, bundle_name, width, _) of input ports.
+    outputs: Iterable of (port_name, bundle_name, width, _) of output ports.
     kernel_xml: File object to write to.
     interface: Interface type, supported values are 'm_axi' and 'axis'.
   """
   args: List[backend.Arg] = []
   if interface == 'm_axi':
     for ports in outputs, inputs:
-      for port_name, bundle_name, haoda_type, _ in ports:
+      for port_name, bundle_name, width, _ in ports:
         args.append(
             backend.Arg(
                 cat=backend.Cat.MMAP,
                 name=port_name,
                 port=bundle_name,
-                ctype=f'{haoda_type.c_type}*',
-                width=haoda_type.width_in_bits,
+                ctype=f'ap_uint<{width}>*',
+                width=width,
             ))
     args.append(
         backend.Arg(
@@ -272,9 +269,9 @@ def print_kernel_xml(
   elif interface == 'axis':
     for cat, ports in ((backend.Cat.ISTREAM, inputs), (backend.Cat.OSTREAM,
                                                        outputs)):
-      for port_name, _, haoda_type, _ in ports:
-        ctype = f'stream<ap_axiu<{haoda_type.width_in_bits}, 0, 0, 0>>&'
-        width = 8 + haoda_type.width_in_bits // 8 * 2
+      for port_name, _, width, _ in ports:
+        ctype = f'stream<ap_axiu<{width}, 0, 0, 0>>&'
+        width = 8 + width // 8 * 2
         args.append(
             backend.Arg(
                 cat=cat,
@@ -292,8 +289,8 @@ def print_kernel_xml(
 def print_top_module(
     printer: backend.VerilogPrinter,
     super_source: dataflow.SuperSourceNode,
-    inputs: Sequence[Tuple[str, str, ir.Type, str]],
-    outputs: Sequence[Tuple[str, str, ir.Type, str]],
+    inputs: Sequence[Tuple[str, str, int, str]],
+    outputs: Sequence[Tuple[str, str, int, str]],
     interface: str = 'm_axi',
 ) -> None:
   """Generate kernel.xml file.
@@ -301,8 +298,8 @@ def print_top_module(
   Args:
     printer: printer to print to
     super_source: SuperSourceNode carrying the IR tree.
-    inputs: sequence of (port_name, bundle_name, haoda_type, _) of input ports
-    outputs: sequence of (port_name, bundle_name, haoda_type, _) of output ports
+    inputs: sequence of (port_name, bundle_name, width, _) of input ports
+    outputs: sequence of (port_name, bundle_name, width, _) of output ports
     interface: interface type, supported values are 'm_axi' and 'axis'
   """
   printer.printlns('`timescale 1 ns / 1 ps', '`default_nettype none')
@@ -354,8 +351,7 @@ def print_top_module(
       *(f'input  wire {arg};' for arg in input_args),
       *(f'output wire {arg};' for arg in output_args),
   )
-  for port_name, _, haoda_type, _ in outputs:
-    width = haoda_type.width_in_bits
+  for port_name, _, width, _ in outputs:
     if interface == 'm_axi':
       printer.printlns(
           f'output wire [{width - 1}:0] {port_name}_V_V{data_in};',
@@ -374,8 +370,7 @@ def print_top_module(
           f'wire {port_name}{not_full};',
           f'wire {port_name}{write_enable};',
       )
-  for port_name, _, haoda_type, _ in inputs:
-    width = haoda_type.width_in_bits
+  for port_name, _, width, _ in inputs:
     if interface == 'm_axi':
       printer.printlns(
           f'input  wire [{width - 1}:0] {port_name}_V_V{data_out};',
@@ -405,8 +400,7 @@ def print_top_module(
 
   # print signals for FIFOs
   if interface == 'm_axi':
-    for port_name, _, haoda_type, _ in outputs:
-      width = haoda_type.width_in_bits
+    for port_name, _, width, _ in outputs:
       printer.printlns(
           f'reg [{width - 1}:0] {port_name}{data_in};',
           f'wire {port_name}_V_V{write_enable};',
@@ -414,8 +408,7 @@ def print_top_module(
     for port_name, _, _, _ in inputs:
       printer.println(f'wire {port_name}_V_V{read_enable};')
   elif interface == 'axis':
-    for port_name, _, haoda_type, _ in ports:
-      width = haoda_type.width_in_bits
+    for port_name, _, width, _ in ports:
       printer.printlns(
           f'wire [{width - 1}:0] {port_name}{data};',
           f'wire [{width // 8 - 1}:0] {port_name}{keep};',
@@ -466,8 +459,8 @@ def print_top_module(
   fifos: Set[Tuple[int, int]] = set()  # used for printing FIFO modules
 
   if interface == 'axis':
-    for port_name, _, haoda_type, _ in outputs:
-      width = haoda_type.width_in_bits // 8
+    for port_name, _, width, _ in outputs:
+      width = width // 8
       ones = '1' * width
       printer.printlns(
           f"assign {port_name}{keep} = {width}'b{ones};",
@@ -475,8 +468,7 @@ def print_top_module(
           f"assign {port_name}{last} = 1'b0;",
       )
 
-    for port_name, _, haoda_type, _ in inputs:
-      width = haoda_type.width_in_bits
+    for port_name, _, width, _ in inputs:
       printer.module_instance(
           'fifo_w{width}_d{depth}_A'.format(width=width, depth=2),
           port_name + '_fifo',
@@ -496,8 +488,7 @@ def print_top_module(
       fifos.add((width, 2))
       printer.println()
 
-    for port_name, _, haoda_type, _ in outputs:
-      width = haoda_type.width_in_bits
+    for port_name, _, width, _ in outputs:
       printer.module_instance(
           f'fifo_w{width}_d2_A',
           port_name + '_fifo',
@@ -600,8 +591,8 @@ def print_top_module(
 def print_dataflow_hls_interface(
     printer: backend.util.CppPrinter,
     top_name: str,
-    inputs: Sequence[Tuple[str, str, ir.Type, str]],
-    outputs: Sequence[Tuple[str, str, ir.Type, str]],
+    inputs: Sequence[Tuple[str, str, int, str]],
+    outputs: Sequence[Tuple[str, str, int, str]],
 ) -> None:
   ports = *outputs, *inputs
 
@@ -635,20 +626,18 @@ def print_dataflow_hls_interface(
   printer.un_scope()
 
   params = [
-      f'hls::stream<{haoda_type.c_type}>& {name}'
-      for name, _, haoda_type, _ in ports
+      f'hls::stream<ap_uint<{width}>>& {name}' for name, _, width, _ in ports
   ]
   printer.print_func('void Dataflow', params, align=0)
   printer.do_scope()
   printer.printlns(
-      *(f'volatile {haoda_type.c_type} {name}_read = {name}.read();'
-        for name, _, haoda_type, _ in inputs),
-      *(f'{name}.write({haoda_type.c_type}());'
-        for name, _, haoda_type, _ in outputs),
+      *(f'volatile ap_uint<{width}> {name}_read = {name}.read();'
+        for name, _, width, _ in inputs),
+      *(f'{name}.write(ap_uint<{width}>());' for name, _, width, _ in outputs),
   )
   printer.un_scope()
 
-  params = [f'{haoda_type.c_type}* {name}' for name, _, haoda_type, _ in ports]
+  params = [f'ap_uint<{width}>* {name}' for name, _, width, _ in ports]
   params.append('uint64_t coalesced_data_num')
   printer.print_func('void %s' % top_name, params, align=0)
   printer.do_scope()
@@ -668,8 +657,8 @@ def print_dataflow_hls_interface(
       '#pragma HLS interface s_axilite port=return '
       'bundle=control', 0)
   printer.println()
-  for _, _, haoda_type, name in ports:
-    printer.println(f'hls::stream<{haoda_type.c_type}> {name}("{name}");')
+  for _, _, width, name in ports:
+    printer.println(f'hls::stream<ap_uint<{width}>> {name}("{name}");')
     printer.println(f'#pragma HLS stream variable={name} depth=32', 0)
   for port_name, _, _, buf_name in inputs:
     printer.print_func(
