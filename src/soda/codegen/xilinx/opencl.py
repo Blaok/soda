@@ -32,6 +32,9 @@ def add_arguments(parser):
   parser.add_argument(
       '--xocl-hw-xo-rpt', type=str, dest='xo_rpt', metavar='file',
       help='Vivado HLS report for the Xilinx OpenCL hardware object')
+  parser.add_argument(
+    '--xocl-interface', type=str, dest='interface', metavar='(m_axi|axis)',
+    default='m_axi', help='interface type of the Xilinx OpenCL hardware object')
 
 def print_code(stencil, args):
   if args.kernel_file is not None:
@@ -67,7 +70,7 @@ def print_code(stencil, args):
   if args.xo_file is not None:
     with tempfile.TemporaryFile(mode='w+b') as tmp:
       rtl_kernel.print_code(stencil, tmp, platform=args.xocl_platform,
-                            rpt_file=args.xo_rpt)
+                            rpt_file=args.xo_rpt, interface=args.interface)
       tmp.seek(0)
       if args.xo_file == '-':
         shutil.copyfileobj(tmp, sys.stdout)
