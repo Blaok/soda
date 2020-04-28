@@ -159,9 +159,18 @@ def print_code(
     stencil.dataflow_super_source.update_module_depths(depths)
 
     hdl_dir = os.path.join(tmpdir, 'hdl')
-    with open(os.path.join(hdl_dir, 'Dataflow.v'), mode='w') as dataflow_v:
-      print_top_module(backend.VerilogPrinter(dataflow_v),
-                       stencil.dataflow_super_source, inputs, outputs)
+    module_name = 'Dataflow'
+    if interface == 'axis':
+      module_name = top_name
+    with open(os.path.join(hdl_dir, f'{module_name}.v'), mode='w') as fileobj:
+      print_top_module(
+          backend.VerilogPrinter(fileobj),
+          stencil.dataflow_super_source,
+          inputs,
+          outputs,
+          module_name,
+          interface,
+      )
 
     util.pause_for_debugging()
 
@@ -271,7 +280,6 @@ def print_kernel_xml(
                                                        outputs)):
       for port_name, _, width, _ in ports:
         ctype = f'stream<ap_axiu<{width}, 0, 0, 0>>&'
-        width = 8 + width // 8 * 2
         args.append(
             backend.Arg(
                 cat=cat,
@@ -291,6 +299,7 @@ def print_top_module(
     super_source: dataflow.SuperSourceNode,
     inputs: Sequence[Tuple[str, str, int, str]],
     outputs: Sequence[Tuple[str, str, int, str]],
+    module_name: str = 'Dataflow',
     interface: str = 'm_axi',
 ) -> None:
   """Generate kernel.xml file.
@@ -300,6 +309,7 @@ def print_top_module(
     super_source: SuperSourceNode carrying the IR tree.
     inputs: sequence of (port_name, bundle_name, width, _) of input ports
     outputs: sequence of (port_name, bundle_name, width, _) of output ports
+    module_name: name of the module
     interface: interface type, supported values are 'm_axi' and 'axis'
   """
   printer.printlns('`timescale 1 ns / 1 ps', '`default_nettype none')
@@ -322,11 +332,13 @@ def print_top_module(
   ready = AXIS_PORT_SUFFIXES['ready']
 
   # prepare arguments
-  input_args = ['ap_clk', 'ap_rst']
+  input_args = ['ap_clk']
   output_args: List[str] = []
   if interface == 'm_axi':
-    input_args += 'ap_start', 'ap_continue'
+    input_args += 'ap_rst', 'ap_start', 'ap_continue'
     output_args += 'ap_done', 'ap_idle', 'ap_ready'
+  elif interface == 'axis':
+    input_args.append('ap_rst_n')
 
   args = list(input_args + output_args)
   if interface == 'm_axi':
@@ -338,12 +350,12 @@ def print_top_module(
       args.append(f'{port_name}_V_V{data_out}')
       args.append(f'{port_name}_V_V{not_empty}')
       args.append(f'{port_name}_V_V{read_enable}')
-  elif interface == 's_axi':
+  elif interface == 'axis':
     for port_name, _, _, _ in ports:
       args.extend(port_name + suffix for suffix in AXIS_PORT_SUFFIXES.values())
 
   # print module interface
-  printer.module('Dataflow', args)
+  printer.module(module_name, args)
   printer.println()
 
   # print signals for modules
@@ -366,9 +378,9 @@ def print_top_module(
           f'output wire {port_name}{last};',
           f'output wire {port_name}{valid};',
           f'input  wire {port_name}{ready};',
-          f'wire {port_name}{data_in};',
-          f'wire {port_name}{not_full};',
-          f'wire {port_name}{write_enable};',
+          f'wire [{width - 1}:0] {port_name}_V_V{data_in};',
+          f'wire {port_name}_V_V{not_full};',
+          f'wire {port_name}_V_V{write_enable};',
       )
   for port_name, _, width, _ in inputs:
     if interface == 'm_axi':
@@ -385,9 +397,9 @@ def print_top_module(
           f'input  wire {port_name}{last};',
           f'input  wire {port_name}{valid};',
           f'output wire {port_name}{ready};',
-          f'wire {port_name}{data_out};',
-          f'wire {port_name}{not_empty};',
-          f'wire {port_name}{read_enable};',
+          f'wire [{width - 1}:0] {port_name}_V_V{data_out};',
+          f'wire {port_name}_V_V{not_empty};',
+          f'wire {port_name}_V_V{read_enable};',
       )
   printer.println()
 
@@ -397,6 +409,8 @@ def print_top_module(
       "reg ap_idle = 1'b1;",
       "reg ap_ready = 1'b0;",
   )
+  if interface == 'axis':
+    printer.println("wire ap_start = 1'b1;")
 
   # print signals for FIFOs
   if interface == 'm_axi':
@@ -407,22 +421,15 @@ def print_top_module(
       )
     for port_name, _, _, _ in inputs:
       printer.println(f'wire {port_name}_V_V{read_enable};')
-  elif interface == 'axis':
-    for port_name, _, width, _ in ports:
-      printer.printlns(
-          f'wire [{width - 1}:0] {port_name}{data};',
-          f'wire [{width // 8 - 1}:0] {port_name}{keep};',
-          f'wire [{width // 8 - 1}:0] {port_name}{strb};',
-          f'wire {port_name}{last};',
-          f'wire {port_name}{valid};',
-          f'wire {port_name}{ready};',
-      )
   printer.println()
 
   # register reset signal
   ap_rst_reg_level = 8
+  rst = 'ap_rst'
+  if interface == 'axis':
+    rst = '~ap_rst_n'
   printer.printlns(
-      'wire ap_rst_reg_0 = ap_rst;',
+      f'wire ap_rst_reg_0 = {rst};',
       *(f'(* shreg_extract = "no", max_fanout = {8 ** i} *) reg ap_rst_reg_{i};'
         for i in range(1, ap_rst_reg_level)),
       f'(* shreg_extract = "no" *) reg ap_rst_reg_{ap_rst_reg_level};',
@@ -434,7 +441,7 @@ def print_top_module(
                        for i in range(ap_rst_reg_level))
 
   with printer.always('posedge ap_clk'):
-    with printer.if_('ap_rst'):
+    with printer.if_('ap_rst_reg'):
       printer.printlns(
           "ap_done <= 1'b0;",
           "ap_idle <= 1'b1;",
@@ -444,16 +451,17 @@ def print_top_module(
       printer.println('ap_idle <= ~ap_start;')
   printer.println()
 
-  # used by cosim for deadlock detection
-  printer.printlns(
-      f'reg {port_name}_V_V{not_block};' for port_name, _, _, _ in ports)
-  with printer.always('*'):
+  if interface == 'm_axi':
+    # used by cosim for deadlock detection
     printer.printlns(
-        *(f'{port_name}_V_V{not_block} = {port_name}_V_V{not_full};'
-          for port_name, _, _, _ in outputs),
-        *(f'{port_name}_V_V{not_block} = {port_name}_V_V{not_empty};'
-          for port_name, _, _, _ in inputs),
-    )
+        f'reg {port_name}_V_V{not_block};' for port_name, _, _, _ in ports)
+    with printer.always('*'):
+      printer.printlns(
+          *(f'{port_name}_V_V{not_block} = {port_name}_V_V{not_full};'
+            for port_name, _, _, _ in outputs),
+          *(f'{port_name}_V_V{not_block} = {port_name}_V_V{not_empty};'
+            for port_name, _, _, _ in inputs),
+      )
   printer.println()
 
   fifos: Set[Tuple[int, int]] = set()  # used for printing FIFO modules
@@ -480,9 +488,9 @@ def print_top_module(
               f'if{data_in}': f'{port_name}{data}',
               f'if{not_full}': f'{port_name}{ready}',
               f'if{write_enable}': f'{port_name}{valid}',
-              f'if{data_out}': f'{port_name}{data_out}',
-              f'if{not_empty}': f'{port_name}{not_empty}',
-              f'if{read_enable}': f'{port_name}{read_enable}',
+              f'if{data_out}': f'{port_name}_V_V{data_out}',
+              f'if{not_empty}': f'{port_name}_V_V{not_empty}',
+              f'if{read_enable}': f'{port_name}_V_V{read_enable}',
           },
       )
       fifos.add((width, 2))
@@ -497,9 +505,9 @@ def print_top_module(
               'reset': 'ap_rst_reg',
               'if_read_ce': "1'b1",
               'if_write_ce': "1'b1",
-              f'if{data_in}': f'{port_name}{data_in}',
-              f'if{not_full}': f'{port_name}{not_full}',
-              f'if{write_enable}': f'{port_name}{write_enable}',
+              f'if{data_in}': f'{port_name}_V_V{data_in}',
+              f'if{not_full}': f'{port_name}_V_V{not_full}',
+              f'if{write_enable}': f'{port_name}_V_V{write_enable}',
               f'if{data_out}': f'{port_name}{data}',
               f'if{not_empty}': f'{port_name}{valid}',
               f'if{read_enable}': f'{port_name}{ready}',
