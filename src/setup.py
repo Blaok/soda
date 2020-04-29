@@ -38,7 +38,7 @@ setup(
     python_requires='>=3.6',
     install_requires=[
         'cached_property',
-        'haoda>=0.0.20200428.dev1',
+        'haoda>=0.0.20200429.dev1',
         'pulp',
         'textx',
         'toposort',
