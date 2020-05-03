@@ -1,3 +1,4 @@
+# coding: utf-8
 import collections
 import itertools
 import logging
@@ -43,10 +44,36 @@ class SuperSourceNode(ir.Module):
     output += '}\n'
     return output
 
+  def verify_mode_depths(self) -> None:
+    latency_table = {}
+    min_capacity_table = {}
+    for node in self.tpo_valid_node_gen():
+      if self in node.parents:
+        latency_table[node] = 0
+        min_capacity_table[node] = 0
+      else:
+        latency_table[node] = max(
+            parent.get_latency(node) + latency_table[parent]
+            for parent in node.parents)
+        min_capacity_table[node] = min(
+            parent.get_latency(node) + latency_table[parent] +
+            parent.fifo(node).depth for parent in node.parents)
+    for node in self.tpo_valid_node_gen():
+      debug_enabled = _logger.isEnabledFor(logging.DEBUG)
+      check_failed = latency_table[node] > min_capacity_table[node]
+      if debug_enabled or check_failed:
+        (_logger.debug if debug_enabled else _logger.warn)(
+            'II=1 check %s: %s: latency %d %s min capacity %d',
+            '✖' if check_failed else '✔',
+            repr(node),
+            latency_table[node],
+            '>' if check_failed else '<=',
+            min_capacity_table[node],
+        )
+
   def update_module_depths(
       self,
       depths: Dict[int, int],
-      min_depth: int = 2,
   ) -> None:
     """Update module pipeline depths and FIFO depths.
 
@@ -69,7 +96,6 @@ class SuperSourceNode(ir.Module):
 
     Args:
         depths (Dict[int, int]): Dict mapping module ids to pipeline depths.
-        min_depth (int): Minimum possible FIFO depth, default to 2.
     """
     # update module pipeline depths
     for src_node, dst_node in self.bfs_valid_edge_gen():
@@ -88,55 +114,25 @@ class SuperSourceNode(ir.Module):
     for src_node, dst_node in self.bfs_valid_edge_gen():
       lp_vars[(src_node, dst_node)] = pulp.LpVariable(
           name=f'depth_{src_node.fifo(dst_node).c_expr}',
-          lowBound=min_depth,
+          lowBound=0,
           cat='Integer',
       )
     lp_problem += sum(
         x.fifo(y).haoda_type.width_in_bits * v for (x, y), v in lp_vars.items())
 
-    # memorize last visited path from super source to each node
-    prev_path_table: Dict[ir.Module, List[ir.Module]] = {}
-
-    # extract non-overlapping reconvergent paths
-    path_table: Dict[Tuple[ir.Module, ir.Module], List[List[ir.Module]]] = {}
-
-    def dfs(node: ir.Module, path: List[ir.Module]) -> None:
-      path.append(node)
-      prev_path = prev_path_table.get(node)
-      prev_path_table[node] = path[:]
-      if prev_path is not None:
-        idx = 0
-        for node1, node2 in zip(prev_path[1:], path[1:]):
-          if node1 is node2:
-            idx += 1
-          else:
-            break
-        key = path[idx], path[-1]
-        path_table.setdefault(key, [prev_path[idx:]]).append(path[idx:])
+    # add ILP constraints
+    latency_table = {}
+    for node in self.tpo_valid_node_gen():
+      if self in node.parents:
+        latency_table[node] = 0
       else:
-        for child in node.children:
-          dfs(child, path)
-      path.pop()
-
-    dfs(self, [])
-
-    # apply ILP constraints
-    for paths in path_table.values():
-      min_latency_list = []
-      max_latency_list = []
-      for path in paths:
-        module_latency = sum(
-            x.get_latency(y)
-            for x, y in zip(path[:-1], path[1:])
-            if is_valid_edge((x, y)))
-        min_fifo_latency = len(path) - 1
-        max_fifo_latency = sum(lp_vars[edge]
-                               for edge in zip(path[:-1], path[1:])
-                               if is_valid_edge(edge))
-        min_latency_list.append(module_latency + min_fifo_latency)
-        max_latency_list.append(module_latency + max_fifo_latency)
-      max_min_latency = max(min_latency_list)
-      lp_problem.extend(max_min_latency <= x for x in max_latency_list)
+        latency_table[node] = max(
+            parent.get_latency(node) + latency_table[parent]
+            for parent in node.parents)
+        lp_problem.extend(
+            parent.get_latency(node) + latency_table[parent] +
+            lp_vars[(parent, node)] >= latency_table[node]
+            for parent in node.parents)
 
     # solve ILP
     lp_status = lp_problem.solve()
@@ -153,28 +149,7 @@ class SuperSourceNode(ir.Module):
         _logger.debug('%s * depth %d -> %d', fifo, fifo.depth, depth)
         fifo.depth = depth
 
-    if _logger.isEnabledFor(logging.DEBUG):
-      for (first, last), paths in path_table.items():
-        _logger.debug('reconvergent paths %s ==> %s', repr(first), repr(last))
-        for path in paths:
-          module_latency = sum(
-              x.get_latency(y)
-              for x, y in zip(path[:-1], path[1:])
-              if is_valid_edge((x, y)))
-          min_fifo_latency = len(path) - 1
-          max_fifo_latency = sum(
-              x.fifo(y).depth
-              for x, y in zip(path[:-1], path[1:])
-              if is_valid_edge((x, y)))
-          _logger.debug(
-              '  latency: [%d, %d] = %d + [%d, %d] path: %s',
-              module_latency + min_fifo_latency,
-              module_latency + max_fifo_latency,
-              module_latency,
-              min_fifo_latency,
-              max_fifo_latency,
-              path,
-          )
+    self.verify_mode_depths()
 
   @property
   def name(self):
