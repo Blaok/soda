@@ -219,7 +219,8 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
   printer.printlns(f'{buf_fmt[x]}'
                    f'[tiled_offset % {bank_count_fmt[x]}].get()'
                    f'[tiled_offset / {bank_count_fmt[x]}] = '
-                   f'{data_fmt[x]}[original_offset];'
+                   f'{data_fmt[x]}[std::max(int64_t(0), original_offset - '
+                   f'{stencil.tensors[x].produce_offset})];'
                    for x in stencil.input_names)
   for dim in range(stencil.dim * 2 - 1):
     printer.un_scope()

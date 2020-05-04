@@ -365,7 +365,7 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
 
     # solve ILP for optimal reuse buffer
     lp_problem = pulp.LpProblem("optimal_reuse_buffer", pulp.LpMinimize)
-    lp_vars = {name: 0 for name in self.input_names}
+    lp_vars = {self.input_names[0]: 0}  # set 1 and only 1 reference point
     lp_helper_vars = {}  # type: Dict[str, pulp.LpVariable]
     objectives = []
     constraints = []
@@ -407,10 +407,13 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
       _logger.error('ILP error: %s\n%s', lp_status_str, lp_problem)
       raise util.InternalError('unexpected ILP status: %s' % lp_status_str)
 
+    # some inputs may need to be delayed relative to others
+    base = min(int(pulp.value(lp_vars[x])) for x in self.input_names)
+
     # set produce offsets
     for tensor in tensor_map.values():
-      produce_offset = int(pulp.value(lp_vars[tensor.name]))
-      consume_offset = int(pulp.value(lp_helper_vars[tensor.name]))
+      produce_offset = int(pulp.value(lp_vars[tensor.name])) - base
+      consume_offset = int(pulp.value(lp_helper_vars[tensor.name])) - base
       tensor.produce_offset = produce_offset
       tensor.consume_offset = consume_offset
       tensor.max_access = 0  # pixels before current produce
