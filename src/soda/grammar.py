@@ -7,9 +7,8 @@ import logging
 
 import toposort
 
-from haoda import ir
+from haoda import ir, util
 from haoda.ir.arithmetic import base
-from soda import util
 
 _logger = logging.getLogger().getChild(__name__)
 
