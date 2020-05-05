@@ -540,22 +540,34 @@ def print_test(printer, stencil):
     def mutate_load_for_host(obj, args):
       if isinstance(obj, ir.Ref):
         if obj.name in stencil.param_names:
-          return ir.make_var(f'{data_fmt[obj.name]}%s' %
-                             ''.join('[%d]' % _ for _ in obj.idx))
-        return ir.make_var(f'{data_fmt[obj.name]}[%s]' % (' + '.join(
-            f'(%s%+d)*{stride_fmt[obj.name]}[%d]' %
-            (soda_util.COORDS_IN_ORIG[d], obj.idx[d] - tensor.st_ref.idx[d], d)
-            for d in range(stencil.dim))))
+          return ir.make_var(
+              f'{data_fmt[obj.name]}%s' % ''.join('[%d]' % _ for _ in obj.idx),
+              haoda_type=obj.haoda_type,
+          )
+        return ir.make_var(
+            f'{data_fmt[obj.name]}[%s]' %
+            (' + '.join(f'(%s%+d)*{stride_fmt[obj.name]}[%d]' %
+                        (soda_util.COORDS_IN_ORIG[d],
+                         obj.idx[d] - tensor.st_ref.idx[d], d)
+                        for d in range(stencil.dim))),
+            haoda_type=obj.haoda_type,
+        )
       return obj
 
     def mutate_store_for_host(obj, args):
       if isinstance(obj, ir.Ref):
         if obj.name in stencil.output_names:
-          return ir.make_var('%s result_%s' % (obj.c_type, obj.name))
-        return ir.make_var(f'{data_fmt[obj.name]}[%s]' %
-                           '+'.join(f'%s*{stride_fmt[obj.name]}[%d]' %
-                                    (soda_util.COORDS_IN_ORIG[d], d)
-                                    for d in range(stencil.dim)))
+          return ir.make_var(
+              '%s result_%s' % (obj.c_type, obj.name),
+              haoda_type=obj.haoda_type,
+          )
+        return ir.make_var(
+            f'{data_fmt[obj.name]}[%s]' %
+            '+'.join(f'%s*{stride_fmt[obj.name]}[%d]' %
+                     (soda_util.COORDS_IN_ORIG[d], d)
+                     for d in range(stencil.dim)),
+            haoda_type=obj.haoda_type,
+        )
       return obj
 
     for let in tensor.lets:
