@@ -12,6 +12,7 @@ for file in "${base_dir}/tests/src/"*.soda; do
   log "+ sodac <- ${basename} ... "
   "${base_dir}/src/sodac" "${file}" \
     --frt-host "${frt_host}" \
+    --xocl-platform "${XCL_PLATFORM}" \
     --xocl-hw-xo "${xrtl_object}" &&
     pass || fail
 

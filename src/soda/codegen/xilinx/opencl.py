@@ -1,12 +1,14 @@
+import argparse
 import os
 import shutil
 import sys
 import tempfile
 
+from haoda.backend import xilinx as backend
+from soda import core
 from soda.codegen.xilinx import header
-from soda.codegen.xilinx import host
 from soda.codegen.xilinx import hls_kernel as kernel
-from soda.codegen.xilinx import rtl_kernel
+from soda.codegen.xilinx import host, rtl_kernel
 
 def add_arguments(parser):
   parser.add_argument(
@@ -27,6 +29,12 @@ def add_arguments(parser):
   parser.add_argument(
       '--xocl-platform', type=str, dest='xocl_platform', metavar='dir',
       help='SDAccel platform directory of the Xilinx OpenCL flow')
+  parser.add_argument(
+      '--xocl-part-num', type=str, dest='xocl_part_num', metavar='string',
+      help='part number used for Vivado HLS')
+  parser.add_argument(
+      '--xocl-clock-period', type=str, dest='xocl_clock_period', metavar='ns',
+      help='target clock period in nanoseconds, used for Vivado HLS')
   parser.add_argument('--xocl-hw-xo', type=str, dest='xo_file', metavar='file',
                       help='hardware object file for the Xilinx OpenCL flow')
   parser.add_argument(
@@ -36,7 +44,11 @@ def add_arguments(parser):
     '--xocl-interface', type=str, dest='interface', metavar='(m_axi|axis)',
     default='m_axi', help='interface type of the Xilinx OpenCL hardware object')
 
-def print_code(stencil, args):
+def print_code(
+    stencil: core.Stencil,
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> None:
   if args.kernel_file is not None:
     with tempfile.TemporaryFile(mode='w+') as tmp:
       kernel.print_code(stencil, tmp)
@@ -68,15 +80,26 @@ def print_code(stencil, args):
           shutil.copyfileobj(tmp, header_file)
 
   if args.xo_file is not None:
-    with tempfile.TemporaryFile(mode='w+b') as tmp:
-      rtl_kernel.print_code(stencil, tmp, platform=args.xocl_platform,
-                            rpt_file=args.xo_rpt, interface=args.interface)
-      tmp.seek(0)
+    with tempfile.TemporaryFile(mode='w+b') as tmp_obj:
+      rtl_kernel.print_code(
+          stencil,
+          tmp_obj,
+          device_info=backend.parse_device_info(
+              parser,
+              args,
+              platform_name='xocl_platform',
+              part_num_name='xocl_part_num',
+              clock_period_name='xocl_clock_period',
+          ),
+          rpt_file=args.xo_rpt,
+          interface=args.interface,
+      )
+      tmp_obj.seek(0)
       if args.xo_file == '-':
-        shutil.copyfileobj(tmp, sys.stdout)
+        shutil.copyfileobj(tmp_obj, sys.stdout)   # type: ignore
       else:
         with open(args.xo_file, 'wb') as xo_file:
-          shutil.copyfileobj(tmp, xo_file)
+          shutil.copyfileobj(tmp_obj, xo_file)
 
   if args.output_dir is not None and (args.kernel_file is None or
                                       args.host_file is None or

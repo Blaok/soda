@@ -8,8 +8,8 @@ import shutil
 import sys
 import tarfile
 import tempfile
-from typing import (BinaryIO, Dict, Iterable, List, Optional, Sequence, Set,
-                    TextIO, Tuple)
+from typing import (IO, Dict, Iterable, List, Optional, Sequence, Set, TextIO,
+                    Tuple)
 
 from haoda import util
 from haoda.backend import xilinx as backend
@@ -22,8 +22,8 @@ _logger = logging.getLogger().getChild(__name__)
 
 def print_code(
     stencil: core.Stencil,
-    xo_file: BinaryIO,
-    platform: Optional[str] = None,
+    xo_file: IO[bytes],
+    device_info: Dict[str, str],
     jobs: Optional[int] = os.cpu_count(),
     rpt_file: Optional[str] = None,
     interface: str = 'm_axi',
@@ -35,7 +35,7 @@ def print_code(
   Args:
     stencil: Stencil object to generate from.
     xo_file: file object to write to.
-    platform: path to the SDAccel platform directory.
+    device_info: dict of 'part_num' and 'clock_period'.
     jobs: maximum number of jobs running in parallel.
     rpt_file: path of the generated report; None disables report generation.
     interface: interface type, supported values are 'm_axi' and 'axis'.
@@ -64,18 +64,6 @@ def print_code(
                      util.get_port_buf_name(stmt.name, bank)))
 
   top_name = stencil.app_name + '_kernel'
-
-  if 'XDEVICE' in os.environ:
-    xdevice = os.environ['XDEVICE'].replace(':', '_').replace('.', '_')
-    if platform is None or not os.path.exists(platform):
-      platform = os.path.join('/opt/xilinx/platforms', xdevice)
-    if platform is None or not os.path.exists(platform):
-      if 'XILINX_SDX' in os.environ:
-        platform = os.path.join(os.environ['XILINX_SDX'], 'platforms', xdevice)
-  if platform is None or not os.path.exists(platform):
-    raise ValueError('Cannot determine platform from environment.')
-  device_info = backend.get_device_info(platform)
-
   with tempfile.TemporaryDirectory(prefix='sodac-xrtl-') as tmpdir:
     kernel_xml = os.path.join(tmpdir, 'kernel.xml')
     with open(kernel_xml, 'w') as kernel_xml_obj:

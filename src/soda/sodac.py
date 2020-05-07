@@ -188,7 +188,7 @@ def main():
 
     logger.debug('stencil obtained: %s', stencil)
 
-    xocl.print_code(stencil, args)
+    xocl.print_code(stencil, args, parser)
     iocl.print_code(stencil, args)
     frt.print_code(stencil, args)
 
