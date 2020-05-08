@@ -15,7 +15,7 @@ with open('../README.md', encoding='utf-8') as f:
 
 setup(
     name='sodac',
-    version='0.0.20200507.dev1',
+    version='0.0.20200507.dev2',
     description='Stencil with optimized dataflow architecture',
     long_description=long_description,
     long_description_content_type='text/markdown',
