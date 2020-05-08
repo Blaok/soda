@@ -509,6 +509,11 @@ def print_top_module(
     for fifo in module.fifos:
       name = fifo.c_expr
       msb = fifo.width_in_bits - 1
+      # fifo.depth is the "extra" capacity of a FIFO; the base depth is 3, 1 for
+      # registering the input, 1 for keeping II=1 when FIFO is (almost) full, 1
+      # for keeping II=1 when FIFO is relaxed from back pressure (necessary
+      # because the optimal FIFO depths may require back pressure)
+      depth = fifo.depth + 3
       printer.printlns(
           f'wire [{msb}:0] {name}{data_in};',
           f'wire {name}{not_full};',
@@ -519,7 +524,7 @@ def print_top_module(
           '',
       )
       printer.module_instance(
-          f'fifo_w{fifo.width_in_bits}_d{fifo.depth + 2}_A',
+          f'fifo_w{fifo.width_in_bits}_d{depth}_A',
           name,
           args={
               'clk': 'ap_clk',
@@ -534,7 +539,7 @@ def print_top_module(
               f'if{read_enable}': f'{name}{read_enable}',
           },
       )
-      fifos.add((fifo.width_in_bits, fifo.depth + 2))
+      fifos.add((fifo.width_in_bits, depth))
       printer.println()
 
   # print module instances

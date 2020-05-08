@@ -46,29 +46,53 @@ class SuperSourceNode(ir.Module):
 
   def verify_mode_depths(self) -> None:
     latency_table = {}
-    min_capacity_table = {}
+    lp_problem = pulp.LpProblem('verify_fifo_depths', pulp.LpMinimize)
     for node in self.tpo_valid_node_gen():
       if self in node.parents:
         latency_table[node] = 0
-        min_capacity_table[node] = 0
       else:
-        latency_table[node] = max(
-            parent.get_latency(node) + latency_table[parent]
+        latency_table[node] = pulp.LpVariable(
+            name=f'latency_{node.name}',
+            lowBound=0,
+            cat='Integer',
+        )
+        lp_problem.extend(
+            parent.get_latency(node) +
+            latency_table[parent] <= latency_table[node]
             for parent in node.parents)
-        min_capacity_table[node] = min(
+        lp_problem.extend(
             parent.get_latency(node) + latency_table[parent] +
-            parent.fifo(node).depth for parent in node.parents)
+            parent.fifo(node).depth >= latency_table[node]
+            for parent in node.parents)
+
+    lp_status = lp_problem.solve()
+    if lp_status == pulp.LpStatusOptimal:
+      _logger.debug('II=1 check: PASS')
+    elif lp_status == pulp.LpStatusInfeasible:
+      _logger.warn('II=1 check: FAIL')
+    else:
+      lp_status_str = pulp.LpStatus[lp_status]
+      _logger.error('ILP error: %s\n%s', lp_status_str, lp_problem)
+      raise util.InternalError('unexpected ILP status: %s' % lp_status_str)
+
     for node in self.tpo_valid_node_gen():
+      if self in node.parents:
+        min_capacity = 0
+      else:
+        min_capacity = min(
+            parent.get_latency(node) + int(pulp.value(latency_table[parent])) +
+            parent.fifo(node).depth for parent in node.parents)
+
       debug_enabled = _logger.isEnabledFor(logging.DEBUG)
-      check_failed = latency_table[node] > min_capacity_table[node]
+      check_failed = int(pulp.value(latency_table[node])) > min_capacity
       if debug_enabled or check_failed:
         (_logger.debug if debug_enabled else _logger.warn)(
             'II=1 check %s: %s: latency %d %s min capacity %d',
             '✖' if check_failed else '✔',
             repr(node),
-            latency_table[node],
+            int(pulp.value(latency_table[node])),
             '>' if check_failed else '<=',
-            min_capacity_table[node],
+            min_capacity,
         )
 
   def update_module_depths(
@@ -121,13 +145,17 @@ class SuperSourceNode(ir.Module):
         x.fifo(y).haoda_type.width_in_bits * v for (x, y), v in lp_vars.items())
 
     # add ILP constraints
-    latency_table = {}
+    latency_table = {
+        x: pulp.LpVariable(name=f'latency_{x.name}', lowBound=0, cat='Integer')
+        for x in self.tpo_valid_node_gen()
+    }
     for node in self.tpo_valid_node_gen():
       if self in node.parents:
         latency_table[node] = 0
       else:
-        latency_table[node] = max(
-            parent.get_latency(node) + latency_table[parent]
+        lp_problem.extend(
+            parent.get_latency(node) +
+            latency_table[parent] <= latency_table[node]
             for parent in node.parents)
         lp_problem.extend(
             parent.get_latency(node) + latency_table[parent] +
