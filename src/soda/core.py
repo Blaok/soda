@@ -163,6 +163,10 @@ unroll factor: {0.unroll_factor}
 border: {0.border}
 cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
 
+  @property
+  def kernel_name(self) -> str:
+    return f'{self.app_name}_kernel'
+
   @cached_property.cached_property
   def dataflow_super_source(self):
     return dataflow.create_dataflow_graph(self)

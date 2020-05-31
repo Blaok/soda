@@ -63,7 +63,7 @@ def print_code(
       inputs.append((port_name, bundle_name, stencil.burst_width,
                      util.get_port_buf_name(stmt.name, bank)))
 
-  top_name = stencil.app_name + '_kernel'
+  top_name = stencil.kernel_name
   with tempfile.TemporaryDirectory(prefix='sodac-xrtl-') as tmpdir:
     kernel_xml = os.path.join(tmpdir, 'kernel.xml')
     with open(kernel_xml, 'w') as kernel_xml_obj:
