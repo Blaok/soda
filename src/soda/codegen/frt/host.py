@@ -636,24 +636,6 @@ def print_code(stencil: core.Stencil, host_file: TextIO) -> None:
 
   print_header(printer)
 
-  if stencil.preserve_border:
-    overall_stencil_window = core.get_overall_stencil_window(
-        stencil.output.parent.preserve_border_from(), stencil.output)
-  else:
-    overall_stencil_window = core.get_overall_stencil_window(
-        map(stencil.tensors.get, stencil.input_names),
-        stencil.tensors[stencil.output_names[0]])
-
-  overall_stencil_distance = core.get_stencil_distance(overall_stencil_window,
-                                                       stencil.tile_size)
-
-  stencil_offset = overall_stencil_distance - soda_util.serialize(
-      core.get_stencil_window_offset(overall_stencil_window), stencil.tile_size)
-  if stencil.preserve_border:
-    stencil_offset *= stencil.iterate
-
-  overall_stencil_distance = max(overall_stencil_distance, stencil_offset)
-
   all_stmts = stencil.input_stmts + stencil.output_stmts + stencil.param_stmts
 
   printer.printlns(
@@ -661,8 +643,8 @@ def print_code(stencil: core.Stencil, host_file: TextIO) -> None:
       'namespace app {',
       '// app-specific constants',
       *(f'constexpr int {STENCIL_DIM_FMT[i]} = {d};'
-        for i, d in enumerate(core.get_stencil_dim(overall_stencil_window))),
-      f'constexpr int kStencilDistance = {overall_stencil_distance};',
+        for i, d in enumerate(core.get_stencil_dim(stencil.stencil_window))),
+      f'constexpr int kStencilDistance = {stencil.stencil_distance};',
       *(f'constexpr int {WIDTH_FMT[x.name]} = {x.width_in_bits};'
         for x in all_stmts),
       '',

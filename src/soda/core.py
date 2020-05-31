@@ -608,6 +608,29 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
       _logger.debug('replicated_all_points: %s' % self.replicated_all_points)
     return self.replicated_all_points
 
+  def _calculate_stencil_window(self) -> None:
+    stencil_window = get_overall_stencil_window(
+        map(self.tensors.get, self.input_names),
+        self.tensors[self.output_names[0]])
+    stencil_distance = get_stencil_distance(stencil_window, self.tile_size)
+    stencil_offset = stencil_distance - soda.util.serialize(
+        get_stencil_window_offset(stencil_window), self.tile_size)
+
+    self._stencil_window = stencil_window
+    self._stencil_distance = max(stencil_distance, stencil_offset)
+
+  @property
+  def stencil_distance(self) -> int:
+    if not hasattr(self, '_stencil_distance'):
+      self._calculate_stencil_window()
+    return getattr(self, '_stencil_distance')
+
+  @property
+  def stencil_window(self) -> int:
+    if not hasattr(self, '_stencil_window'):
+      self._calculate_stencil_window()
+    return getattr(self, '_stencil_window')
+
 
 def _get_reuse_chains(tile_size, tensor, unroll_factor):
   """Generates reuse chains for a Tensor.
