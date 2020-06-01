@@ -91,8 +91,8 @@ sodac tests/src/blur.soda --iocl-kernel blur_kernel.cl
 
 Requries `vivado_hls`.
 
-```bas
-sodac tests/src/blur.soda --xocl-hw-xo blur_kernel.hw.xoh
+```bash
+sodac tests/src/blur.soda --xocl-hw-xo blur_kernel.hw.xo
 ```
 
 ### Generate Xilinx Object file with AXI Stream Interface
@@ -100,7 +100,7 @@ sodac tests/src/blur.soda --xocl-hw-xo blur_kernel.hw.xoh
 Requries `vivado_hls`.
 
 ```bash
-sodac tests/src/blur.soda --xocl-hw-xo blur_kernel.hw.xo --interface axis
+sodac tests/src/blur.soda --xocl-hw-xo blur_kernel.hw.xo --xocl-interface axis
 ```
 
 ### Apply Computation Reuse
