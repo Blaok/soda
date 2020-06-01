@@ -42,7 +42,7 @@ def add_arguments(parser):
       help='Vivado HLS report for the Xilinx OpenCL hardware object')
   parser.add_argument(
     '--xocl-interface', type=str, dest='interface', metavar='(m_axi|axis)',
-    default='m_axi', help='interface type of the Xilinx OpenCL hardware object')
+    default='m_axi', help='interface type of the Xilinx OpenCL code')
 
 def print_code(
     stencil: core.Stencil,
