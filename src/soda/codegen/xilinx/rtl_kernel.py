@@ -219,9 +219,6 @@ FIFO_PORT_SUFFIXES = dict(data_in='_din',
 
 AXIS_PORT_SUFFIXES = collections.OrderedDict(
     data='_TDATA',  # producer -> consumer
-    keep='_TKEEP',  # producer -> consumer
-    strb='_TSTRB',  # producer -> consumer
-    last='_TLAST',  # producer -> consumer
     valid='_TVALID',  # producer -> consumer
     ready='_TREADY',  # producer <- consumer
 )
@@ -313,9 +310,6 @@ def print_top_module(
   read_enable = FIFO_PORT_SUFFIXES['read_enable']
   not_block = FIFO_PORT_SUFFIXES['not_block']
   data = AXIS_PORT_SUFFIXES['data']
-  keep = AXIS_PORT_SUFFIXES['keep']
-  strb = AXIS_PORT_SUFFIXES['strb']
-  last = AXIS_PORT_SUFFIXES['last']
   valid = AXIS_PORT_SUFFIXES['valid']
   ready = AXIS_PORT_SUFFIXES['ready']
 
@@ -361,9 +355,6 @@ def print_top_module(
     elif interface == 'axis':
       printer.printlns(
           f'output wire [{width - 1}:0] {port_name}{data};',
-          f'output wire [{width // 8 - 1}:0] {port_name}{keep};',
-          f'output wire [{width // 8 - 1}:0] {port_name}{strb};',
-          f'output wire {port_name}{last};',
           f'output wire {port_name}{valid};',
           f'input  wire {port_name}{ready};',
           f'wire [{width - 1}:0] {port_name}_V_V{data_in};',
@@ -380,9 +371,6 @@ def print_top_module(
     elif interface == 'axis':
       printer.printlns(
           f'input  wire [{width - 1}:0] {port_name}{data};',
-          f'input  wire [{width // 8 - 1}:0] {port_name}{keep};',
-          f'input  wire [{width // 8 - 1}:0] {port_name}{strb};',
-          f'input  wire {port_name}{last};',
           f'input  wire {port_name}{valid};',
           f'output wire {port_name}{ready};',
           f'wire [{width - 1}:0] {port_name}_V_V{data_out};',
@@ -455,15 +443,6 @@ def print_top_module(
   fifos: Set[Tuple[int, int]] = set()  # used for printing FIFO modules
 
   if interface == 'axis':
-    for port_name, _, width, _ in outputs:
-      width = width // 8
-      ones = '1' * width
-      printer.printlns(
-          f"assign {port_name}{keep} = {width}'b{ones};",
-          f"assign {port_name}{strb} = {width}'b{ones};",
-          f"assign {port_name}{last} = 1'b0;",
-      )
-
     for port_name, _, width, _ in inputs:
       printer.module_instance(
           'fifo_w{width}_d{depth}_A'.format(width=width, depth=2),
