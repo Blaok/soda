@@ -1,15 +1,35 @@
 import collections
-import functools
+import itertools
 import logging
-import operator
+from typing import IO, Any, Dict, List, Tuple
 
-from haoda import ir
-from haoda import util
+from haoda import ir, util
 from haoda.ir import visitor
+from soda import core, dataflow
 
 _logger = logging.getLogger().getChild(__name__)
 
-def _print_interface(printer, kernel_name, inputs, outputs, super_source):
+SUPPORTED_INTERFACES = 'm_axi', 'axis'
+
+DATA_TYPE_FMT = dict(
+    m_axi='Data<{0.c_type}>',
+    axis='ap_axiu<{0.width_in_bits}, 0, 0, 0>',
+)
+
+
+def _check_interface(interface: str) -> None:
+  if interface not in SUPPORTED_INTERFACES:
+    raise NotImplementedError(f'interface "{interface}" is not implemented')
+
+
+def _print_interface(
+    printer: util.CppPrinter,
+    stencil: core.Stencil,
+    inputs: List[Tuple[str, ir.Type, int]],
+    outputs: List[Tuple[str, ir.Type, int]],
+    super_source: dataflow.SuperSourceNode,
+    interface: str,
+) -> None:
   """Prints the top-level module for the given arguments.
 
   Prints the top-level interfaces and sub-module instances with proper interface
@@ -18,720 +38,699 @@ def _print_interface(printer, kernel_name, inputs, outputs, super_source):
 
   Args:
     printer: CppPrinter to which the code is emitted.
-    kernel_name: str, name of the kernel.
-    inputs: Sequence of (name, c_type, bank, depth) tuples, specifies the m_axi
-      input interfaces.
-    outputs: Sequence of (name, c_type, bank, depth) tuples, specifies the m_axi
-      output interfaces.
+    stencil: core.Stencil to print.
+    inputs: List of (name, ir.Type, bank) tuples, specifying the input
+        interfaces.
+    outputs: List of (name, ir.Type, bank) tuples, specifying the output
+        interfaces.
     super_source: SuperSourceNode of a DAG of HAODA nodes.
   """
-  println = printer.println
-  do_indent = printer.do_indent
-  un_indent = printer.un_indent
-  do_scope = printer.do_scope
-  un_scope = printer.un_scope
-
   get_bundle_name = util.get_bundle_name
   get_port_name = util.get_port_name
   get_port_buf_name = util.get_port_buf_name
 
-  println('extern "C"')
-  println('{')
-  println()
-  println('void %s(' % kernel_name)
-  do_indent()
-  for name, c_type, bank, _ in outputs + inputs:
-    println('{}* {},'.format(c_type, get_port_name(name, bank)))
-  println('uint64_t coalesced_data_num)')
-  un_indent()
-  do_scope()
+  if interface in {'m_axi', 'axis'}:
+    printer.println('extern "C" {\n')
 
-  for name, c_type, bank, depth in outputs + inputs:
-    println('#pragma HLS interface m_axi port={} offset=slave depth={} bundle={'
-            '}'.format(get_port_name(name, bank), depth,
-                       get_bundle_name(name, bank)), 0)
+  params: List[str] = []
+  if interface == 'm_axi':
+    params.extend(f'ap_uint<{stencil.burst_width}>* {get_port_name(name, bank)}'
+                  for name, _, bank in outputs + inputs)
+    params.append('uint64_t coalesced_data_num')
+  elif interface == 'axis':
+    params.extend(f'hls::stream<ap_axiu<{stencil.burst_width}, 0, 0, 0>>&'
+                  f' {get_port_name(name, bank)}'
+                  for name, haoda_type, bank in outputs + inputs)
 
-  println()
-  for name, _, bank, _ in outputs + inputs:
-    println('#pragma HLS interface s_axilite port={} bundle=control'.format(
-        get_port_name(name, bank)), 0)
+  printer.print_func(f'void {stencil.kernel_name}', params, align=0)
 
-  println('#pragma HLS interface s_axilite port=coalesced_data_num '
-          'bundle=control', 0)
-  println('#pragma HLS interface s_axilite port=return bundle=control', 0)
-  println()
+  # print function body
+  printer.do_scope()
+
+  if interface == 'm_axi':
+    printer.printlns(
+        *(f'#pragma HLS interface m_axi port = {get_port_name(name, bank)} '
+          f'offset = slave bundle = {get_bundle_name(name, bank)}'
+          for name, _, bank in outputs + inputs),
+        *(f'#pragma HLS interface s_axilite port = {get_port_name(name, bank)} '
+          'bundle = control' for name, _, bank in outputs + inputs),
+        '#pragma HLS interface s_axilite port = coalesced_data_num '
+        'bundle = control',
+        '#pragma HLS interface s_axilite port = return bundle = control',
+        '',
+    )
+  elif interface == 'axis':
+    printer.printlns(
+        *(f'#pragma HLS interface axis port = {get_port_name(name, bank)}'
+          for name, _, bank in outputs + inputs),
+        '#pragma HLS interface ap_ctrl_none port = return',
+    )
 
   # port buf declarations
-  for name, c_type, bank, _ in inputs + outputs:
-    println('hls::stream<Data<{c_type}>> {name}("{name}");'.format(
-        name=get_port_buf_name(name, bank), c_type=c_type))
-  # port buf depths
-    println('#pragma HLS stream variable={} depth=32'.format(
-        get_port_buf_name(name, bank)), 0)
-    println('#pragma HLS data_pack variable={}'.format(
-        get_port_buf_name(name, bank)), indent=0)
-  println()
+  if interface == 'm_axi':
+    printer.printlns(
+        itertools.chain.from_iterable((
+            f'hls::stream<Data<ap_uint<{stencil.burst_width}>>>'
+            f' {get_port_buf_name(name, bank)}'
+            f'("{get_port_buf_name(name, bank)}");',
+            '#pragma HLS stream'
+            f' variable = {get_port_buf_name(name, bank)} depth = 32',
+            f'#pragma HLS data_pack variable = {get_port_buf_name(name, bank)}',
+        ) for name, haoda_type, bank in inputs + outputs))
+  printer.println()
 
   # internal fifos
-  for node in super_source.tpo_valid_node_gen():
-    for fifo in node.fifos:
-      println('hls::stream<Data<{0}>> {1}("{1}");'.format(fifo.c_type,
-                                                          fifo.c_expr))
-      println('#pragma HLS stream variable={} depth={}'.format(
-          fifo.c_expr, fifo.depth + 3), 0)
-      println('#pragma HLS data_pack variable={}'.format(fifo.c_expr),
-              indent=0)
+  if interface in {'m_axi', 'axis'}:
+    printer.printlns(
+        itertools.chain.from_iterable((
+            f'hls::stream<{DATA_TYPE_FMT[interface].format(fifo)}>'
+            f' {fifo.c_expr}("{fifo.c_expr}");',
+            '#pragma HLS stream'
+            f' variable = {fifo.c_expr} depth = {fifo.depth + 3}',
+            f'#pragma HLS data_pack variable = {fifo.c_expr}' if interface ==
+            'm_axi' else '',
+        ) for node in super_source.tpo_valid_node_gen() for fifo in node.fifos))
+  printer.println()
 
-  # pylint: disable=pointless-string-statement
-  '''
-  if extra_params:
-    for param in extra_params.values():
-      if param.dup:
-        dup = ('[%d]' % param.dup)
-      else:
-        dup = ''
-      println('%s %s%s[UNROLL_FACTOR][%s];' % (param.type, param.name, dup, ']['.join(map(str, param.size))))
-    println()
+  # start of dataflow region
+  if interface in {'m_axi', 'axis'}:
+    printer.println('#pragma HLS dataflow', 0)
 
-    for param in extra_params.values():
-      println('#pragma HLS array_partition variable=%s complete dim=1' % param.name, 0)
-      dim_offset = 1
-      if param.dup:
-        println('#pragma HLS array_partition variable=%s complete dim=2' % param.name, 0)
-        dim_offset = 2
-      for partitioning in param.partitioning:
-        println('#pragma HLS array_partition variable=%s %s dim=%d%s' % (
-          param.name,
-          partitioning.partition_type,
-          dim_offset+1 if partitioning.dim is None else partitioning.dim+dim_offset,
-          '' if partitioning.factor is None else ' factor=%d' % partitioning.factor,
-        ), 0)
-    println()
+  # load modules
+  if interface == 'm_axi':
+    printer.printlns(f'BurstRead({get_port_buf_name(name, bank)},'
+                     f' {get_port_name(name, bank)}, coalesced_data_num);'
+                     for name, _, bank in inputs)
 
-    for param in extra_params.values():
-      if len(param.size) > 1:
-        for dim, size in enumerate(param.size):
-          println('uint32_t %s_index_dim_%d = 0;' % (param.name, dim))
-      println('%s_init:' % param.name, 0)
-      println('for(int %s_index = 0; %s_index < %d; ++%s_index)' % (param.name, param.name, functools.reduce(operator.mul, param.size), param.name))
-      p.do_scope()
-      println('#pragma HLS pipeline II=1', 0)
-      println('%s& %s_tmp = var_%s[%s_index];' % (param.type, param.name, param.name, param.name))
-      println('%s_unrolled:' % param.name, 0)
-      println('for(int unroll_index = 0; unroll_index < UNROLL_FACTOR; ++unroll_index)')
-      p.do_scope()
-      println('#pragma HLS unroll',0)
-      if param.dup is None:
-        println('%s[unroll_index]%s = %s_tmp;' % ((param.name, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name)))
-      else:
-        for i in range(param.dup):
-          println('%s[%d][unroll_index]%s = %s_tmp;' % (param.name, i, ''.join(['[%s_index_dim_%d]' % (param.name, x) for x in range(len(param.size)-1, -1, -1)]) if len(param.size)>1 else '[%s_index]' % param.name, param.name))
-      p.un_scope()
-      if len(param.size) > 1:
-        for dim in range(len(param.size)):
-          println('++%s_index_dim_%d;' % (param.name, dim))
-          if dim<len(param.size)-1:
-            println('if(%s_index_dim_%d==%d)' % (param.name, dim, param.size[len(param.size)-1-dim]))
-            p.do_scope()
-            println('%s_index_dim_%d = 0;' % (param.name, dim))
-      for size in param.size[:-1]:
-        p.un_scope()
-      p.un_scope()
-    println()
-
-  extra_params_str = ''.join([param.name+', ' for param in extra_params.values()])
-  '''
-
-  println()
-
-  # TODO: replication not supported
-  # pylint: disable=pointless-string-statement
-  '''
-  if stencil.replication_factor > 1:
-    _generate_code(p, stencil)
-
-    p.un_scope()
-    println()
-    println('}  //extern "C"')
-
-    return
-
-  # reuse buffers
-  if stencil.cluster == 'none':
-    for name, reuse_buffer in reuse_buffers.items():
-      pragmas = []
-      msg = 'reuse buffers for %s' % name
-      _logger.debug('generate %s', msg)
-      println('// %s' % msg)
-      for start, end in reuse_buffer[1:]:
-        println('hls::stream<{0}> {1}("{1}");'.format(
-            stencil.tensors[name].c_type, get_tensor_name_at(name, end)))
-        buffer_length = stencil.reuse_buffer_lengths[name][end]
-        tensor_name = get_tensor_name_at(name, end)
-        if buffer_length > 1:
-          pragmas.append((tensor_name, buffer_length))
-      for pragma in pragmas:
-        println('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
-      println()
-  else:
-    println('// %s' % stencil.input.name)
-    for unroll_index in range(unroll_factor):
-      for c in range(stencil.input.chan):
-        println('hls::stream<{0}> {1}("{1}");'.format(
-            stencil.tensors[stencil.input.name].type,
-            get_tensor_name_at(stencil.input.name, unroll_index, c)))
-    println()
-
-  for output_name in stencil.output_names:
-    println('// %s' % output_name)
-    for unroll_index in range(unroll_factor):
-      println('hls::stream<{0}> {1}("{1}");'.format(
-          stencil.tensors[output_name].c_type,
-          get_tensor_name_at(output_name, unroll_index)))
-  println()
-
-  # params
-  msg = 'params'
-  _logger.debug('generate %s' % msg)
-  println('// %s' % msg)
-  pragmas = []
-  for tensor in stencil.chronological_tensors:
-    for pe_id in range(unroll_factor):
-      for input_name, input_window in tensor.ld_indices.items():
-        for param_id in range(len(input_window)):
-          offset = next(offset for offset, points in
-            all_points[input_name][tensor.name].items()
-            if pe_id in points and points[pe_id] == param_id)
-          fwd_node = super_source.fwd_nodes[(input_name, offset)]
-          cpt_node = super_source.cpt_nodes[(tensor.name, pe_id)]
-          extra_depth = super_source.get_extra_depth(
-            (fwd_node, cpt_node))
-          var_type = stencil.tensors[input_name].c_type
-          var_name = 'from_%s_to_%s_param_%d_pe_%d' % (
-            input_name, tensor.name, param_id, pe_id)
-          println('hls::stream<{0}> {1}("{1}");'.format(var_type, var_name))
-          if extra_depth > 0:
-            pragmas.append((var_name, extra_depth+1))
-          else:
-            pragmas.append((var_name, 2))
-  for pragma in pragmas:
-    println('#pragma HLS stream variable=%s depth=%d' % pragma, 0)
-  println()
-  '''
-
-  '''
-  # border buffers
-  msg = 'border buffers'
-  _logger.debug('generate %s' % msg)
-  println('// %s' % msg)
-  for tensor in stencil.chronological_tensors:
-    if tensor.output.preserve_border_to():
-      for unroll_index in range(unroll_factor):
-        for d in range(stencil.dim-1):
-          for c in range(tensor.output.chan):
-            println('hls::stream<{0}> {1}("{1}");'.foramt(
-                tensor.output.type,
-                'border_from_%s_dim_%d_left_chan_%d_pe_%d' % (
-                    tensor.name, d, c, unroll_index)))
-            println('hls::stream<{0}> {1}("{1}");'.foramt(
-                tensor.output.type,
-                'border_from_%s_dim_%d_right_chan_%d_pe_%d' % (
-                    tensor.name, d, c, unroll_index)))
-  println()
-  '''
-
-  println('#pragma HLS dataflow', 0)
-  for name, _, bank, _ in inputs:
-    println('BurstRead(&{}, {}, coalesced_data_num);'.format(
-        get_port_buf_name(name, bank), get_port_name(name, bank)))
-
+  # SODA modules
   for node in super_source.tpo_valid_node_gen():
     module_trait_id = super_source.module_table[node][1]
-    _print_module_func_call(printer, node, module_trait_id)
+    _print_module_func_call(printer, node, module_trait_id, interface)
 
-  for name, _, bank, _ in outputs:
-    println('BurstWrite({}, &{}, coalesced_data_num);'.format(
-        get_port_name(name, bank), get_port_buf_name(name, bank)))
+  # store modules
+  if interface == 'm_axi':
+    printer.printlns(f'BurstWrite({get_port_name(name, bank)},'
+                     f' {get_port_buf_name(name, bank)}, coalesced_data_num);'
+                     for name, _, bank in outputs)
 
-  un_scope()
-  println()
-  println('}//extern "C"')
+  # end of dataflow region
 
-def print_header(printer):
-  println = printer.println
-  for header in ['float', 'math', 'stdbool', 'stddef', 'stdint', 'stdio',
-                 'string', 'ap_int', 'hls_stream']:
-    println('#include<%s.h>' % header)
-  println()
-  for header in ['algorithm']:
-    println('#include<%s>' % header)
-  println()
+  printer.un_scope()
+  if interface in {'m_axi', 'axis'}:
+    printer.printlns('', '}  // extern "C"')
 
-def _print_burst_read(printer):
-  println = printer.println
-  do_scope = printer.do_scope
-  un_scope = printer.un_scope
-  println('void BurstRead(hls::stream<Data<ap_uint<BURST_WIDTH>>>* to, ap_uint<'
-          'BURST_WIDTH>* from, uint64_t data_num)')
-  do_scope()
-  println('load_epoch:', 0)
-  println('for (uint64_t epoch = 0; epoch < data_num;)')
-  do_scope()
-  println('#pragma HLS pipeline II=1', 0)
-  println('const uint64_t next_epoch = epoch + 1;')
-  println('WriteData(to, from[epoch], next_epoch < data_num);')
-  println('epoch = next_epoch;')
-  un_scope()
-  un_scope()
 
-def _print_burst_write(printer):
-  println = printer.println
-  do_scope = printer.do_scope
-  un_scope = printer.un_scope
-  println('void BurstWrite(ap_uint<BURST_WIDTH>* to, hls::stream<Data<ap_uint<B'
-          'URST_WIDTH>>>* from, uint64_t data_num)')
-  do_scope()
-  println('store_epoch:', 0)
-  println('for (uint64_t epoch = 0; epoch < data_num; ++epoch)')
-  do_scope()
-  println('#pragma HLS pipeline II=1', 0)
-  println('ap_uint<BURST_WIDTH> buf;')
-  println('ReadData(&buf, from);')
-  println('to[epoch] = buf;')
-  un_scope()
-  un_scope()
+def print_header(
+    printer: util.CppPrinter,
+    interface: str = SUPPORTED_INTERFACES[0],
+) -> None:
+  third_party_headers = ['ap_int']
+  if interface == 'm_axi':
+    third_party_headers.append('hls_stream')
+  elif interface == 'axis':
+    third_party_headers += 'ap_axi_sdata', 'hls_stream'
 
-def print_code(stencil, output_file):
+  printer.printlns(
+      *map('#include <c{}>'.format, [
+          'float',
+          'math',
+          'stdbool',
+          'stddef',
+          'stdint',
+          'stdio',
+          'string',
+      ]),
+      '',
+      *(map('#include <{}>'.format, ['algorithm'])),
+      '',
+      *(map('#include <{}.h>'.format, third_party_headers)),
+      '',
+  )
+
+
+def _print_burst_read_m_axi(printer):
+  printer.println('''template <typename T>
+void BurstRead(hls::stream<Data<T>>& to, T* from, uint64_t data_num) {
+load:
+  for (uint64_t i = 0; i < data_num;) {
+#pragma HLS pipeline II = 1
+    const uint64_t next_i = i + 1;
+    WriteData(to, from[i], next_i < data_num);
+    i = next_i;
+  }
+}
+''')
+
+
+def _print_burst_write_m_axi(printer):
+  printer.println('''template <typename T>
+void BurstWrite(T* to, hls::stream<Data<T>>& from, uint64_t data_num) {
+store:
+  for (uint64_t i = 0; i < data_num; ++i) {
+#pragma HLS pipeline II = 1
+    T buf;
+    ReadData(buf, from);
+    to[i] = buf;
+  }
+}
+''')
+
+
+
+
+
+
+def print_code(
+    stencil: core.Stencil,
+    output_file: IO[str],
+    interface: str = SUPPORTED_INTERFACES[0],
+):
+  _check_interface(interface)
+
   _logger.info('generate kernel code as %s' % output_file.name)
   printer = util.CppPrinter(output_file)
 
-  print_header(printer)
+  print_header(printer, interface)
 
-  printer.println()
+  if interface in {'m_axi', 'axis'}:
+    printer.printlns(
+        '#ifdef __SYNTHESIS__',
+        '#warning this file should be used for simulation only',
+        '#warning synthesis result may be sub-optimal',
+        '#endif  // __SYNTHESIS__',
+        '',
+    )
 
-  util.print_define(printer, 'BURST_WIDTH', stencil.burst_width)
-  printer.println()
+  printer.printlns(
+      '// this file can be generated from the following SODA DSL',
+      f'/*\n{stencil}\n*/',
+      '',
+      '// stencil window size:'
+      f' {tuple(core.get_stencil_dim(stencil.stencil_window))}',
+      f'// stencil distace: {stencil.stencil_distance}',
+      '// data layout is documented at',
+      '// https://github.com/Blaok/soda/blob/master/docs/data-layout.md',
+      '',
+  )
 
-  util.print_guard(printer, 'UNROLL_FACTOR', stencil.unroll_factor)
-  for i in range(len(stencil.tile_size)-1):
-    util.print_guard(printer, 'TILE_SIZE_DIM_%d' % i, stencil.tile_size[i])
-  util.print_guard(printer, 'BURST_WIDTH', stencil.burst_width)
-  printer.println()
+  if interface in {'m_axi', 'axis'}:
+    _print_reinterpret(printer)
 
-  _print_data_struct(printer)
-  _print_reinterpret(printer)
-  _print_read_data(printer)
-  _print_write_data(printer)
-
-  _print_burst_read(printer)
-  _print_burst_write(printer)
+  if interface == 'm_axi':
+    _print_data_struct(printer)
+    _print_read_data_m_axi(printer)
+    _print_write_data_m_axi(printer)
+    _print_burst_read_m_axi(printer)
+    _print_burst_write_m_axi(printer)
+  elif interface == 'axis':
+    _print_read_data_axis(printer)
+    _print_write_data_axis(printer)
 
   for module_trait_id, module_trait in enumerate(stencil.module_traits):
-    print_module_definition(printer, module_trait, module_trait_id,
-                           burst_width=stencil.burst_width)
-
-
-  # pylint: disable=pointless-string-statement
-  '''
-  if stencil.cluster == 'none':
-    for forwarder in stencil.get_forwarders():
-      print_forward_func(printer, forwarder)
-      printer.println()
-
-    for forwarder in stencil.get_forwarders_with_border():
-      print_forward_func_with_border(printer, stencil, forwarder)
-      printer.println()
-    for stage in stencil.stages.values():
-      print_compute_stage(printer, stencil, stage)
-      printer.println()
-  elif stencil.cluster == 'fine':
-    print_compute_input(printer, stencil)
-    for stage in stencil.get_stages_chronologically():
-      print_compute_stage(printer, stencil, stage)
-
-  if stencil.replication_factor > 1:
-    dst_lists = set()
-    super_source = stencil.dataflow_super_source
-    def add_dst_lists(tensor):
-      rf = stencil.replication_factor
-      dst_ids = [start%rf for start, end
-        in stencil.get_replicated_reuse_buffers()[tensor.name][1:]
-        if start == end]
-      dst_ids = tuple(dst_id if dst_id in dst_ids else None
-        for dst_id in range(stencil.replication_factor))
-      dst_lists.add(dst_ids)
-    for node in super_source.tpo_node_generator():
-      if isinstance(node, SuperSourceNode):
-        add_dst_lists(stencil.input)
-      elif isinstance(node, ComputeNode):
-        if not node.stage.is_output():
-          add_dst_lists(node.stage.output)
-    for dst_list in dst_lists:
-      _print_reconnect_func(printer, dst_list)
-  printer.println()
-  '''
+    print_module_definition(
+        printer,
+        module_trait,
+        module_trait_id,
+        stencil.burst_width,
+        interface,
+    )
 
   outputs = []
   inputs = []
   for stmt in stencil.output_stmts:
     for bank in stmt.dram:
-      outputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
-                      65536))
+      outputs.append((stmt.name, stmt.haoda_type, bank))
   for stmt in stencil.input_stmts:
     for bank in stmt.dram:
-      inputs.append((stmt.name, 'ap_uint<%d>' % stencil.burst_width, bank,
-                     65536))
+      inputs.append((stmt.name, stmt.haoda_type, bank))
   for stmt in stencil.param_stmts:
-    inputs.append(('var_%s' % stmt.name, stmt.type, 0,
-                    functools.reduce(operator.mul, stmt.size)))
-  _print_interface(printer, stencil.app_name + '_kernel', inputs, outputs,
-                   stencil.dataflow_super_source)
+    inputs.append(('var_%s' % stmt.name, stmt.type, 0))
+  _print_interface(printer, stencil, inputs, outputs,
+                   stencil.dataflow_super_source, interface)
 
-def _print_module_func_call(printer, node, module_trait_id, **kwargs):
-  println = printer.println
-  print_func = printer.print_func
+
+def _print_module_func_call(printer: util.CppPrinter, node: ir.Module,
+                            module_trait_id: int, interface: str) -> None:
   func_name = util.get_func_name(module_trait_id)
 
-  dram_reads = tuple(
-      '/* input*/ &' + util.get_port_buf_name(dram_ref.var, bank)
-      for dram_ref, bank in node.dram_reads)
-  dram_writes = tuple(
-      '/*output*/ &' + util.get_port_buf_name(dram_ref.var, bank)
-      for dram_ref, bank in node.dram_writes)
-  output_fifos = tuple('/*output*/ &' + _ for _ in node.output_fifos)
-  input_fifos = tuple('/* input*/ &' + _ for _ in node.input_fifos)
+  if interface == 'm_axi':
+    get_port_name = util.get_port_buf_name
+  elif interface == 'axis':
+    get_port_name = util.get_port_name
+
+  dram_reads = tuple('  /* input*/ ' + get_port_name(dram_ref.var, bank)
+                     for dram_ref, bank in node.dram_reads)
+  dram_writes = tuple('  /*output*/ ' + get_port_name(dram_ref.var, bank)
+                      for dram_ref, bank in node.dram_writes)
+  output_fifos = tuple('  /*output*/ ' + _ for _ in node.output_fifos)
+  input_fifos = tuple('  /* input*/ ' + _ for _ in node.input_fifos)
   params = dram_writes + output_fifos + input_fifos + dram_reads
 
-  print_func(func_name, params, suffix=';', align=0)
+  if interface in {'m_axi', 'axis'}:
+    printer.print_func(func_name, params, suffix=';', align=0)
 
-# pylint: disable=too-many-branches,too-many-statements
-def print_module_definition(printer, module_trait, module_trait_id, **kwargs):
-  println = printer.println
-  do_scope = printer.do_scope
-  un_scope = printer.un_scope
-  func_name = util.get_func_name(module_trait_id)
-  func_lower_name = util.get_module_name(module_trait_id)
-  ii = 1
 
-  def get_delays(obj, delays):
-    if isinstance(obj, ir.DelayedRef):
-      delays.append(obj)
-    return obj
-  delays = []
-  for let in module_trait.lets:
-    let.visit(get_delays, delays)
-  for expr in module_trait.exprs:
-    expr.visit(get_delays, delays)
-  _logger.debug('delays: %s', delays)
+def _get_delays(obj, delays):
+  if isinstance(obj, ir.DelayedRef):
+    delays.append(obj)
+  return obj
 
-  fifo_loads = tuple('/* input*/ hls::stream<Data<{}>>* {}'.format(
-      _.c_type, _.ld_name) for _ in module_trait.loads)
-  fifo_stores = tuple('/*output*/ hls::stream<Data<{}>>* {}{}'.format(
-      expr.c_type, ir.FIFORef.ST_PREFIX, idx)
-    for idx, expr in enumerate(module_trait.exprs))
 
-  # look for DRAM access
-  reads_in_lets = tuple(_.expr for _ in module_trait.lets)
-  writes_in_lets = tuple(_.name for _ in module_trait.lets
-                         if not isinstance(_.name, str))
-  reads_in_exprs = module_trait.exprs
-  dram_reads = visitor.get_dram_refs(reads_in_lets + reads_in_exprs)
-  dram_writes = visitor.get_dram_refs(writes_in_lets)
-  dram_read_map = collections.OrderedDict()
-  dram_write_map = collections.OrderedDict()
-  all_dram_reads = ()
-  num_bank_map = {}
-  if dram_reads:  # this is an unpacking module
-    assert not dram_writes, 'cannot read and write DRAM in the same module'
-    for dram_read in dram_reads:
-      dram_read_map.setdefault(dram_read.var,
-                               collections.OrderedDict()).setdefault(
-                                   dram_read.dram, []).append(dram_read)
-    _logger.debug('dram read map: %s', dram_read_map)
-    burst_width = kwargs.pop('burst_width')
-    for var in dram_read_map:
-      for dram in dram_read_map[var]:
-        # number of elements per cycle
-        batch_size = len(dram_read_map[var][dram])
-        dram_read_map[var][dram] = collections.OrderedDict(
-            (_.offset, _) for _ in dram_read_map[var][dram])
-        dram_reads = dram_read_map[var][dram]
-        num_banks = len(next(iter(dram_reads.values())).dram)
-        if var in num_bank_map:
-          assert num_bank_map[var] == num_banks, 'inconsistent num banks'
-        else:
-          num_bank_map[var] = num_banks
-        _logger.debug('dram reads: %s', dram_reads)
-        assert tuple(sorted(dram_reads.keys())) == tuple(range(batch_size)), \
-               'unexpected DRAM accesses pattern %s' % dram_reads
-        batch_width = sum(_.haoda_type.width_in_bits
-                          for _ in dram_reads.values())
-        del dram_reads
-        if burst_width * num_banks >= batch_width:
-          assert burst_width * num_banks % batch_width == 0, \
-              'cannot process such a burst'
-          # a single burst consumed in multiple cycles
-          coalescing_factor = burst_width * num_banks // batch_width
-          ii = coalescing_factor
-        else:
-          assert batch_width * num_banks % burst_width == 0, \
-              'cannot process such a burst'
-          # multiple bursts consumed in a single cycle
-          # reassemble_factor = batch_width // (burst_width * num_banks)
-          raise util.InternalError('cannot process such a burst yet')
-      dram_reads = tuple(next(iter(_.values()))
-                         for _ in dram_read_map[var].values())
-      all_dram_reads += dram_reads
-      fifo_loads += tuple(
-          '/* input*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
-          '{bank_name}'.format(
-              burst_width=burst_width, bank_name=_.dram_fifo_name(bank))
-          for _ in dram_reads for bank in _.dram)
-  elif dram_writes:   # this is a packing module
-    for dram_write in dram_writes:
-      dram_write_map.setdefault(dram_write.var,
-                                collections.OrderedDict()).setdefault(
-                                    dram_write.dram, []).append(dram_write)
-    _logger.debug('dram write map: %s', dram_write_map)
-    burst_width = kwargs.pop('burst_width')
-    for var in dram_write_map:
-      for dram in dram_write_map[var]:
-        # number of elements per cycle
-        batch_size = len(dram_write_map[var][dram])
-        dram_write_map[var][dram] = collections.OrderedDict(
-            (_.offset, _) for _ in dram_write_map[var][dram])
-        dram_writes = dram_write_map[var][dram]
-        num_banks = len(next(iter(dram_writes.values())).dram)
-        if var in num_bank_map:
-          assert num_bank_map[var] == num_banks, 'inconsistent num banks'
-        else:
-          num_bank_map[var] = num_banks
-        _logger.debug('dram writes: %s', dram_writes)
-        assert tuple(sorted(dram_writes.keys())) == tuple(range(batch_size)), \
-               'unexpected DRAM accesses pattern %s' % dram_writes
-        batch_width = sum(_.haoda_type.width_in_bits
-                          for _ in dram_writes.values())
-        del dram_writes
-        if burst_width * num_banks >= batch_width:
-          assert burst_width * num_banks % batch_width == 0, \
-              'cannot process such a burst'
-          # a single burst consumed in multiple cycles
-          coalescing_factor = burst_width * num_banks // batch_width
-          ii = coalescing_factor
-        else:
-          assert batch_width * num_banks % burst_width == 0, \
-              'cannot process such a burst'
-          # multiple bursts consumed in a single cycle
-          # reassemble_factor = batch_width // (burst_width * num_banks)
-          raise util.InternalError('cannot process such a burst yet')
-      dram_writes = tuple(next(iter(_.values()))
-                          for _ in dram_write_map[var].values())
-      fifo_stores += tuple(
-          '/*output*/ hls::stream<Data<ap_uint<{burst_width}>>>* '
-          '{bank_name}'.format(
-              burst_width=burst_width, bank_name=_.dram_fifo_name(bank))
-          for _ in dram_writes for bank in _.dram)
-
-  # print function
-  printer.print_func('void {func_name}'.format(**locals()),
-                     fifo_stores+fifo_loads, align=0)
-  do_scope(func_name)
-
-  for dram_ref, bank in module_trait.dram_writes:
-    println('#pragma HLS data_pack variable = {}'.format(
-        dram_ref.dram_fifo_name(bank)), 0)
-  for arg in module_trait.output_fifos:
-    println('#pragma HLS data_pack variable = %s' % arg, 0)
-  for arg in module_trait.input_fifos:
-    println('#pragma HLS data_pack variable = %s' % arg, 0)
-  for dram_ref, bank in module_trait.dram_reads:
-    println('#pragma HLS data_pack variable = {}'.format(
-        dram_ref.dram_fifo_name(bank)), 0)
-
-  # print inter-iteration declarations
-  for delay in delays:
-    println(delay.c_buf_decl)
-    println(delay.c_ptr_decl)
-
-  # print loop
-  println('{}_epoch:'.format(func_lower_name), indent=0)
-  println('for (bool enable = true; enable;)')
-  do_scope('for {}_epoch'.format(func_lower_name))
-  println('#pragma HLS pipeline II=%d' % ii, 0)
-  for delay in delays:
-    println('#pragma HLS dependence variable=%s inter false' %
-            delay.buf_name, 0)
-
-  # print emptyness tests
-  println('if (%s)' % (' && '.join(
-      '!{fifo}->empty()'.format(fifo=fifo)
-      for fifo in tuple(_.ld_name for _ in module_trait.loads) +
-                  tuple(_.dram_fifo_name(bank)
-                        for _ in all_dram_reads for bank in _.dram))))
-  do_scope('if not empty')
-
-  # print intra-iteration declarations
-  for fifo_in in module_trait.loads:
-    println('{fifo_in.c_type} {fifo_in.ref_name};'.format(**locals()))
-  for var in dram_read_map:
-    for dram in (next(iter(_.values())) for _ in dram_read_map[var].values()):
-      for bank in dram.dram:
-        println('ap_uint<{}> {};'.format(burst_width, dram.dram_buf_name(bank)))
-  for var in dram_write_map:
-    for dram in (next(iter(_.values())) for _ in dram_write_map[var].values()):
-      for bank in dram.dram:
-        println('ap_uint<{}> {};'.format(burst_width, dram.dram_buf_name(bank)))
-
-  # print enable conditions
-  if not dram_write_map:
-    for fifo_in in module_trait.loads:
-      println('const bool {fifo_in.ref_name}_enable = '
-        'ReadData(&{fifo_in.ref_name}, {fifo_in.ld_name});'.format(**locals()))
-  for dram in all_dram_reads:
-    for bank in dram.dram:
-      println('const bool {dram_buf_name}_enable = '
-              'ReadData(&{dram_buf_name}, {dram_fifo_name});'.format(
-                  dram_buf_name=dram.dram_buf_name(bank),
-                  dram_fifo_name=dram.dram_fifo_name(bank)))
-  if not dram_write_map:
-    println('const bool enabled = %s;' % (
-      ' && '.join(tuple('{_.ref_name}_enable'.format(_=_)
-                        for _ in module_trait.loads) +
-                  tuple('{}_enable'.format(_.dram_buf_name(bank))
-                        for _ in all_dram_reads for bank in _.dram))))
-    println('enable = enabled;')
-
-  # print delays (if any)
-  for delay in delays:
-    println('const {} {};'.format(delay.c_type, delay.c_buf_load))
-
-  # print lets
-  def mutate_dram_ref_for_writes(obj, kwargs):
-    if isinstance(obj, ir.DRAMRef):
-      coalescing_idx = kwargs.pop('coalescing_idx')
-      unroll_factor = kwargs.pop('unroll_factor')
-      type_width = obj.haoda_type.width_in_bits
-      elem_idx = coalescing_idx * unroll_factor + obj.offset
-      num_banks = num_bank_map[obj.var]
-      bank = obj.dram[elem_idx % num_banks]
+def _mutate_dram_ref_for_writes(obj: ir.Node, kwargs: Dict[str, Any]) -> None:
+  if isinstance(obj, ir.DRAMRef):
+    coalescing_idx = kwargs.pop('coalescing_idx')
+    unroll_factor = kwargs.pop('unroll_factor')
+    interface = kwargs.pop('interface')
+    num_bank_map = kwargs.pop('num_bank_map')
+    type_width = obj.haoda_type.width_in_bits
+    elem_idx = coalescing_idx * unroll_factor + obj.offset
+    num_banks = num_bank_map[obj.var]
+    bank = obj.dram[elem_idx % num_banks]
+    if interface in {'m_axi', 'axis'}:
       lsb = (elem_idx // num_banks) * type_width
       msb = lsb + type_width - 1
-      return ir.Var(name='{}({msb}, {lsb})'.format(
-          obj.dram_buf_name(bank), msb=msb, lsb=lsb), idx=())
-    return obj
+      return ir.Var(name=f'{obj.dram_buf_name(bank)}({msb}, {lsb})', idx=())
+  return obj
+
+
+def _mutate_dram_ref_for_reads(obj: ir.Node, kwargs: Dict[str, Any]) -> None:
+  if isinstance(obj, ir.DRAMRef):
+    coalescing_idx = kwargs.pop('coalescing_idx')
+    unroll_factor = kwargs.pop('unroll_factor')
+    interface = kwargs.pop('interface')
+    num_bank_map = kwargs.pop('num_bank_map')
+    expr = kwargs.pop('expr')
+    type_width = obj.haoda_type.width_in_bits
+    elem_idx = coalescing_idx * unroll_factor + obj.offset
+    num_banks = num_bank_map[obj.var]
+    bank = expr.dram[elem_idx % num_banks]
+    if interface in {'m_axi', 'axis'}:
+      lsb = (elem_idx // num_banks) * type_width
+      msb = lsb + type_width - 1
+      return ir.Var(
+          name=f'Reinterpret<{obj.c_type}>('
+          f'static_cast<ap_uint<{msb - lsb + 1}>>('
+          f'{obj.dram_buf_name(bank)}({msb}, {lsb})))',
+          idx=(),
+      )
+  return obj
+
+
+def _process_accesses(
+    module_trait: ir.ModuleTrait,
+    burst_width: int,
+    interface: str,
+):
+  # input/output channels
+  if interface in {'m_axi', 'axis'}:
+    fifo_loads = [
+        f'/* input*/ hls::stream<{DATA_TYPE_FMT[interface].format(x)}>&'
+        f' {x.ld_name}' for x in module_trait.loads
+    ]
+    fifo_stores = [
+        f'/*output*/ hls::stream<{DATA_TYPE_FMT[interface].format(expr)}>&'
+        f' {ir.FIFORef.ST_PREFIX}{idx}'
+        for idx, expr in enumerate(module_trait.exprs)
+    ]
+
+  # format strings for input/output channels for packing/unpacking modules
+  if interface == 'm_axi':
+    fifo_load_fmt = ("f'/* input*/ hls::stream<Data<ap_uint<{burst_width}>>>&"
+                     " {x.dram_fifo_name(bank)}'")
+    fifo_store_fmt = ("f'/*output*/ hls::stream<Data<ap_uint<{burst_width}>>>&"
+                      " {x.dram_fifo_name(bank)}'")
+  elif interface == 'axis':
+    fifo_load_fmt = (
+        "f'/* input*/ hls::stream<ap_axiu<{burst_width}, 0, 0, 0>>&"
+        " {x.dram_fifo_name(bank)}'")
+    fifo_store_fmt = (
+        "f'/*output*/ hls::stream<ap_axiu<{burst_width}, 0, 0, 0>>&"
+        " {x.dram_fifo_name(bank)}'")
+
+  # dict mapping variable name to
+  #   dict mapping bank tuple to
+  #     dict mapping offset to ir.DRAMRef
+  dram_read_map: Dict[str, Dict[Tuple[int, ...], Dict[int, ir.DRAMRef]]]
+  dram_read_map = collections.defaultdict(dict)
+  dram_write_map: Dict[str, Dict[Tuple[int, ...], Dict[int, ir.DRAMRef]]]
+  dram_write_map = collections.defaultdict(dict)
+
+  num_bank_map: Dict[str, int] = {}
+  all_dram_reads: List[ir.DRAMRef] = []
+  dram_reads: List[ir.DRAMRef] = []
+  coalescing_factor = 0
+  ii = 1
+
+  exprs = [_.expr for _ in module_trait.lets]
+  exprs.extend(module_trait.exprs)
+  dram_read_refs: Tuple[ir.DRAMRef, ...] = visitor.get_dram_refs(exprs)
+  dram_write_refs: Tuple[ir.DRAMRef, ...] = visitor.get_dram_refs(
+      _.name for _ in module_trait.lets if not isinstance(_.name, str))
+
+  # temporary dict mapping variable name to
+  #   dict mapping bank tuple to
+  #     list of ir.DRAMRef
+  dram_map: Dict[str, Dict[Tuple[int, ...], List[ir.DRAMRef]]]
+  dram_map = collections.defaultdict(lambda: collections.defaultdict(list))
+
+  if dram_read_refs:  # this is an unpacking module
+    assert not dram_write_refs, 'cannot read and write DRAM in the same module'
+    for dram_ref in dram_read_refs:
+      dram_map[dram_ref.var][dram_ref.dram].append(dram_ref)
+    _logger.debug('dram read map: %s', dram_map)
+    for var in dram_map:
+      for dram in dram_map[var]:
+        # number of elements per cycle
+        batch_size = len(dram_map[var][dram])
+        dram_read_map[var][dram] = {_.offset: _ for _ in dram_map[var][dram]}
+        offset_dict = dram_read_map[var][dram]
+        num_banks = len(dram)
+        if var in num_bank_map:
+          assert num_bank_map[var] == num_banks, 'inconsistent num banks'
+        else:
+          num_bank_map[var] = num_banks
+        _logger.debug('dram reads: %s', offset_dict)
+        assert tuple(sorted(offset_dict.keys())) == tuple(range(batch_size)), \
+               'unexpected DRAM accesses pattern %s' % offset_dict
+        batch_width = sum(
+            _.haoda_type.width_in_bits for _ in offset_dict.values())
+        if burst_width * num_banks >= batch_width:
+          assert burst_width * num_banks % batch_width == 0, \
+              'cannot process such a burst'
+          # a single burst consumed in multiple cycles
+          coalescing_factor = burst_width * num_banks // batch_width
+          ii = coalescing_factor
+        else:
+          assert batch_width * num_banks % burst_width == 0, \
+              'cannot process such a burst'
+          # multiple bursts consumed in a single cycle
+          # reassemble_factor = batch_width // (burst_width * num_banks)
+          raise util.InternalError('cannot process such a burst yet')
+      dram_reads = [next(iter(_.values())) for _ in dram_read_map[var].values()]
+      all_dram_reads += dram_reads
+      fifo_loads.extend(
+          eval(fifo_load_fmt, dict(burst_width=burst_width), locals())
+          for x in dram_reads
+          for bank in x.dram)
+  elif dram_write_refs:  # this is a packing module
+    for dram_ref in dram_write_refs:
+      dram_map[dram_ref.var][dram_ref.dram].append(dram_ref)
+    _logger.debug('dram write map: %s', dram_map)
+    for var in dram_map:
+      for dram in dram_map[var]:
+        # number of elements per cycle
+        batch_size = len(dram_map[var][dram])
+        dram_write_map[var][dram] = {_.offset: _ for _ in dram_map[var][dram]}
+        offset_dict = dram_write_map[var][dram]
+        num_banks = len(dram)
+        if var in num_bank_map:
+          assert num_bank_map[var] == num_banks, 'inconsistent num banks'
+        else:
+          num_bank_map[var] = num_banks
+        _logger.debug('dram writes: %s', offset_dict)
+        assert tuple(sorted(offset_dict.keys())) == tuple(range(batch_size)), \
+               'unexpected DRAM accesses pattern %s' % offset_dict
+        batch_width = sum(
+            _.haoda_type.width_in_bits for _ in offset_dict.values())
+        if burst_width * num_banks >= batch_width:
+          assert burst_width * num_banks % batch_width == 0, \
+              'cannot process such a burst'
+          # a single burst consumed in multiple cycles
+          coalescing_factor = burst_width * num_banks // batch_width
+          ii = coalescing_factor
+        else:
+          assert batch_width * num_banks % burst_width == 0, \
+              'cannot process such a burst'
+          # multiple bursts consumed in a single cycle
+          # reassemble_factor = batch_width // (burst_width * num_banks)
+          raise util.InternalError('cannot process such a burst yet')
+      dram_writes = [
+          next(iter(_.values())) for _ in dram_write_map[var].values()
+      ]
+      fifo_stores.extend(
+          eval(fifo_store_fmt, dict(burst_width=burst_width), locals())
+          for x in dram_writes
+          for bank in x.dram)
+
+  return (
+      fifo_loads,
+      fifo_stores,
+      dram_read_map,
+      dram_write_map,
+      num_bank_map,
+      all_dram_reads,
+      coalescing_factor,
+      ii,
+  )
+
+
+def print_module_definition(
+    printer: util.CppPrinter,
+    module_trait: ir.ModuleTrait,
+    module_trait_id: int,
+    burst_width: int,
+    interface: str = SUPPORTED_INTERFACES[0],
+) -> None:
+  func_name = util.get_func_name(module_trait_id)
+  func_lower_name = util.get_module_name(module_trait_id)
+
+  delays: ir.DelayedRef = []
+  for let in module_trait.lets:
+    let.visit(_get_delays, delays)
+  for expr in module_trait.exprs:
+    expr.visit(_get_delays, delays)
+  _logger.debug('delays: %s', delays)
+
+  (
+      fifo_loads,
+      fifo_stores,
+      dram_read_map,
+      dram_write_map,
+      num_bank_map,
+      dram_reads,
+      coalescing_factor,
+      ii,
+  ) = _process_accesses(
+      module_trait,
+      burst_width,
+      interface,
+  )
+
+  dram_rw_map = {**dram_read_map, **dram_write_map}
+
+  # print function
+  printer.print_func(f'void {func_name}', fifo_stores + fifo_loads, align=0)
+  printer.do_scope(func_name)
+
+  if interface == 'm_axi':
+    printer.printlns(
+        *(f'#pragma HLS data_pack variable = {dram_ref.dram_fifo_name(bank)}'
+          for dram_ref, bank in module_trait.dram_writes +
+          module_trait.dram_reads),
+        *(f'#pragma HLS data_pack variable = {arg}'
+          for arg in module_trait.output_fifos + module_trait.input_fifos),
+    )
+
+  # print inter-iteration declarations
+  printer.printlns(x.c_buf_decl for x in delays)
+  printer.printlns(x.c_ptr_decl for x in delays)
+
+  # print loop
+  printer.println(f'{func_lower_name}:', indent=0)
+  if interface in {'m_axi', 'axis'}:
+    printer.println('for (bool enable = true; enable;)')
+  else:
+    printer.println('for (;;)')
+  printer.do_scope(f'for {func_lower_name}')
+  printer.printlns(
+      f'#pragma HLS pipeline II = {ii}',
+      *(f'#pragma HLS dependence variable = {delay.buf_name} inter false'
+        for delay in delays),
+  )
+
+  # print emptyness tests
+  printer.println('if (%s)' % (' && '.join(
+      f'!{fifo}.empty()' for fifo in [_.ld_name for _ in module_trait.loads] +
+      [_.dram_fifo_name(bank) for _ in dram_reads for bank in _.dram])))
+  printer.do_scope('if not empty')
+
+  # print intra-iteration declarations
+  printer.printlns(
+      f'{fifo_in.c_type} {fifo_in.ref_name};' for fifo_in in module_trait.loads)
+  if interface in {'m_axi', 'axis'}:
+    printer.printlns(
+        f'ap_uint<{burst_width}> {dram.dram_buf_name(bank)};'
+        for var, accesses in dram_rw_map.items()
+        for dram in (next(iter(_.values())) for _ in accesses.values())
+        for bank in dram.dram)
+
+  if interface in {'m_axi', 'axis'}:
+    # print enable conditions
+    if not dram_write_map:
+      printer.printlns(f'const bool {fifo_in.ref_name}_enable = '
+                       f'ReadData({fifo_in.ref_name}, {fifo_in.ld_name});'
+                       for fifo_in in module_trait.loads)
+    printer.printlns(
+        f'const bool {x.dram_buf_name(bank)}_enable = '
+        f'ReadData({x.dram_buf_name(bank)}, {x.dram_fifo_name(bank)});'
+        for x in dram_reads
+        for bank in x.dram)
+    if not dram_write_map:
+      printer.println(
+          'const bool enabled = %s;' %
+          ' && '.join([f'{y.ref_name}_enable' for y in module_trait.loads] + [
+              f'{x.dram_buf_name(bank)}_enable' for x in dram_reads
+              for bank in x.dram
+          ]))
+      printer.println('enable = enabled;')
+
+  # print delays (if any)
+  printer.printlns(f'const {x.c_type} {x.c_buf_load};' for x in delays)
 
   # mutate dram ref for writes
   if dram_write_map:
     for coalescing_idx in range(coalescing_factor):
-      for fifo_in in module_trait.loads:
+      if interface in {'m_axi', 'axis'}:
+        for fifo_in in module_trait.loads:
+          if coalescing_idx == coalescing_factor - 1:
+            prefix = f'const bool {fifo_in.ref_name}_enable = '
+          else:
+            prefix = ''
+          printer.println(f'{prefix}ReadData({fifo_in.ref_name},'
+                          f' {fifo_in.ld_name});')
         if coalescing_idx == coalescing_factor - 1:
-          prefix = 'const bool {fifo_in.ref_name}_enable = '.format(
-              fifo_in=fifo_in)
-        else:
-          prefix = ''
-        println('{prefix}ReadData(&{fifo_in.ref_name},'
-                ' {fifo_in.ld_name});'.format(fifo_in=fifo_in, prefix=prefix))
-      if coalescing_idx == coalescing_factor - 1:
-        println('const bool enabled = %s;' % (
-          ' && '.join(tuple('{_.ref_name}_enable'.format(_=_)
-                            for _ in module_trait.loads) +
-                      tuple('{}_enable'.format(_.dram_buf_name(bank))
-                            for _ in dram_reads for bank in _.dram))))
-        println('enable = enabled;')
+          printer.printlns(
+              'const bool enabled = %s;' %
+              ' && '.join([f'{x.ref_name}_enable' for x in module_trait.loads] +
+                          [
+                              f'{x.dram_buf_name(bank)}_enable'
+                              for x in dram_reads
+                              for bank in x.dram
+                          ]),
+              'enable = enabled;',
+          )
       for idx, let in enumerate(module_trait.lets):
-        let = let.visit(mutate_dram_ref_for_writes, {
-            'coalescing_idx': coalescing_idx, 'unroll_factor': len(
-                dram_write_map[let.name.var][let.name.dram])})
-        println('{} = Reinterpret<ap_uint<{width}>>({});'.format(
-            let.name, let.expr.c_expr,
-            width=let.expr.haoda_type.width_in_bits))
-    for var in dram_write_map:
-      for dram in (next(iter(_.values()))
-                   for _ in dram_write_map[var].values()):
-        for bank in dram.dram:
-          println('WriteData({}, {}, enabled);'.format(
-              dram.dram_fifo_name(bank), dram.dram_buf_name(bank)))
+        let = let.visit(
+            _mutate_dram_ref_for_writes,
+            dict(
+                coalescing_idx=coalescing_idx,
+                unroll_factor=len(dram_write_map[let.name.var][let.name.dram]),
+                num_bank_map=num_bank_map,
+                interface=interface,
+            ))
+        if interface in {'m_axi', 'axis'}:
+          printer.println(
+              f'{let.name} = '
+              f'Reinterpret<ap_uint<{let.expr.haoda_type.width_in_bits}>>'
+              f'({let.expr.c_expr});')
+    if interface in {'m_axi', 'axis'}:
+      printer.printlns(
+          f'WriteData({dram.dram_fifo_name(bank)}, '
+          f'{dram.dram_buf_name(bank)}, enabled);' for var in dram_write_map
+          for dram in (
+              next(iter(_.values())) for _ in dram_write_map[var].values())
+          for bank in dram.dram)
   else:
-    for let in module_trait.lets:
-      println(let.c_expr)
-
-  def mutate_dram_ref_for_reads(obj, kwargs):
-    if isinstance(obj, ir.DRAMRef):
-      coalescing_idx = kwargs.pop('coalescing_idx')
-      unroll_factor = kwargs.pop('unroll_factor')
-      type_width = obj.haoda_type.width_in_bits
-      elem_idx = coalescing_idx * unroll_factor + obj.offset
-      num_banks = num_bank_map[obj.var]
-      bank = expr.dram[elem_idx % num_banks]
-      lsb = (elem_idx // num_banks) * type_width
-      msb = lsb + type_width - 1
-      return ir.Var(
-          name='Reinterpret<{c_type}>(static_cast<ap_uint<{width}>>('
-               '{dram_buf_name}({msb}, {lsb})))'.format(
-                   c_type=obj.c_type, dram_buf_name=obj.dram_buf_name(bank),
-                   msb=msb, lsb=lsb, width=msb-lsb+1), idx=())
-    return obj
+    printer.printlns(let.c_expr for let in module_trait.lets)
 
   # mutate dram ref for reads
   if dram_read_map:
     for coalescing_idx in range(coalescing_factor):
       for idx, expr in enumerate(module_trait.exprs):
-        println('WriteData({}{}, {}, {});'.format(
-            ir.FIFORef.ST_PREFIX, idx,
-            expr.visit(mutate_dram_ref_for_reads, {
-                'coalescing_idx': coalescing_idx, 'unroll_factor': len(
-                    dram_read_map[expr.var][expr.dram])}).c_expr,
-            'true' if coalescing_idx < coalescing_factor - 1 else 'enabled'))
+        c_expr = expr.visit(
+            _mutate_dram_ref_for_reads,
+            dict(
+                coalescing_idx=coalescing_idx,
+                unroll_factor=len(dram_read_map[expr.var][expr.dram]),
+                num_bank_map=num_bank_map,
+                interface=interface,
+                expr=expr,
+            )).c_expr
+        if interface in {'m_axi', 'axis'}:
+          if coalescing_idx < coalescing_factor - 1:
+            enabled = 'true'
+          else:
+            enabled = 'enabled'
+          printer.println(
+              f'WriteData({ir.FIFORef.ST_PREFIX}{idx}, {c_expr}, {enabled});')
   else:
-    for idx, expr in enumerate(module_trait.exprs):
-      println('WriteData({}{}, {}({}), enabled);'.format(
-              ir.FIFORef.ST_PREFIX, idx, expr.c_type, expr.c_expr))
+    if interface in {'m_axi', 'axis'}:
+      printer.printlns(f'WriteData({ir.FIFORef.ST_PREFIX}{idx}, '
+                       f'{expr.c_type}({expr.c_expr}), enabled);'
+                       for idx, expr in enumerate(module_trait.exprs))
 
   for delay in delays:
-    println(delay.c_buf_store)
-    println('{} = {};'.format(delay.ptr, delay.c_next_ptr_expr))
+    printer.printlns(
+        delay.c_buf_store,
+        f'{delay.ptr} = {delay.c_next_ptr_expr};',
+    )
 
-  un_scope()
-  un_scope()
-  un_scope()
+  printer.un_scope()
+  printer.un_scope()
+  printer.un_scope()
+  printer.println()
   _logger.debug('printing: %s', module_trait)
 
+
 def _print_data_struct(printer):
-  println = printer.println
-  println('template<typename T> struct Data')
-  printer.do_scope()
-  println('T data;')
-  println('bool ctrl;')
-  printer.un_scope(suffix=';')
+  printer.println('''template<typename T>
+struct Data {
+  T data;
+  bool ctrl;
+};
+''')
+
 
 def _print_reinterpret(printer):
-  println = printer.println
-  println('template<typename To, typename From>')
-  println('inline To Reinterpret(From val)')
-  printer.do_scope()
-  println('#pragma HLS inline', indent=0)
-  println('return reinterpret_cast<To&>(val);')
-  printer.un_scope()
+  printer.println('''template<typename To, typename From>
+To Reinterpret(From val) {
+#pragma HLS inline
+  return reinterpret_cast<To&>(val);
+}
+''')
 
-def _print_read_data(printer):
-  println = printer.println
-  println('template<typename T> inline bool ReadData'
-          '(T* data, hls::stream<Data<T>>* from)')
-  printer.do_scope()
-  println('#pragma HLS inline', indent=0)
-  println('const Data<T>& tmp = from->read();')
-  println('*data = tmp.data;')
-  println('return tmp.ctrl;')
-  printer.un_scope()
 
-def _print_write_data(printer):
-  println = printer.println
-  println('template<typename T> inline void WriteData'
-          '(hls::stream<Data<T>>* to, const T& data, bool ctrl)')
-  printer.do_scope()
-  println('#pragma HLS inline', indent=0)
-  println('Data<T> tmp;')
-  println('tmp.data = data;')
-  println('tmp.ctrl = ctrl;')
-  println('to->write(tmp);')
-  printer.un_scope()
+def _print_read_data_m_axi(printer):
+  printer.println('''template<typename T>
+bool ReadData(T& data, hls::stream<Data<T>>& from) {
+#pragma HLS inline
+  const auto tmp = from.read();
+  data = tmp.data;
+  return tmp.ctrl;
+}
+''')
+
+
+def _print_write_data_m_axi(printer):
+  printer.println('''template<typename T>
+void WriteData(hls::stream<Data<T>>& to, const T& data, bool ctrl) {
+#pragma HLS inline
+  Data<T> tmp;
+  tmp.data = data;
+  tmp.ctrl = ctrl;
+  to.write(tmp);
+}
+''')
+
+
+def _print_read_data_axis(printer):
+  printer.println('''template<typename T, int D>
+bool ReadData(T& data, hls::stream<ap_axiu<D, 0, 0, 0>>& from) {
+#pragma HLS inline
+  const auto tmp = from.read();
+  data = Reinterpret<T>(tmp.data);
+  return !tmp.last;
+}
+''')
+
+
+def _print_write_data_axis(printer):
+  printer.println('''template<typename T, int D>
+void WriteData(hls::stream<ap_axiu<D, 0, 0, 0>>& to, const T& data, bool ctrl) {
+#pragma HLS inline
+  ap_axiu<D, 0, 0, 0> tmp = {data, 0, 0, !ctrl};
+  tmp.keep.b_not();
+  tmp.strb.b_not();
+  to.write(tmp);
+}
+''')

@@ -51,7 +51,7 @@ def print_code(
 ) -> None:
   if args.kernel_file is not None:
     with tempfile.TemporaryFile(mode='w+') as tmp:
-      kernel.print_code(stencil, tmp)
+      kernel.print_code(stencil, tmp, interface=args.interface)
       tmp.seek(0)
       if args.kernel_file == '-':
         shutil.copyfileobj(tmp, sys.stdout)
@@ -115,7 +115,7 @@ def print_code(
     else:
       kernel_file_name = args.kernel_file
     with tempfile.TemporaryFile(mode='w+') as tmp:
-      kernel.print_code(stencil, tmp)
+      kernel.print_code(stencil, tmp, interface=args.interface)
       tmp.seek(0)
       with open(kernel_file_name, 'w') as kernel_file:
         shutil.copyfileobj(tmp, kernel_file)
