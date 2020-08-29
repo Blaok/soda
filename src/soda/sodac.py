@@ -3,6 +3,7 @@ import argparse
 import logging
 import os
 import sys
+from typing import Optional, Iterable
 
 import textx
 
@@ -18,7 +19,8 @@ logging.basicConfig(level=logging.WARNING,
                     format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
 logger = logging.getLogger().getChild(os.path.basename(__file__))
 
-def main():
+
+def main(argv: Optional[Iterable[str]] = None):
   parser = argparse.ArgumentParser(
     prog='sodac',
     description='Stencil with Optimized Dataflow Architecture '
@@ -106,7 +108,7 @@ def main():
             help='report resource and performance estimation as '
                'json file')
 
-  args = parser.parse_args()
+  args = parser.parse_args(argv)
   verbose = 0 if args.verbose is None else args.verbose
   quiet = 0 if args.quiet is None else args.quiet
   logging_level = (quiet-verbose)*10+logging.getLogger().getEffectiveLevel()
