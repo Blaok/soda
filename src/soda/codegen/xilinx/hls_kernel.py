@@ -9,7 +9,7 @@ from soda import core, dataflow
 
 _logger = logging.getLogger().getChild(__name__)
 
-SUPPORTED_INTERFACES = 'm_axi', 'axis'
+SUPPORTED_INTERFACES = 'm_axi', 'axis', 'tapa::mmap', 'tapa::stream'
 
 DATA_TYPE_FMT = dict(
     m_axi='Data<{0.c_type}>',
@@ -61,6 +61,18 @@ def _print_interface(
     params.extend(f'hls::stream<ap_axiu<{stencil.burst_width}, 0, 0, 0>>&'
                   f' {get_port_name(name, bank)}'
                   for name, haoda_type, bank in outputs + inputs)
+  elif interface == 'tapa::mmap':
+    params.extend(f'tapa::mmap<tapa::vec_t<{haoda_type.c_type},'
+                  f' {stencil.burst_width // haoda_type.width_in_bits}>>'
+                  f' {get_port_name(name, bank)}'
+                  for name, haoda_type, bank in outputs + inputs)
+    params.append('uint64_t coalesced_data_num')
+  elif interface == 'tapa::stream':
+    params.extend(f'tapa::{io}stream<tapa::vec_t<{haoda_type.c_type},'
+                  f' {stencil.burst_width // haoda_type.width_in_bits}>>&'
+                  f' {get_port_name(name, bank)}'
+                  for tuples, io in ((outputs, 'o'), (inputs, 'i'))
+                  for name, haoda_type, bank in tuples)
 
   printer.print_func(f'void {stencil.kernel_name}', params, align=0)
 
@@ -97,6 +109,12 @@ def _print_interface(
             f' variable = {get_port_buf_name(name, bank)} depth = 32',
             f'#pragma HLS data_pack variable = {get_port_buf_name(name, bank)}',
         ) for name, haoda_type, bank in inputs + outputs))
+  elif interface == 'tapa::mmap':
+    printer.printlns(f'tapa::stream<tapa::vec_t<{haoda_type.c_type},'
+                     f' {stencil.burst_width // haoda_type.width_in_bits}>, 32>'
+                     f' {get_port_buf_name(name, bank)}'
+                     f'("{get_port_buf_name(name, bank)}");'
+                     for name, haoda_type, bank in inputs + outputs)
   printer.println()
 
   # internal fifos
@@ -110,16 +128,28 @@ def _print_interface(
             f'#pragma HLS data_pack variable = {fifo.c_expr}' if interface ==
             'm_axi' else '',
         ) for node in super_source.tpo_valid_node_gen() for fifo in node.fifos))
+  elif interface.startswith('tapa::'):
+    printer.printlns(f'tapa::stream<{fifo.c_type}, {fifo.depth + 3}> '
+                     f'{fifo.c_expr}("{fifo.c_expr}");'
+                     for node in super_source.tpo_valid_node_gen()
+                     for fifo in node.fifos)
   printer.println()
 
   # start of dataflow region
   if interface in {'m_axi', 'axis'}:
     printer.println('#pragma HLS dataflow', 0)
+  elif interface.startswith('tapa::'):
+    printer.println('tapa::task()')
+    printer.do_indent()
 
   # load modules
   if interface == 'm_axi':
     printer.printlns(f'BurstRead({get_port_buf_name(name, bank)},'
                      f' {get_port_name(name, bank)}, coalesced_data_num);'
+                     for name, _, bank in inputs)
+  elif interface == 'tapa::mmap':
+    printer.printlns(f'.invoke<0>(BurstRead, {get_port_buf_name(name, bank)},'
+                     f' {get_port_name(name, bank)}, coalesced_data_num)'
                      for name, _, bank in inputs)
 
   # SODA modules
@@ -132,8 +162,15 @@ def _print_interface(
     printer.printlns(f'BurstWrite({get_port_name(name, bank)},'
                      f' {get_port_buf_name(name, bank)}, coalesced_data_num);'
                      for name, _, bank in outputs)
+  elif interface == 'tapa::mmap':
+    printer.printlns(f'.invoke<0>(BurstWrite, {get_port_name(name, bank)},'
+                     f' {get_port_buf_name(name, bank)}, coalesced_data_num)'
+                     for name, _, bank in outputs)
 
   # end of dataflow region
+  if interface.startswith('tapa::'):
+    printer.un_indent()
+    printer.println(';')
 
   printer.un_scope()
   if interface in {'m_axi', 'axis'}:
@@ -149,6 +186,8 @@ def print_header(
     third_party_headers.append('hls_stream')
   elif interface == 'axis':
     third_party_headers += 'ap_axi_sdata', 'hls_stream'
+  elif interface.startswith('tapa::'):
+    third_party_headers.append('tapa')
 
   printer.printlns(
       *map('#include <c{}>'.format, [
@@ -196,8 +235,28 @@ store:
 ''')
 
 
+def _print_burst_read_tapa(printer: util.CppPrinter, c_type: str) -> None:
+  printer.printlns(f'void BurstRead(tapa::ostream<{c_type}>& to, '
+                   f'tapa::mmap<{c_type}> from, uint64_t n)')
+  printer.do_scope()
+  printer.println('load:', 0)
+  with printer.for_('uint64_t i = 0', 'i < n', '++i'):
+    printer.println('#pragma HLS pipeline II = 1', 0)
+    printer.println('to.write(from[i]);')
+  printer.un_scope()
+  printer.println()
 
 
+def _print_burst_write_tapa(printer: util.CppPrinter, c_type: str) -> None:
+  printer.printlns(f'void BurstWrite(tapa::mmap<{c_type}> to, '
+                   f'tapa::istream<{c_type}>& from, uint64_t n)')
+  printer.do_scope()
+  printer.println('store:', 0)
+  with printer.for_('uint64_t i = 0', 'i < n', '++i'):
+    printer.println('#pragma HLS pipeline II = 1', 0)
+    printer.println('to[i] = from.read();')
+  printer.un_scope()
+  printer.println()
 
 
 def print_code(
@@ -245,6 +304,19 @@ def print_code(
   elif interface == 'axis':
     _print_read_data_axis(printer)
     _print_write_data_axis(printer)
+  elif interface == 'tapa::mmap':
+    for input_iface_c_type in {
+        f'tapa::vec_t<{stmt.c_type}, '
+        f'{stencil.burst_width // stmt.width_in_bits}>'
+        for stmt in stencil.input_stmts
+    }:
+      _print_burst_read_tapa(printer, input_iface_c_type)
+    for output_iface_c_type in {
+        f'tapa::vec_t<{stmt.c_type}, '
+        f'{stencil.burst_width // stmt.width_in_bits}>'
+        for stmt in stencil.output_stmts
+    }:
+      _print_burst_write_tapa(printer, output_iface_c_type)
 
   for module_trait_id, module_trait in enumerate(stencil.module_traits):
     print_module_definition(
@@ -277,6 +349,10 @@ def _print_module_func_call(printer: util.CppPrinter, node: ir.Module,
     get_port_name = util.get_port_buf_name
   elif interface == 'axis':
     get_port_name = util.get_port_name
+  elif interface == 'tapa::mmap':
+    get_port_name = util.get_port_buf_name
+  elif interface == 'tapa::stream':
+    get_port_name = util.get_port_name
 
   dram_reads = tuple('  /* input*/ ' + get_port_name(dram_ref.var, bank)
                      for dram_ref, bank in node.dram_reads)
@@ -288,6 +364,12 @@ def _print_module_func_call(printer: util.CppPrinter, node: ir.Module,
 
   if interface in {'m_axi', 'axis'}:
     printer.print_func(func_name, params, suffix=';', align=0)
+  elif interface.startswith('tapa::'):
+    printer.printlns(
+        f'.invoke<-1>({func_name},',
+        *(x + ',' for x in params[:-1]),
+        params[-1] + ')',
+    )
 
 
 def _get_delays(obj, delays):
@@ -310,6 +392,11 @@ def _mutate_dram_ref_for_writes(obj: ir.Node, kwargs: Dict[str, Any]) -> None:
       lsb = (elem_idx // num_banks) * type_width
       msb = lsb + type_width - 1
       return ir.Var(name=f'{obj.dram_buf_name(bank)}({msb}, {lsb})', idx=())
+    if interface.startswith('tapa::'):
+      return ir.Var(
+          name=f'{obj.dram_buf_name(bank)}.set({elem_idx // num_banks}',
+          idx=(),
+      )
   return obj
 
 
@@ -333,6 +420,11 @@ def _mutate_dram_ref_for_reads(obj: ir.Node, kwargs: Dict[str, Any]) -> None:
           f'{obj.dram_buf_name(bank)}({msb}, {lsb})))',
           idx=(),
       )
+    if interface.startswith('tapa::'):
+      return ir.Var(
+          name=f'{obj.dram_buf_name(bank)}[{elem_idx // num_banks}]',
+          idx=(),
+      )
   return obj
 
 
@@ -352,6 +444,14 @@ def _process_accesses(
         f' {ir.FIFORef.ST_PREFIX}{idx}'
         for idx, expr in enumerate(module_trait.exprs)
     ]
+  elif interface.startswith('tapa::'):
+    fifo_loads = [
+        f'tapa::istream<{x.c_type}>& {x.ld_name}' for x in module_trait.loads
+    ]
+    fifo_stores = [
+        f'tapa::ostream<{expr.c_type}>& {ir.FIFORef.ST_PREFIX}{idx}'
+        for idx, expr in enumerate(module_trait.exprs)
+    ]
 
   # format strings for input/output channels for packing/unpacking modules
   if interface == 'm_axi':
@@ -366,6 +466,13 @@ def _process_accesses(
     fifo_store_fmt = (
         "f'/*output*/ hls::stream<ap_axiu<{burst_width}, 0, 0, 0>>&"
         " {x.dram_fifo_name(bank)}'")
+  elif interface.startswith('tapa::'):
+    fifo_load_fmt = (
+        "f'tapa::istream<tapa::vec_t<{x.c_type},"
+        " {burst_width // x.width_in_bits}>>& {x.dram_fifo_name(bank)}'")
+    fifo_store_fmt = (
+        "f'tapa::ostream<tapa::vec_t<{x.c_type},"
+        " {burst_width // x.width_in_bits}>>& {x.dram_fifo_name(bank)}'")
 
   # dict mapping variable name to
   #   dict mapping bank tuple to
@@ -563,6 +670,12 @@ def print_module_definition(
         for var, accesses in dram_rw_map.items()
         for dram in (next(iter(_.values())) for _ in accesses.values())
         for bank in dram.dram)
+  elif interface.startswith('tapa::'):
+    printer.printlns(
+        f'tapa::vec_t<{dram.c_type}, {burst_width // dram.width_in_bits}> '
+        f'{dram.dram_buf_name(bank)};' for var, accesses in dram_rw_map.items()
+        for dram in (next(iter(_.values())) for _ in accesses.values())
+        for bank in dram.dram)
 
   if interface in {'m_axi', 'axis'}:
     # print enable conditions
@@ -583,6 +696,15 @@ def print_module_definition(
               for bank in x.dram
           ]))
       printer.println('enable = enabled;')
+  elif interface.startswith('tapa::'):
+    # print FIFO reads
+    if not dram_write_map:
+      printer.printlns(f'{fifo_in.ref_name} = {fifo_in.ld_name}.read(nullptr);'
+                       for fifo_in in module_trait.loads)
+    printer.printlns(f'{dram.dram_buf_name(bank)} = '
+                     f'{dram.dram_fifo_name(bank)}.read(nullptr);'
+                     for dram in dram_reads
+                     for bank in dram.dram)
 
   # print delays (if any)
   printer.printlns(f'const {x.c_type} {x.c_buf_load};' for x in delays)
@@ -609,6 +731,10 @@ def print_module_definition(
                           ]),
               'enable = enabled;',
           )
+      elif interface.startswith('tapa::'):
+        printer.printlns(
+            f'{fifo_in.ref_name} = {fifo_in.ld_name}.read(nullptr);'
+            for fifo_in in module_trait.loads)
       for idx, let in enumerate(module_trait.lets):
         let = let.visit(
             _mutate_dram_ref_for_writes,
@@ -623,11 +749,19 @@ def print_module_definition(
               f'{let.name} = '
               f'Reinterpret<ap_uint<{let.expr.haoda_type.width_in_bits}>>'
               f'({let.expr.c_expr});')
+        elif interface.startswith('tapa::'):
+          printer.println(f'{let.name}, {let.expr.c_expr});')
     if interface in {'m_axi', 'axis'}:
       printer.printlns(
           f'WriteData({dram.dram_fifo_name(bank)}, '
           f'{dram.dram_buf_name(bank)}, enabled);' for var in dram_write_map
           for dram in (
+              next(iter(_.values())) for _ in dram_write_map[var].values())
+          for bank in dram.dram)
+    elif interface.startswith('tapa::'):
+      printer.printlns(
+          f'{dram.dram_fifo_name(bank)}.write({dram.dram_buf_name(bank)});'
+          for var in dram_write_map for dram in (
               next(iter(_.values())) for _ in dram_write_map[var].values())
           for bank in dram.dram)
   else:
@@ -653,10 +787,15 @@ def print_module_definition(
             enabled = 'enabled'
           printer.println(
               f'WriteData({ir.FIFORef.ST_PREFIX}{idx}, {c_expr}, {enabled});')
+        elif interface.startswith('tapa::'):
+          printer.println(f'{ir.FIFORef.ST_PREFIX}{idx}.write({c_expr});')
   else:
     if interface in {'m_axi', 'axis'}:
       printer.printlns(f'WriteData({ir.FIFORef.ST_PREFIX}{idx}, '
                        f'{expr.c_type}({expr.c_expr}), enabled);'
+                       for idx, expr in enumerate(module_trait.exprs))
+    elif interface.startswith('tapa::'):
+      printer.printlns(f'{ir.FIFORef.ST_PREFIX}{idx}.write({expr.c_expr});'
                        for idx, expr in enumerate(module_trait.exprs))
 
   for delay in delays:
