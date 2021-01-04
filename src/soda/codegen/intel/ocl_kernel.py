@@ -306,11 +306,13 @@ def print_kernel(name: str,
           buf=dram_ref.dram_buf_name(bank),
       ))
     for dram_ref, bank in node.dram_reads:
-      println('vstore{n}({vec_ptr}[i], 0, {buf});'.format(
-          vec_ptr=util.get_port_name(dram_ref.var, bank),
-          n=burst_width // dram_ref.width_in_bits,
-          buf=dram_ref.dram_buf_name(bank),
-      ))
+      vec_ptr = util.get_port_name(dram_ref.var, bank)
+      n = burst_width // dram_ref.width_in_bits
+      buf = dram_ref.dram_buf_name(bank)
+      if burst_width == dram_ref.width_in_bits:
+        println(f'{buf}[0] = {vec_ptr}[i];')
+      else:
+        println(f'vstore{n}({vec_ptr}[i], 0, {buf});')
 
     # read from FIFOs
     for port, arg in zip(module_trait.loads, node.input_fifos):
@@ -348,11 +350,13 @@ def print_kernel(name: str,
 
     # print store to DRAM (if any)
     for dram_ref, bank in node.dram_writes:
-      println('{vec_ptr}[i] = vload{n}(0, {buf});'.format(
-          vec_ptr=util.get_port_name(dram_ref.var, bank),
-          n=burst_width // dram_ref.width_in_bits,
-          buf=dram_ref.dram_buf_name(bank),
-      ))
+      vec_ptr = util.get_port_name(dram_ref.var, bank)
+      n = burst_width // dram_ref.width_in_bits
+      buf = dram_ref.dram_buf_name(bank)
+      if burst_width == dram_ref.width_in_bits:
+        println(f'{vec_ptr}[i] = {buf}[0];')
+      else:
+        println(f'{vec_ptr}[i] = vload{n}(0, {buf});')
 
   if code_reuse:
     printer.eol = '\n'
