@@ -37,6 +37,8 @@ class OrderedCounter(  # type: ignore
 
 _logger = logging.getLogger().getChild(__name__)
 
+_solver = pulp.PULP_CBC_CMD(msg=False)
+
 
 def extract_attr(node: ir.Node) -> Tuple[Tuple[int, ...], ir.Node]:
   """Extract attributes from a node.
@@ -600,7 +602,7 @@ class CommSchedule(ScheduleBase):
         min_offset, max_offset = self.dependees[dst_vid][src_vid]
         lp_problem += lp_vars[src_vid] <= min_offset + lp_vars[dst_vid]
         lp_problem += lp_helper_vars[src_vid] >= max_offset + lp_vars[dst_vid]
-    lp_status = pulp.LpStatus[lp_problem.solve()]
+    lp_status = pulp.LpStatus[lp_problem.solve(_solver)]
     _logger.debug('ILP status: %s', lp_status)
     _logger.debug('var_0 should be produced @ 0 and kept until %d',
                   int(pulp.value(lp_helper_vars[0])))

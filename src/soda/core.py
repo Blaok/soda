@@ -18,6 +18,8 @@ from soda.optimization import inline
 
 _logger = logging.getLogger().getChild(__name__)
 
+_solver = pulp.PULP_CBC_CMD(msg=False)
+
 
 class Stencil():
   """
@@ -401,7 +403,7 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
         lp_problem += lp_helper_vars[ld_tensor_name] >= lp_vars[
             st_tensor.name] + (st_tensor.st_offset - oldest_access)
 
-    lp_status = lp_problem.solve()
+    lp_status = lp_problem.solve(_solver)
     lp_status_str = pulp.LpStatus[lp_status]
     total_distance = int(pulp.value(lp_problem.objective))
     _logger.debug('ILP status: %s %s', lp_status_str, total_distance)

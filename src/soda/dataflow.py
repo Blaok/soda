@@ -11,6 +11,8 @@ from haoda import ir, util
 
 _logger = logging.getLogger().getChild(__name__)
 
+_solver = pulp.PULP_CBC_CMD(msg=False)
+
 
 class SuperSourceNode(ir.Module):
   """A node representing the super source in the dataflow graph.
@@ -65,7 +67,7 @@ class SuperSourceNode(ir.Module):
             parent.fifo(node).depth >= latency_table[node]
             for parent in node.parents)
 
-    lp_status = lp_problem.solve()
+    lp_status = lp_problem.solve(_solver)
     if lp_status == pulp.LpStatusOptimal:
       _logger.debug('II=1 check: PASS')
     elif lp_status == pulp.LpStatusInfeasible:
@@ -163,7 +165,7 @@ class SuperSourceNode(ir.Module):
             for parent in node.parents)
 
     # solve ILP
-    lp_status = lp_problem.solve()
+    lp_status = lp_problem.solve(_solver)
     if lp_status != pulp.LpStatusOptimal:
       lp_status_str = pulp.LpStatus[lp_status]
       _logger.error('ILP error: %s\n%s', lp_status_str, lp_problem)
