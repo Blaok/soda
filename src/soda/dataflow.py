@@ -20,22 +20,14 @@ class SuperSourceNode(ir.Module):
   A super source doesn't have parent nodes.
 
   Attributes:
-      fwd_nodes (Dict[Tuple[str, int], ForwardNode]): Dict mapping tuples of
-        (tensor name, offset) to nodes.
-      cpt_nodes (Dict[Tuple[str, int], ComputeNode]): Dict mapping tuples of
-        (stage_name, pe_id) to nodes.
       super_sink (SuperSinkNode): The super sink node of this DAG.
   """
 
   def __init__(
       self,
-      fwd_nodes: Dict[Tuple[str, int], 'ForwardNode'],
-      cpt_nodes: Dict[Tuple[str, int], 'ComputeNode'],
       super_sink: 'SuperSinkNode',
   ):
     super().__init__()
-    self.fwd_nodes = fwd_nodes
-    self.cpt_nodes = cpt_nodes
     self.super_sink = super_sink
 
   @property
@@ -341,11 +333,13 @@ def is_valid_edge(edge: Tuple[ir.Module, ir.Module]) -> bool:
 # pylint: disable=too-many-branches,too-many-statements
 def create_dataflow_graph(stencil):
   chronological_tensors = stencil.chronological_tensors
-  super_source = SuperSourceNode(
-      fwd_nodes={},
-      cpt_nodes={},
-      super_sink=SuperSinkNode(),
-  )
+  super_source = SuperSourceNode(super_sink=SuperSinkNode(),)
+
+  # Dict mapping tuples of (tensor name, offset) to nodes.
+  fwd_nodes: Dict[Tuple[str, int], ForwardNode] = {}
+
+  # Dict mapping tuples of (stage_name, pe_id) to nodes.
+  cpt_nodes: Dict[Tuple[str, int], ComputeNode] = {}
 
   load_nodes = {
       stmt.name:
@@ -402,7 +396,7 @@ def create_dataflow_graph(stencil):
       nodes_to_add = []
       for dst_point_dicts in dsts.values():
         for offset in dst_point_dicts:
-          if (src_name, offset) in super_source.fwd_nodes:
+          if (src_name, offset) in fwd_nodes:
             continue
           fwd_node = ForwardNode(
               tensor=stencil.tensors[src_name],
@@ -417,31 +411,30 @@ def create_dataflow_graph(stencil):
               load_nodes[src_name][load_node_count - 1 -
                                    offset % load_node_count].add_child(fwd_node)
             else:
-              (super_source.cpt_nodes[(src_name, 0)].add_child(fwd_node))
-          super_source.fwd_nodes[(src_name, offset)] = fwd_node
+              cpt_nodes[(src_name, 0)].add_child(fwd_node)
+          fwd_nodes[(src_name, offset)] = fwd_node
           if offset in replicated_next_fifo[src_name]:
             nodes_to_add.append(
                 (fwd_node, (src_name, replicated_next_fifo[src_name][offset])))
       for src_node, key in nodes_to_add:
-        src_node.add_child(super_source.fwd_nodes[key])
+        src_node.add_child(fwd_nodes[key])
 
     add_fwd_nodes(stencil.input.name)
 
     for stage in stencil.get_stages_chronologically():
       cpt_node = ComputeNode(stage=stage, pe_id=0)
       _logger.debug('create %s', print_node(cpt_node))
-      super_source.cpt_nodes[(stage.name, 0)] = cpt_node
+      cpt_nodes[(stage.name, 0)] = cpt_node
       for input_name, input_window in stage.window.items():
         for i in range(len(input_window)):
           offset = next(offset for offset, points in (
               replicated_all_points[input_name][stage.name].items())
                         if points == i)
-          fwd_node = super_source.fwd_nodes[(input_name, offset)]
+          fwd_node = fwd_nodes[(input_name, offset)]
           _logger.debug('  access %s', print_node(fwd_node))
           fwd_node.add_child(cpt_node)
       if stage.is_output():
-        super_source.cpt_nodes[stage.name,
-                               0].add_child(store_nodes[stage.name][0])
+        cpt_nodes[stage.name, 0].add_child(store_nodes[stage.name][0])
       else:
         add_fwd_nodes(stage.name)
 
@@ -456,7 +449,7 @@ def create_dataflow_graph(stencil):
       nodes_to_add = []
       for dst_point_dicts in dsts.values():
         for offset in dst_point_dicts:
-          if (src_name, offset) in super_source.fwd_nodes:
+          if (src_name, offset) in fwd_nodes:
             continue
           fwd_node = ForwardNode(tensor=stencil.tensors[src_name],
                                  offset=offset)
@@ -483,15 +476,15 @@ def create_dataflow_graph(stencil):
               cpt_offset = next(
                   unroll_idx for unroll_idx in range(stencil.unroll_factor)
                   if init_offsets[unroll_idx] == offset)
-              cpt_node = super_source.cpt_nodes[(src_name, cpt_offset)]
+              cpt_node = cpt_nodes[(src_name, cpt_offset)]
               cpt_node.add_child(fwd_node)
-          super_source.fwd_nodes[(src_name, offset)] = fwd_node
+          fwd_nodes[(src_name, offset)] = fwd_node
           if offset in next_fifo[src_name]:
             nodes_to_add.append(
                 (fwd_node, (src_name, next_fifo[src_name][offset])))
       for src_node, key in nodes_to_add:
         # fwd from another fwd node
-        src_node.add_child(super_source.fwd_nodes[key])
+        src_node.add_child(fwd_nodes[key])
 
     for input_name in stencil.input_names:
       add_fwd_nodes(input_name)
@@ -503,17 +496,17 @@ def create_dataflow_graph(stencil):
         pe_id = stencil.unroll_factor - 1 - unroll_index
         cpt_node = ComputeNode(tensor=tensor, pe_id=pe_id)
         _logger.debug('create %s', print_node(cpt_node))
-        super_source.cpt_nodes[(tensor.name, pe_id)] = cpt_node
+        cpt_nodes[(tensor.name, pe_id)] = cpt_node
         for input_name, input_window in tensor.ld_indices.items():
           for i in range(len(input_window)):
             offset = next(offset for offset, points in all_points[input_name][
                 tensor.name].items() if pe_id in points and points[pe_id] == i)
-            fwd_node = super_source.fwd_nodes[(input_name, offset)]
+            fwd_node = fwd_nodes[(input_name, offset)]
             _logger.debug('  access %s', print_node(fwd_node))
             fwd_node.add_child(cpt_node)
       if tensor.is_output():
         for pe_id in range(stencil.unroll_factor):
-          super_source.cpt_nodes[tensor.name, pe_id].add_child(
+          cpt_nodes[tensor.name, pe_id].add_child(
               store_nodes[tensor.name][pe_id % len(store_nodes[tensor.name])])
       else:
         add_fwd_nodes(tensor.name)
