@@ -3,8 +3,9 @@ import logging
 import operator
 from typing import List, TextIO
 
-import soda.tensor
 from haoda import ir, util
+
+import soda.tensor
 from soda import core, grammar
 from soda import util as soda_util
 
@@ -29,7 +30,7 @@ def print_header(printer):
   printer.println()
 
   # Other system headers
-  for header in ('frt',):
+  for header in ('frt', 'ap_int'):
     printer.println(f'#include <{header}.h>')
   printer.println()
 
@@ -38,6 +39,24 @@ def print_header(printer):
                'unordered_map', 'vector'):
     printer.println(f'using std::{name};')
   printer.println()
+
+
+def print_decl(printer: util.CppPrinter, stencil: soda.core.Stencil):
+
+  params: List[str] = []
+  for stmt in stencil.output_stmts + stencil.input_stmts:
+    for bank in stmt.dram:
+      port_name = util.get_port_name(stmt.name, bank)
+      params.append(f'  ap_uint<{stencil.burst_width}>* {port_name},')
+  printer.printlns(
+      '// C++ binding',
+      'extern "C" {',
+      f'void {stencil.kernel_name}(',
+      *params,
+      '  uint64_t coalesced_data_num);',
+      '}  // extern "C"',
+      '',
+  )
 
 
 def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
@@ -69,18 +88,20 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
   printer.print_func(name=f'int {stencil.app_name}', params=params, align=0)
   printer.do_scope()
 
-  printer.printlns(
-      '// load bitstream',
-      'auto instance = fpga::Instance(bitstream);',
-      'auto args_info = instance.GetArgsInfo();'
-      '',
-  )
-
   bank_count_fmt = util.MetaFmt('bank_count_%s')
   regex_fmt = util.MetaFmt('regex_%s')
   elem_count_per_cycle_fmt = util.MetaFmt('elem_count_per_cycle_%s')
   tile_count_fmt = util.MetaFmt('tile_count_dim_%d')
+
   printer.printlns(
+      '#ifdef SODA_CPP_BINDING',
+      '// C++ binding only supports a fixed number of banks',
+      *(f'int {bank_count_fmt[x.name]} = {len(x.dram)};' for x in stmts),
+      '#else  // SODA_CPP_BINDING',
+      '// load bitstream',
+      'auto instance = fpga::Instance(bitstream);',
+      'auto args_info = instance.GetArgsInfo();'
+      '',
       '// find out how many banks are used for each tensor',
       *(f'int {bank_count_fmt[x.name]} = 0;' for x in stmts),
       *(f'const regex {regex_fmt[x.name]}'
@@ -90,6 +111,7 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
     printer.printlns(f'if (regex_match(arg.name, {regex_fmt[x.name]})) '
                      f'++{bank_count_fmt[x.name]};' for x in stmts)
   printer.printlns(
+      '#endif  // SODA_CPP_BINDING'
       '',
       ('auto round_up = [](int64_t a, int64_t b) -> int64_t '
        '{ return ((a - 1) / b + 1) * b; };'),
@@ -257,7 +279,18 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
       '',
   )
 
-  printer.println('int arg_idx = 0;')
+  params = []
+  for stmt in stencil.output_stmts + stencil.input_stmts:
+    for i in range(len(stmt.dram)):
+      params.append(
+          f'(ap_uint<{stencil.burst_width}>*){buf_fmt[stmt.name]}[{i}].get()')
+  params.append('cycle_count')
+  printer.println('#ifdef SODA_CPP_BINDING')
+  printer.print_func(f'::{stencil.kernel_name}', params, suffix=';\n', align=0)
+  printer.printlns(
+      '#else  // SODA_CPP_BINDING',
+      'int arg_idx = 0;',
+  )
   iter_fmt = util.MetaFmt('iter_%s')
   for stmt in stmts:
     printer.println(
@@ -294,6 +327,7 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
        '<< instance.ComputeTimeSeconds() << " s" << endl;'),
       ('clog << "Store throughput: " << std::setprecision(3) '
        '<< instance.StoreThroughputGbps() <<" GB/s" << endl;'),
+      '#endif  // SODA_CPP_BINDING',
       '',
   )
 
@@ -635,6 +669,7 @@ def print_code(stencil: core.Stencil, host_file: TextIO) -> None:
   print_define = lambda key, value: util.print_define(printer, key, value)
 
   print_header(printer)
+  print_decl(printer, stencil)
 
   all_stmts = stencil.input_stmts + stencil.output_stmts + stencil.param_stmts
 
