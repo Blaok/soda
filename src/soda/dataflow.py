@@ -566,7 +566,8 @@ def create_dataflow_graph(stencil):
               var_type = let.haoda_type
               break
           else:
-            var_name = 'let_%d' % len(src_node.lets)
+            var_name = (f'from_{src_node.name}_to_{dst_node.name}_'
+                        f'let_{len(src_node.lets)}')
             # pylint: disable=undefined-loop-variable
             var_type = fifo_r.haoda_type
             lets.append(
