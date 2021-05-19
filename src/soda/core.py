@@ -13,6 +13,7 @@ from haoda.ir import arithmetic
 import soda.tensor
 import soda.util
 from soda import dataflow, visitor
+from soda.optimization import cluster
 from soda.optimization import computation_reuse as cr
 from soda.optimization import inline
 
@@ -135,6 +136,7 @@ class Stencil():
     if 'inline' in self.optimizations:
       inline.inline(self)
     inline.rebalance(self)
+    cluster.cluster(self.dataflow_super_source, self.cluster)
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
       stmt.propagate_type()

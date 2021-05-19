@@ -1,8 +1,10 @@
 import collections
 import logging
-from typing import Dict, List, TextIO, Union
+from typing import Dict, List, Set, TextIO, Union
 
+import toposort
 from haoda import ir, util
+
 from soda import core
 
 _logger = logging.getLogger().getChild(__name__)
@@ -35,6 +37,28 @@ def print_code(
 
   # internal fifos
   super_source = stencil.dataflow_super_source
+
+  # emit tuple struct definitions
+  tuple_types: Dict[ir.TupleType, Set[ir.TupleType]] = {}
+
+  def find_tuple_types(haoda_type: ir.Type) -> None:
+    """Recursively find tuple types."""
+    if isinstance(haoda_type, ir.TupleType):
+      dependency = tuple_types.get(haoda_type)
+      if dependency is None:
+        tuple_types[haoda_type] = {
+            x for x in haoda_type if isinstance(x, ir.TupleType)
+        }
+        for t in haoda_type:
+          find_tuple_types(t)
+
+  for node in super_source.tpo_valid_node_gen():
+    for fifo in node.fifos:
+      find_tuple_types(fifo.haoda_type)
+
+  for haoda_type in toposort.toposort_flatten(tuple_types, sort=False):
+    println(haoda_type.cl_type_def)
+
   for node in super_source.tpo_valid_node_gen():
     for fifo in node.fifos:
       println(f'channel {fifo.cl_type} {fifo.cl_expr};')
@@ -258,8 +282,18 @@ def print_kernel(name: str,
     println(delay.cl_ptr_decl)
 
   def mutate_dram_ref(obj: ir.Node, kwargs: Dict[str, int]) -> ir.Node:
-    if isinstance(obj, ir.DRAMRef):
-      dram_throughput = len(obj.dram) * burst_width // obj.width_in_bits
+    if isinstance(obj, ir.Pack) and isinstance(obj.exprs[0], ir.DRAMRef):
+      # packed DRAM load
+
+      # check that all exprs are the same ir.DRAMRef
+      var = obj.exprs[0].var
+      dram = obj.exprs[0].dram
+      for expr in obj.exprs[1:]:
+        assert isinstance(expr, ir.DRAMRef)
+        assert var == expr.var
+
+      # check that DRAM throughput is consistent with FIFO
+      dram_throughput = len(dram) * burst_width // obj.width_in_bits
       if node.dram_reads:
         output_count = len({x[0].var for x in node.dram_reads})
         fifo_throughput = len(node.output_fifos) // output_count
@@ -267,6 +301,43 @@ def print_kernel(name: str,
         input_count = len({x[0].var for x in node.dram_writes})
         fifo_throughput = len(node.input_fifos) // input_count
       if dram_throughput != fifo_throughput:
+        _logger.error('DRAM channels : %s', dram)
+        _logger.error('variable name : %s', var)
+        _logger.error('variable width: %d', obj.width_in_bits)
+        _logger.error('burst width   : %d', burst_width)
+        raise NotImplementedError(f'memory throughput {dram_throughput} != '
+                                  f'processing throughput {fifo_throughput}')
+
+      # replace ir.DRAMRef with a reference to the DRAM buffer
+      coalescing_idx = kwargs['coalescing_idx']
+      unroll_factor = kwargs['unroll_factor']
+      packed_vars = []
+      for expr in obj.exprs:
+        elem_idx = coalescing_idx * unroll_factor + expr.offset
+        packed_vars.append(
+            ir.make_var(
+                f'{expr.dram_buf_name(dram[elem_idx % len(dram)])}'
+                f'[{elem_idx // len(dram)}]',
+                haoda_type=expr.haoda_type,
+            ))
+      return ir.Pack(exprs=packed_vars)
+
+    if isinstance(obj, ir.DRAMRef):
+      # singleton DRAM load/store
+      # allow overriden width from unpacked store
+      width_in_bits = kwargs.get('width_in_bits', obj.width_in_bits)
+      dram_throughput = len(obj.dram) * burst_width // width_in_bits
+      if node.dram_reads:
+        output_count = len({x[0].var for x in node.dram_reads})
+        fifo_throughput = len(node.output_fifos) // output_count
+      else:
+        input_count = len({x[0].var for x in node.dram_writes})
+        fifo_throughput = len(node.input_fifos) // input_count
+      if dram_throughput != fifo_throughput:
+        _logger.error('DRAM channels : %s', obj.dram)
+        _logger.error('variable name : %s', obj.var)
+        _logger.error('variable width: %d', width_in_bits)
+        _logger.error('burst width   : %d', burst_width)
         raise NotImplementedError(f'memory throughput {dram_throughput} != '
                                   f'processing throughput {fifo_throughput}')
 
@@ -280,10 +351,16 @@ def print_kernel(name: str,
           ),
           idx=(),
       )
+
     if isinstance(obj, ir.Let) and isinstance(obj.name, ir.DRAMRef):
-      return ir.Var(name='{} = {};'.format(
-          obj.name.visit(mutate_dram_ref, kwargs), obj.expr.cl_expr),
-                    idx=())
+      # DRAM store
+      kwargs_with_width = kwargs.copy()
+      if isinstance(obj.expr, ir.Unpack):
+        # packed DRAM store
+        # send the packed width for consistency check
+        kwargs_with_width['width_in_bits'] = obj.expr.expr.width_in_bits
+      lhs = obj.name.visit(mutate_dram_ref, kwargs_with_width)
+      return ir.make_var(f'{lhs} = {obj.expr.cl_expr};')
     return obj
 
   if node.dram_reads or node.dram_writes:
@@ -296,7 +373,7 @@ def print_kernel(name: str,
   with printer.for_(*loop_args):
     # print DelayedRef (if any)
     for delay in delays:
-      println('const {} {};'.format(delay.cl_type, delay.c_buf_load))
+      println('const {} {};'.format(delay.cl_type, delay.cl_buf_load))
 
     # print load from DRAM (if any)
     for dram_ref, bank in node.dram_reads:
@@ -345,7 +422,7 @@ def print_kernel(name: str,
 
     # update DelayedRef (if any)
     for delay in delays:
-      println(delay.c_buf_store)
+      println(delay.cl_buf_store)
       println('{} = {};'.format(delay.ptr, delay.cl_next_ptr_expr))
 
     # print store to DRAM (if any)

@@ -1,10 +1,11 @@
 import collections
 import itertools
 import logging
-from typing import IO, Any, Dict, List, Tuple
+from typing import IO, Any, Dict, List, Tuple, Union
 
 from haoda import ir, util
 from haoda.ir import visitor
+
 from soda import core, dataflow
 
 _logger = logging.getLogger().getChild(__name__)
@@ -402,15 +403,15 @@ def _mutate_dram_ref_for_writes(obj: ir.Node, kwargs: Dict[str, Any]) -> None:
 
 def _mutate_dram_ref_for_reads(obj: ir.Node, kwargs: Dict[str, Any]) -> None:
   if isinstance(obj, ir.DRAMRef):
-    coalescing_idx = kwargs.pop('coalescing_idx')
-    unroll_factor = kwargs.pop('unroll_factor')
-    interface = kwargs.pop('interface')
-    num_bank_map = kwargs.pop('num_bank_map')
-    expr = kwargs.pop('expr')
+    coalescing_idx = kwargs['coalescing_idx']
+    unroll_factor = kwargs['unroll_factor']
+    interface = kwargs['interface']
+    num_bank_map = kwargs['num_bank_map']
+    expr = kwargs['expr']
     type_width = obj.haoda_type.width_in_bits
     elem_idx = coalescing_idx * unroll_factor + obj.offset
     num_banks = num_bank_map[obj.var]
-    bank = expr.dram[elem_idx % num_banks]
+    bank = _get_dram_attr(expr, 'dram')[elem_idx % num_banks]
     if interface in {'m_axi', 'axis'}:
       lsb = (elem_idx // num_banks) * type_width
       msb = lsb + type_width - 1
@@ -532,7 +533,11 @@ def _process_accesses(
               'cannot process such a burst'
           # multiple bursts consumed in a single cycle
           # reassemble_factor = batch_width // (burst_width * num_banks)
-          raise util.InternalError('cannot process such a burst yet')
+          _logger.error('DRAM channels: %s', dram)
+          _logger.error('burst width  : %d', burst_width)
+          _logger.error('batch width  : %d', batch_width)
+          raise util.InternalError(
+              'cannot process such a burst yet: burst width too small')
       dram_reads = [next(iter(_.values())) for _ in dram_read_map[var].values()]
       all_dram_reads += dram_reads
       fifo_loads.extend(
@@ -771,11 +776,13 @@ def print_module_definition(
   if dram_read_map:
     for coalescing_idx in range(coalescing_factor):
       for idx, expr in enumerate(module_trait.exprs):
+        var = _get_dram_attr(expr, 'var')
+        dram = _get_dram_attr(expr, 'dram')
         c_expr = expr.visit(
             _mutate_dram_ref_for_reads,
             dict(
                 coalescing_idx=coalescing_idx,
-                unroll_factor=len(dram_read_map[expr.var][expr.dram]),
+                unroll_factor=len(dram_read_map[var][dram]),
                 num_bank_map=num_bank_map,
                 interface=interface,
                 expr=expr,
@@ -809,6 +816,18 @@ def print_module_definition(
   printer.un_scope()
   printer.println()
   _logger.debug('printing: %s', module_trait)
+
+
+def _get_dram_attr(node: Union[ir.Pack, ir.DRAMRef], name: str):
+  if isinstance(node, ir.Pack):
+    attr = getattr(node.exprs[0], name)
+    for expr in node.exprs:
+      assert isinstance(expr, ir.DRAMRef)
+      assert attr == getattr(expr, name)
+    return attr
+  if isinstance(node, ir.DRAMRef):
+    return getattr(node, name)
+  raise TypeError
 
 
 def _print_data_struct(printer):
