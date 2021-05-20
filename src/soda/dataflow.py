@@ -595,7 +595,10 @@ def create_dataflow_graph(stencil):
         lets = [_.visit(replace_refs_callback) for _ in src_node.tensor.lets]
         _logger.debug('replaced lets: %s', lets)
         _logger.debug('expr: %s', src_node.tensor.expr)
-        expr = src_node.tensor.expr.visit(replace_refs_callback)
+        expr = ir.Cast(
+            haoda_type=src_node.tensor.haoda_type,
+            expr=src_node.tensor.expr.visit(replace_refs_callback),
+        )
         _logger.debug('replaced expr: %s', expr)
         if isinstance(dst_node, StoreNode):
           dram_ref = ir.DRAMRef(
