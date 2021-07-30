@@ -53,9 +53,9 @@ class Stencil():
     self.iterate = kwargs.pop('iterate')
     if self.iterate < 1:
       raise util.SemanticError('cannot iterate %d times' % self.iterate)
-    self.border = kwargs.pop('border')
+    self.border = kwargs.pop('border') or 'ignore'
     self.preserve_border = self.border == 'preserve'
-    self.cluster = kwargs.pop('cluster')
+    self.cluster = kwargs.pop('cluster') or 'none'
     # platform determined
     self.burst_width = kwargs.pop('burst_width')
     # application determined
