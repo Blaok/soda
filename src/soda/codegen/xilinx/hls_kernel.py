@@ -201,7 +201,10 @@ def print_header(
           'string',
       ]),
       '',
-      *(map('#include <{}>'.format, ['algorithm'])),
+      *(map('#include <{}>'.format, [
+          'algorithm',
+          'tuple',
+      ])),
       '',
       *(map('#include <{}.h>'.format, third_party_headers)),
       '',
