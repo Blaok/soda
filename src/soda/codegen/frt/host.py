@@ -668,6 +668,7 @@ def print_code(stencil: core.Stencil, host_file: TextIO) -> None:
   printer = util.CppPrinter(host_file)
   print_define = lambda key, value: util.print_define(printer, key, value)
 
+  printer.printlns(stencil.meta_lines)
   print_header(printer)
   print_decl(printer, stencil)
 

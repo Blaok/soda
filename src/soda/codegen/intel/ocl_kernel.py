@@ -29,6 +29,8 @@ def print_code(
   printer = util.CppPrinter(output_file)
   println = printer.println
 
+  printer.printlns(stencil.meta_lines)
+
   println('#include <ihc_apint.h>', indent=0)
   println()
 

@@ -639,6 +639,20 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
       self._calculate_stencil_window()
     return getattr(self, '_stencil_window')
 
+  @property
+  def meta_lines(self) -> Tuple[str, ...]:
+    return (
+        '// this file can be generated from the following SODA DSL',
+        f'/*\n{self}\n*/',
+        '',
+        '// stencil window size:'
+        f' {tuple(get_stencil_dim(self.stencil_window))}',
+        f'// stencil distace: {self.stencil_distance}',
+        '// data layout is documented at',
+        '// https://github.com/Blaok/soda/blob/master/docs/data-layout.md',
+        '',
+    )
+
 
 def _get_reuse_chains(tile_size, tensor, unroll_factor):
   """Generates reuse chains for a Tensor.

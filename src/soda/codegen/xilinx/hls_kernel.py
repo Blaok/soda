@@ -273,6 +273,8 @@ def print_code(
   _logger.info('generate kernel code as %s' % output_file.name)
   printer = util.CppPrinter(output_file)
 
+  printer.printlns(stencil.meta_lines)
+
   print_header(printer, interface)
 
   if interface in {'m_axi', 'axis'}:
@@ -284,17 +286,6 @@ def print_code(
         '',
     )
 
-  printer.printlns(
-      '// this file can be generated from the following SODA DSL',
-      f'/*\n{stencil}\n*/',
-      '',
-      '// stencil window size:'
-      f' {tuple(core.get_stencil_dim(stencil.stencil_window))}',
-      f'// stencil distace: {stencil.stencil_distance}',
-      '// data layout is documented at',
-      '// https://github.com/Blaok/soda/blob/master/docs/data-layout.md',
-      '',
-  )
 
   if interface in {'m_axi', 'axis'}:
     _print_reinterpret(printer)
