@@ -1,54 +1,128 @@
 import argparse
+import logging
 import os
 import shutil
 import sys
 import tempfile
 
 from haoda.backend import xilinx as backend
+
 from soda import core
 from soda.codegen.xilinx import header
 from soda.codegen.xilinx import hls_kernel as kernel
 from soda.codegen.xilinx import host, rtl_kernel
 
+_logger = logging.getLogger().getChild(__name__)
+
+hls = 'vivado_hls'
+
+
+class ArgParseActionForHls(argparse.Action):
+
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+
+  def __call__(self, parser, namespace, values, option_string=None):
+    global hls  # pylint: disable=global-statement
+    hls = values
+
+
 def add_arguments(parser):
   parser.add_argument(
-      '--xocl', type=str, dest='output_dir', metavar='dir', nargs='?', const='',
-      help='directory to generate kernel and host code; default names are'
-      'used; default to the current working directory; may be overridden by '
-      '--xocl-header, --xocl-host, or --xocl-kernel')
+      '--xocl',
+      type=str,
+      dest='output_dir',
+      metavar='dir',
+      nargs='?',
+      const='',
+      help=('(deprecated) directory to generate kernel and host code; '
+            'default names are used; '
+            'default to the current working directory; '
+            'may be overridden by --xocl-header, --xocl-host, or '
+            '--xocl-kernel'),
+  )
   parser.add_argument(
-      '--xocl-header', type=str, dest='header_file', metavar='file',
-      help='host C++ header code; overrides --xocl')
+      '--xocl-header',
+      type=str,
+      dest='header_file',
+      metavar='file',
+      help='(deprecated) host C++ header code; overrides --xocl',
+  )
   parser.add_argument(
-      '--xocl-host', type=str, dest='host_file', metavar='file',
-      help='host C++ source code for the Xilinx OpenCL flow; overrides --xocl')
+      '--xocl-host',
+      type=str,
+      dest='host_file',
+      metavar='file',
+      help=('(deprecated) host C++ source code for the Xilinx OpenCL flow; '
+            'overrides --xocl'),
+  )
   parser.add_argument(
-      '--xocl-kernel', type=str, dest='kernel_file', metavar='file',
-      help='Vivado HLS C++ kernel code for the Xilinx OpenCL flow; overrides '
-      '--xocl')
+      '--xocl-kernel',
+      type=str,
+      dest='kernel_file',
+      metavar='file',
+      help=('Xilinx HLS C++ kernel code for the Xilinx OpenCL flow; '
+            'overrides --xocl'),
+  )
   parser.add_argument(
-      '--xocl-platform', type=str, dest='xocl_platform', metavar='dir',
-      help='SDAccel platform directory of the Xilinx OpenCL flow')
+      '--xocl-platform',
+      type=str,
+      dest='xocl_platform',
+      metavar='dir',
+      help='Vitis shell platform name or directory for the Xilinx OpenCL flow',
+  )
   parser.add_argument(
-      '--xocl-part-num', type=str, dest='xocl_part_num', metavar='string',
-      help='part number used for Vivado HLS')
+      '--xocl-part-num',
+      type=str,
+      dest='xocl_part_num',
+      metavar='string',
+      help='part number used for Xilinx HLS',
+  )
   parser.add_argument(
-      '--xocl-clock-period', type=str, dest='xocl_clock_period', metavar='ns',
-      help='target clock period in nanoseconds, used for Vivado HLS')
-  parser.add_argument('--xocl-hw-xo', type=str, dest='xo_file', metavar='file',
-                      help='hardware object file for the Xilinx OpenCL flow')
+      '--xocl-clock-period',
+      type=str,
+      dest='xocl_clock_period',
+      metavar='ns',
+      help='target clock period in nanoseconds, used for Xilinx HLS',
+  )
   parser.add_argument(
-      '--xocl-hw-xo-rpt', type=str, dest='xo_rpt', metavar='file',
-      help='Vivado HLS report for the Xilinx OpenCL hardware object')
+      '--xocl-hw-xo',
+      type=str,
+      dest='xo_file',
+      metavar='file',
+      help='hardware object file for the Xilinx OpenCL flow',
+  )
   parser.add_argument(
-    '--xocl-interface', type=str, dest='interface', metavar='(m_axi|axis)',
-    default='m_axi', help='interface type of the Xilinx OpenCL code')
+      '--xocl-hw-xo-rpt',
+      type=str,
+      dest='xo_rpt',
+      metavar='file',
+      help='Xilinx HLS report for the Xilinx OpenCL hardware object',
+  )
+  parser.add_argument(
+      '--xocl-interface',
+      type=str,
+      dest='interface',
+      choices=('m_axi', 'axis'),
+      default='m_axi',
+      help='interface type of the Xilinx OpenCL code',
+  )
+  parser.add_argument(
+      '--xocl-hls',
+      type=str,
+      choices=('vivado_hls', 'vitis_hls'),
+      default='vivado_hls',
+      action=ArgParseActionForHls,  # modifies global var hls directly
+      help='use Vivado HLS or Vitis HLS style for Xilinx HLS',
+  )
+
 
 def print_code(
     stencil: core.Stencil,
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
 ) -> None:
+  _logger.info('using %s', hls)
   if args.kernel_file is not None:
     with tempfile.TemporaryFile(mode='w+') as tmp:
       kernel.print_code(stencil, tmp, interface=args.interface)
