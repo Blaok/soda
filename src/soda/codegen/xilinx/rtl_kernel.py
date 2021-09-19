@@ -15,7 +15,7 @@ from haoda import util
 from haoda.backend import xilinx as backend
 from haoda.report.xilinx import hls as hls_report
 from soda import core, dataflow
-from soda.codegen.xilinx import hls_kernel
+from soda.codegen.xilinx import hls_kernel, opencl
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -148,6 +148,8 @@ def print_code(
 
     hdl_dir = os.path.join(tmpdir, 'hdl')
     module_name = 'Dataflow'
+    if opencl.hls == 'vitis_hls':
+      module_name = f'{top_name}_Dataflow'
     if interface == 'axis':
       module_name = top_name
     with open(os.path.join(hdl_dir, f'{module_name}.v'), mode='w') as fileobj:
@@ -196,6 +198,7 @@ def synthesis_module(tmpdir, kernel_files, module_name, device_info):
                         module_name,
                         device_info['clock_period'],
                         device_info['part_num'],
+                        hls=opencl.hls,
                         reset_low=False) as proc:
       stdout, stderr = proc.communicate()
     if proc.returncode == 0:
@@ -313,6 +316,11 @@ def print_top_module(
   valid = AXIS_PORT_SUFFIXES['valid']
   ready = AXIS_PORT_SUFFIXES['ready']
 
+  if opencl.hls == 'vivado_hls':
+    div = '_V_V'
+  elif opencl.hls == 'vitis_hls':
+    div = ''
+
   # prepare arguments
   input_args = ['ap_clk']
   output_args: List[str] = []
@@ -325,13 +333,13 @@ def print_top_module(
   args = list(input_args + output_args)
   if interface == 'm_axi':
     for port_name, _, _, _ in outputs:
-      args.append(f'{port_name}_V_V{data_in}')
-      args.append(f'{port_name}_V_V{not_full}')
-      args.append(f'{port_name}_V_V{write_enable}')
+      args.append(f'{port_name}{div}{data_in}')
+      args.append(f'{port_name}{div}{not_full}')
+      args.append(f'{port_name}{div}{write_enable}')
     for port_name, _, _, _ in inputs:
-      args.append(f'{port_name}_V_V{data_out}')
-      args.append(f'{port_name}_V_V{not_empty}')
-      args.append(f'{port_name}_V_V{read_enable}')
+      args.append(f'{port_name}{div}{data_out}')
+      args.append(f'{port_name}{div}{not_empty}')
+      args.append(f'{port_name}{div}{read_enable}')
   elif interface == 'axis':
     for port_name, _, _, _ in ports:
       args.extend(port_name + suffix for suffix in AXIS_PORT_SUFFIXES.values())
@@ -348,34 +356,34 @@ def print_top_module(
   for port_name, _, width, _ in outputs:
     if interface == 'm_axi':
       printer.printlns(
-          f'output wire [{width - 1}:0] {port_name}_V_V{data_in};',
-          f'input  wire {port_name}_V_V{not_full};',
-          f'output wire {port_name}_V_V{write_enable};',
+          f'output wire [{width - 1}:0] {port_name}{div}{data_in};',
+          f'input  wire {port_name}{div}{not_full};',
+          f'output wire {port_name}{div}{write_enable};',
       )
     elif interface == 'axis':
       printer.printlns(
           f'output wire [{width - 1}:0] {port_name}{data};',
           f'output wire {port_name}{valid};',
           f'input  wire {port_name}{ready};',
-          f'wire [{width - 1}:0] {port_name}_V_V{data_in};',
-          f'wire {port_name}_V_V{not_full};',
-          f'wire {port_name}_V_V{write_enable};',
+          f'wire [{width - 1}:0] {port_name}{div}{data_in};',
+          f'wire {port_name}{div}{not_full};',
+          f'wire {port_name}{div}{write_enable};',
       )
   for port_name, _, width, _ in inputs:
     if interface == 'm_axi':
       printer.printlns(
-          f'input  wire [{width - 1}:0] {port_name}_V_V{data_out};',
-          f'input  wire {port_name}_V_V{not_empty};',
-          f'output wire {port_name}_V_V{read_enable};',
+          f'input  wire [{width - 1}:0] {port_name}{div}{data_out};',
+          f'input  wire {port_name}{div}{not_empty};',
+          f'output wire {port_name}{div}{read_enable};',
       )
     elif interface == 'axis':
       printer.printlns(
           f'input  wire [{width - 1}:0] {port_name}{data};',
           f'input  wire {port_name}{valid};',
           f'output wire {port_name}{ready};',
-          f'wire [{width - 1}:0] {port_name}_V_V{data_out};',
-          f'wire {port_name}_V_V{not_empty};',
-          f'wire {port_name}_V_V{read_enable};',
+          f'wire [{width - 1}:0] {port_name}{div}{data_out};',
+          f'wire {port_name}{div}{not_empty};',
+          f'wire {port_name}{div}{read_enable};',
       )
   printer.println()
 
@@ -392,11 +400,10 @@ def print_top_module(
   if interface == 'm_axi':
     for port_name, _, width, _ in outputs:
       printer.printlns(
-          f'reg [{width - 1}:0] {port_name}{data_in};',
-          f'wire {port_name}_V_V{write_enable};',
+          f'wire {port_name}{div}{write_enable};',
       )
     for port_name, _, _, _ in inputs:
-      printer.println(f'wire {port_name}_V_V{read_enable};')
+      printer.println(f'wire {port_name}{div}{read_enable};')
   printer.println()
 
   # register reset signal
@@ -430,12 +437,12 @@ def print_top_module(
   if interface == 'm_axi':
     # used by cosim for deadlock detection
     printer.printlns(
-        f'reg {port_name}_V_V{not_block};' for port_name, _, _, _ in ports)
+        f'reg {port_name}{div}{not_block};' for port_name, _, _, _ in ports)
     with printer.always('*'):
       printer.printlns(
-          *(f'{port_name}_V_V{not_block} = {port_name}_V_V{not_full};'
+          *(f'{port_name}{div}{not_block} = {port_name}{div}{not_full};'
             for port_name, _, _, _ in outputs),
-          *(f'{port_name}_V_V{not_block} = {port_name}_V_V{not_empty};'
+          *(f'{port_name}{div}{not_block} = {port_name}{div}{not_empty};'
             for port_name, _, _, _ in inputs),
       )
   printer.println()
@@ -455,9 +462,9 @@ def print_top_module(
               f'if{data_in}': f'{port_name}{data}',
               f'if{not_full}': f'{port_name}{ready}',
               f'if{write_enable}': f'{port_name}{valid}',
-              f'if{data_out}': f'{port_name}_V_V{data_out}',
-              f'if{not_empty}': f'{port_name}_V_V{not_empty}',
-              f'if{read_enable}': f'{port_name}_V_V{read_enable}',
+              f'if{data_out}': f'{port_name}{div}{data_out}',
+              f'if{not_empty}': f'{port_name}{div}{not_empty}',
+              f'if{read_enable}': f'{port_name}{div}{read_enable}',
           },
       )
       fifos.add((width, 2))
@@ -472,9 +479,9 @@ def print_top_module(
               'reset': 'ap_rst_reg',
               'if_read_ce': "1'b1",
               'if_write_ce': "1'b1",
-              f'if{data_in}': f'{port_name}_V_V{data_in}',
-              f'if{not_full}': f'{port_name}_V_V{not_full}',
-              f'if{write_enable}': f'{port_name}_V_V{write_enable}',
+              f'if{data_in}': f'{port_name}{div}{data_in}',
+              f'if{not_full}': f'{port_name}{div}{not_full}',
+              f'if{write_enable}': f'{port_name}{div}{write_enable}',
               f'if{data_out}': f'{port_name}{data}',
               f'if{not_empty}': f'{port_name}{valid}',
               f'if{read_enable}': f'{port_name}{ready}',
@@ -533,9 +540,9 @@ def print_top_module(
       port = dram_ref.dram_fifo_name(bank)
       fifo = util.get_port_name(dram_ref.var, bank)
       arg_dict.update({
-          f'{port}_V{data_in}': f'{fifo}_V_V{data_in}',
-          f'{port}_V{not_full}': f'{fifo}_V_V{not_full}',
-          f'{port}_V{write_enable}': f'{fifo}_V_V{write_enable}',
+          f'{port}_V{data_in}': f'{fifo}{div}{data_in}',
+          f'{port}_V{not_full}': f'{fifo}{div}{not_full}',
+          f'{port}_V{write_enable}': f'{fifo}{div}{write_enable}',
       })
     for port, fifo in zip(module_trait.output_fifos, module.output_fifos):
       arg_dict.update({
@@ -553,9 +560,9 @@ def print_top_module(
       port = dram_ref.dram_fifo_name(bank)
       fifo = util.get_port_name(dram_ref.var, bank)
       arg_dict.update({
-          f'{port}_V{data_out}': f"{{1'b1, {fifo}_V_V{data_out}}}",
-          f'{port}_V{not_empty}': f'{fifo}_V_V{not_empty}',
-          f'{port}_V{read_enable}': f'{fifo}_V_V{read_enable}',
+          f'{port}_V{data_out}': f"{{1'b1, {fifo}{div}{data_out}}}",
+          f'{port}_V{not_empty}': f'{fifo}{div}{not_empty}',
+          f'{port}_V{read_enable}': f'{fifo}{div}{read_enable}',
       })
     printer.module_instance(util.get_func_name(module_trait_id), module.name,
                             arg_dict)

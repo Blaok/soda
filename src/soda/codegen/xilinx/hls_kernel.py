@@ -7,6 +7,7 @@ from haoda import ir, util
 from haoda.ir import visitor
 
 from soda import core, dataflow
+from soda.codegen.xilinx import opencl
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -46,6 +47,8 @@ def _print_interface(
         interfaces.
     super_source: SuperSourceNode of a DAG of HAODA nodes.
   """
+  pack = 'aggregate bit' if opencl.hls == 'vitis_hls' else 'data_pack'
+
   get_bundle_name = util.get_bundle_name
   get_port_name = util.get_port_name
   get_port_buf_name = util.get_port_buf_name
@@ -108,7 +111,7 @@ def _print_interface(
             f'("{get_port_buf_name(name, bank)}");',
             '#pragma HLS stream'
             f' variable = {get_port_buf_name(name, bank)} depth = 32',
-            f'#pragma HLS data_pack variable = {get_port_buf_name(name, bank)}',
+            f'#pragma HLS {pack} variable = {get_port_buf_name(name, bank)}',
         ) for name, haoda_type, bank in inputs + outputs))
   elif interface == 'tapa::mmap':
     printer.printlns(f'tapa::stream<tapa::vec_t<{haoda_type.c_type},'
@@ -126,7 +129,7 @@ def _print_interface(
             f' {fifo.c_expr}("{fifo.c_expr}");',
             '#pragma HLS stream'
             f' variable = {fifo.c_expr} depth = {fifo.depth + 3}',
-            f'#pragma HLS data_pack variable = {fifo.c_expr}' if interface ==
+            f'#pragma HLS {pack} variable = {fifo.c_expr}' if interface ==
             'm_axi' else '',
         ) for node in super_source.tpo_valid_node_gen() for fifo in node.fifos))
   elif interface.startswith('tapa::'):
@@ -597,6 +600,8 @@ def print_module_definition(
     burst_width: int,
     interface: str = SUPPORTED_INTERFACES[0],
 ) -> None:
+  pack = 'aggregate bit' if opencl.hls == 'vitis_hls' else 'data_pack'
+
   func_name = util.get_func_name(module_trait_id)
   func_lower_name = util.get_module_name(module_trait_id)
 
@@ -630,10 +635,10 @@ def print_module_definition(
 
   if interface == 'm_axi':
     printer.printlns(
-        *(f'#pragma HLS data_pack variable = {dram_ref.dram_fifo_name(bank)}'
+        *(f'#pragma HLS {pack} variable = {dram_ref.dram_fifo_name(bank)}'
           for dram_ref, bank in module_trait.dram_writes +
           module_trait.dram_reads),
-        *(f'#pragma HLS data_pack variable = {arg}'
+        *(f'#pragma HLS {pack} variable = {arg}'
           for arg in module_trait.output_fifos + module_trait.input_fifos),
     )
 
