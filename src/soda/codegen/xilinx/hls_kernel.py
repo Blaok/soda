@@ -369,7 +369,7 @@ def _print_module_func_call(printer: util.CppPrinter, node: ir.Module,
 
 def _get_delays(obj, delays):
   if isinstance(obj, ir.DelayedRef):
-    delays.append(obj)
+    delays.setdefault(obj, obj)
   return obj
 
 
@@ -600,7 +600,7 @@ def print_module_definition(
   func_name = util.get_func_name(module_trait_id)
   func_lower_name = util.get_module_name(module_trait_id)
 
-  delays: ir.DelayedRef = []
+  delays: Dict[ir.DelayedRef, ir.DelayedRef] = {}
   for let in module_trait.lets:
     let.visit(_get_delays, delays)
   for expr in module_trait.exprs:

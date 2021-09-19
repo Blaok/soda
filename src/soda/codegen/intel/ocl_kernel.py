@@ -266,12 +266,15 @@ def print_kernel(name: str,
   printer.do_scope(name)
 
   # prepare for any DelayedRef
-  def get_delays(obj: ir.Node, delays: List[ir.DelayedRef]) -> ir.Node:
+  def get_delays(
+      obj: ir.Node,
+      delays: Dict[ir.DelayedRef, ir.DelayedRef],
+  ) -> ir.Node:
     if isinstance(obj, ir.DelayedRef):
-      delays.append(obj)
+      delays.setdefault(obj)
     return obj
 
-  delays = []  # type: List[ir.DelayedRef]
+  delays: Dict[ir.DelayedRef, ir.DelayedRef] = {}
   for let in module_trait.lets:
     let.visit(get_delays, delays)
   for expr in module_trait.exprs:
