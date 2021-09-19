@@ -389,9 +389,9 @@ def print_top_module(
 
   # not used
   printer.printlns(
-      "reg ap_done = 1'b0;",
-      "reg ap_idle = 1'b1;",
-      "reg ap_ready = 1'b0;",
+      "reg ap_done;",
+      "reg ap_idle;",
+      "reg ap_ready;",
   )
   if interface == 'axis':
     printer.println("wire ap_start = 1'b1;")
