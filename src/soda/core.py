@@ -148,9 +148,6 @@ class Stencil():
                   ', '.join(tensor.name for tensor in self.consumer_tensors))
 
     # TODO: build Ref table and Var table
-    # generate reuse buffers and get haoda nodes
-    # pylint: disable=pointless-statement
-    self.dataflow_super_source
     _logger.debug('dataflow: %s', self.dataflow_super_source)
 
     _logger.debug('module table: %s', dict(self.module_table))
