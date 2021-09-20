@@ -1,8 +1,7 @@
 import collections
 import logging
-from typing import Dict, List, Set, TextIO, Union
+from typing import Dict, List, TextIO, Union
 
-import toposort
 from haoda import ir, util
 from haoda.ir import visitor
 
@@ -42,25 +41,7 @@ def print_code(
   super_source = stencil.dataflow_super_source
 
   # emit tuple struct definitions
-  tuple_types: Dict[ir.TupleType, Set[ir.TupleType]] = {}
-
-  def find_tuple_types(haoda_type: ir.Type) -> None:
-    """Recursively find tuple types."""
-    if isinstance(haoda_type, ir.TupleType):
-      dependency = tuple_types.get(haoda_type)
-      if dependency is None:
-        tuple_types[haoda_type] = {
-            x for x in haoda_type if isinstance(x, ir.TupleType)
-        }
-        for t in haoda_type:
-          find_tuple_types(t)
-
-  for node in super_source.tpo_valid_node_gen():
-    for fifo in node.fifos:
-      find_tuple_types(fifo.haoda_type)
-
-  for haoda_type in toposort.toposort_flatten(tuple_types, sort=False):
-    println(haoda_type.cl_type_def)
+  printer.printlns(x.cl_type_def for x in stencil.tuple_types)
 
   for node in super_source.tpo_valid_node_gen():
     for fifo in node.fifos:

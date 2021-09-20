@@ -2,7 +2,7 @@ import collections
 import itertools
 import logging
 import operator
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import cached_property
 import pulp
@@ -649,6 +649,28 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
         '// https://github.com/Blaok/soda/blob/master/docs/data-layout.md',
         '',
     )
+
+  @property
+  def tuple_types(self) -> List[ir.TupleType]:
+    # emit tuple struct definitions
+    tuple_types: Dict[ir.TupleType, Set[ir.TupleType]] = {}
+
+    def find_tuple_types(haoda_type: ir.Type) -> None:
+      """Recursively find tuple types."""
+      if isinstance(haoda_type, ir.TupleType):
+        dependency = tuple_types.get(haoda_type)
+        if dependency is None:
+          tuple_types[haoda_type] = {
+              x for x in haoda_type if isinstance(x, ir.TupleType)
+          }
+          for t in haoda_type:
+            find_tuple_types(t)
+
+    for node in self.dataflow_super_source.tpo_valid_node_gen():
+      for fifo in node.fifos:
+        find_tuple_types(fifo.haoda_type)
+
+    return toposort.toposort_flatten(tuple_types, sort=False)
 
 
 def _get_reuse_chains(tile_size, tensor, unroll_factor):

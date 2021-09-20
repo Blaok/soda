@@ -280,6 +280,9 @@ def print_code(
 
   print_header(printer, interface)
 
+  # emit tuple struct definitions
+  printer.printlns(x.c_type_def for x in stencil.tuple_types)
+
   if interface in {'m_axi', 'axis'}:
     printer.printlns(
         '#ifdef __SYNTHESIS__',
