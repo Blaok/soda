@@ -4,6 +4,7 @@ from typing import Dict, List, Set, TextIO, Union
 
 import toposort
 from haoda import ir, util
+from haoda.ir import visitor
 
 from soda import core
 
@@ -265,26 +266,12 @@ def print_kernel(name: str,
   )
   printer.do_scope(name)
 
-  # prepare for any DelayedRef
-  def get_delays(
-      obj: ir.Node,
-      delays: Dict[ir.DelayedRef, ir.DelayedRef],
-  ) -> ir.Node:
-    if isinstance(obj, ir.DelayedRef):
-      delays.setdefault(obj)
-    return obj
-
-  delays: Dict[ir.DelayedRef, ir.DelayedRef] = {}
-  for let in module_trait.lets:
-    let.visit(get_delays, delays)
-  for expr in module_trait.exprs:
-    expr.visit(get_delays, delays)
+  delays = {x: x for x in visitor.get_instances_of(module_trait, ir.DelayedRef)}
   _logger.debug('delays: %s', delays)
 
   # inter-iteration declarations
-  for delay in delays:
-    println(delay.cl_buf_decl)
-    println(delay.cl_ptr_decl)
+  printer.printlns({x.cl_ptr_decl: None for x in delays})
+  printer.printlns(x.cl_buf_decl for x in delays)
 
   def mutate_dram_ref(obj: ir.Node, kwargs: Dict[str, int]) -> ir.Node:
     if isinstance(obj, ir.Pack) and isinstance(obj.exprs[0], ir.DRAMRef):
@@ -426,9 +413,8 @@ def print_kernel(name: str,
           expr.visit(mutate_dram_ref, mutate_kwargs).cl_expr))
 
     # update DelayedRef (if any)
-    for delay in delays:
-      println(delay.cl_buf_store)
-      println('{} = {};'.format(delay.ptr, delay.cl_next_ptr_expr))
+    printer.printlns(x.cl_buf_store for x in delays)
+    printer.printlns({f'{x.cl_next_ptr_expr};': None for x in delays})
 
     # print store to DRAM (if any)
     for dram_ref, bank in node.dram_writes:

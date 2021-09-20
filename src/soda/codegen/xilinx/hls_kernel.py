@@ -289,7 +289,6 @@ def print_code(
         '',
     )
 
-
   if interface in {'m_axi', 'axis'}:
     _print_reinterpret(printer)
 
@@ -368,12 +367,6 @@ def _print_module_func_call(printer: util.CppPrinter, node: ir.Module,
         *(x + ',' for x in params[:-1]),
         params[-1] + ')',
     )
-
-
-def _get_delays(obj, delays):
-  if isinstance(obj, ir.DelayedRef):
-    delays.setdefault(obj, obj)
-  return obj
 
 
 def _mutate_dram_ref_for_writes(obj: ir.Node, kwargs: Dict[str, Any]) -> None:
@@ -605,11 +598,7 @@ def print_module_definition(
   func_name = util.get_func_name(module_trait_id)
   func_lower_name = util.get_module_name(module_trait_id)
 
-  delays: Dict[ir.DelayedRef, ir.DelayedRef] = {}
-  for let in module_trait.lets:
-    let.visit(_get_delays, delays)
-  for expr in module_trait.exprs:
-    expr.visit(_get_delays, delays)
+  delays = {x: x for x in visitor.get_instances_of(module_trait, ir.DelayedRef)}
   _logger.debug('delays: %s', delays)
 
   (
@@ -643,8 +632,8 @@ def print_module_definition(
     )
 
   # print inter-iteration declarations
+  printer.printlns({x.c_ptr_decl: None for x in delays})
   printer.printlns(x.c_buf_decl for x in delays)
-  printer.printlns(x.c_ptr_decl for x in delays)
 
   # print loop
   printer.println(f'{func_lower_name}:', indent=0)
@@ -804,11 +793,8 @@ def print_module_definition(
       printer.printlns(f'{ir.FIFORef.ST_PREFIX}{idx}.write({expr.c_expr});'
                        for idx, expr in enumerate(module_trait.exprs))
 
-  for delay in delays:
-    printer.printlns(
-        delay.c_buf_store,
-        f'{delay.ptr} = {delay.c_next_ptr_expr};',
-    )
+  printer.printlns(x.c_buf_store for x in delays)
+  printer.printlns({f'{x.c_next_ptr_expr};': None for x in delays})
 
   printer.un_scope()
   printer.un_scope()
