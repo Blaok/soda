@@ -243,25 +243,25 @@ store:
 
 
 def _print_burst_read_tapa(printer: util.CppPrinter, c_type: str) -> None:
-  printer.printlns(f'void BurstRead(tapa::ostream<{c_type}>& to, '
-                   f'tapa::mmap<{c_type}> from, uint64_t n)')
+  printer.printlns(f'void BurstRead(tapa::ostream<{c_type}>& dest, '
+                   f'tapa::mmap<{c_type}> src, uint64_t n)')
   printer.do_scope()
   printer.println('load:', 0)
   with printer.for_('uint64_t i = 0', 'i < n', '++i'):
     printer.println('#pragma HLS pipeline II = 1', 0)
-    printer.println('to.write(from[i]);')
+    printer.println('dest.write(src[i]);')
   printer.un_scope()
   printer.println()
 
 
 def _print_burst_write_tapa(printer: util.CppPrinter, c_type: str) -> None:
-  printer.printlns(f'void BurstWrite(tapa::mmap<{c_type}> to, '
-                   f'tapa::istream<{c_type}>& from, uint64_t n)')
+  printer.printlns(f'void BurstWrite(tapa::mmap<{c_type}> dest, '
+                   f'tapa::istream<{c_type}>& src, uint64_t n)')
   printer.do_scope()
   printer.println('store:', 0)
   with printer.for_('uint64_t i = 0', 'i < n', '++i'):
     printer.println('#pragma HLS pipeline II = 1', 0)
-    printer.println('to[i] = from.read();')
+    printer.println('dest[i] = src.read();')
   printer.un_scope()
   printer.println()
 
