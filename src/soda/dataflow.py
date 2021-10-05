@@ -9,6 +9,8 @@ import pulp
 
 from haoda import ir, util
 
+from soda.tensor import Tensor
+
 _logger = logging.getLogger().getChild(__name__)
 
 _solver = pulp.PULP_CBC_CMD(msg=False)
@@ -261,8 +263,8 @@ class ForwardNode(ir.Module):
 
   def __init__(self, **kwargs):
     super().__init__()
-    self.tensor = kwargs.pop('tensor')
-    self.offset = kwargs.pop('offset')
+    self.tensor: Tensor = kwargs.pop('tensor')
+    self.offset: int = kwargs.pop('offset')
 
   def __repr__(self):
     return '\033[32mforward %s @%d\033[0m' % (self.tensor.name, self.offset)
@@ -283,9 +285,9 @@ class ComputeNode(ir.Module):
 
   def __init__(self, **kwargs):
     super().__init__()
-    self.tensor = kwargs.pop('tensor')
-    self.pe_id = kwargs.pop('pe_id')
-    self.fifo_map = collections.defaultdict(dict)
+    self.tensor: Tensor = kwargs.pop('tensor')
+    self.pe_id: int = kwargs.pop('pe_id')
+    self.fifo_map: Dict[str, Dict[int, ir.Node]] = collections.defaultdict(dict)
 
   def __repr__(self):
     return '\033[31mcompute %s #%d\033[0m' % (self.tensor.name, self.pe_id)
