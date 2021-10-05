@@ -103,7 +103,7 @@ def add_arguments(parser):
       '--xocl-interface',
       type=str,
       dest='interface',
-      choices=('m_axi', 'axis'),
+      choices=('m_axi', 'axis', 'tapa::mmap', 'tapa::stream'),
       default='m_axi',
       help='interface type of the Xilinx OpenCL code',
   )
