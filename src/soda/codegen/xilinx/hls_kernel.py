@@ -647,7 +647,8 @@ def print_module_definition(
   printer.do_scope(f'for {func_lower_name}')
   printer.printlns(
       f'#pragma HLS pipeline II = {ii}',
-      *(f'#pragma HLS dependence variable = {delay.buf_name} inter false'
+      *('#pragma HLS dependence inter true '
+        f'variable = {delay.buf_name} distance = {delay.delay}'
         for delay in delays),
   )
 
