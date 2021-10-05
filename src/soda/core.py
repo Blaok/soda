@@ -652,7 +652,16 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
 
   @property
   def tuple_types(self) -> List[ir.TupleType]:
-    # emit tuple struct definitions
+    # find all tuple types
+    def find_types(node, haoda_types: Dict[ir.TupleType, None]) -> None:
+      if isinstance(node.haoda_type, ir.TupleType):
+        haoda_types[node.haoda_type] = None
+
+    haoda_types = {}
+    for node in self.dataflow_super_source.tpo_valid_node_gen():
+      node.visit_loads(find_types, haoda_types)
+
+    # toposort tuple types
     tuple_types: Dict[ir.TupleType, Set[ir.TupleType]] = {}
 
     def find_tuple_types(haoda_type: ir.Type) -> None:
@@ -666,9 +675,8 @@ cluster: {0.cluster}'''.format(self, stmts='\n'.join(map(str, stmts)))
           for t in haoda_type:
             find_tuple_types(t)
 
-    for node in self.dataflow_super_source.tpo_valid_node_gen():
-      for fifo in node.fifos:
-        find_tuple_types(fifo.haoda_type)
+    for haoda_type in haoda_types:
+      find_tuple_types(haoda_type)
 
     return toposort.toposort_flatten(tuple_types, sort=False)
 
