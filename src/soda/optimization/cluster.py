@@ -1,7 +1,7 @@
 import collections
 import copy
 import logging
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from haoda import ir, util
 
@@ -32,41 +32,59 @@ class PrettyPrinter:
 def cluster(
     super_source: dataflow.SuperSourceNode,
     granularity: str = 'none',
+    unroll_factor: int = 0,
 ) -> None:
   """Cluster a dataflow.SuperSourceNode with given granularity."""
 
   if granularity == 'none':
-    pass
-  elif granularity == 'full':
-    nodes_to_merge: List[ir.Module] = []
-    for node in super_source.tpo_node_gen():
-      if isinstance(node, (dataflow.ForwardNode, dataflow.ComputeNode)):
-        nodes_to_merge.append(node)
+    return
 
+  nodes_to_merge: Dict[str, List[ir.Module]] = collections.defaultdict(list)
+  if granularity == 'full':
+    for node in super_source.tpo_node_gen():
       _logger.debug('old node before merging: %s', PrettyPrinter(node))
-    _logger.debug('=' * 80)
+      if isinstance(node, (dataflow.ForwardNode, dataflow.ComputeNode)):
+        nodes_to_merge[''].append(node)
 
-    for node in nodes_to_merge:
-      _logger.debug('merging node: %s', PrettyPrinter(node))
-    _logger.debug('=' * 80)
-
-    merged_node = merge(super_source, nodes_to_merge)
-
-    _logger.debug('merged node: %s', PrettyPrinter(merged_node))
-    _logger.debug('=' * 80)
-
+  elif granularity == 'coarse':
     for node in super_source.tpo_node_gen():
-      _logger.debug('new node after merging: %s', PrettyPrinter(node))
-    _logger.debug('=' * 80)
+      _logger.debug('old node before merging: %s', PrettyPrinter(node))
+      if isinstance(node, (dataflow.ForwardNode, dataflow.ComputeNode)):
+        nodes_to_merge[node.tensor.name].append(node)
+
+  elif granularity == 'fine':
+    if unroll_factor <= 0:
+      raise util.InputError(
+          'unroll_factor must be specified for fine-grained clustering')
+    for node in super_source.tpo_node_gen():
+      _logger.debug('old node before merging: %s', PrettyPrinter(node))
+      if isinstance(node, dataflow.ComputeNode):
+        nodes_to_merge[f'{node.tensor.name}_{node.pe_id}'].append(node)
+      elif isinstance(node, dataflow.ForwardNode):
+        pe_id = unroll_factor - 1 - node.offset % unroll_factor
+        nodes_to_merge[f'{node.tensor.name}_{pe_id}'].append(node)
+
   else:
     raise util.InputError(f'unknown cluster granularity: {granularity}')
 
+  _logger.debug('=' * 80)
+  for name, nodes in nodes_to_merge.items():
+    for node in nodes:
+      _logger.debug('merging node: %s', PrettyPrinter(node))
+    _logger.debug('=' * 80)
+    merged_node = merge(super_source, nodes, name)
+    _logger.debug('merged node: %s', PrettyPrinter(merged_node))
+    _logger.debug('=' * 80)
+  for node in super_source.tpo_node_gen():
+    _logger.debug('new node after merging: %s', PrettyPrinter(node))
+  _logger.debug('=' * 80)
   _logger.debug('done %s clustering', granularity)
 
 
 def merge(
     super_source: dataflow.SuperSourceNode,
     nodes_to_merge: Iterable[ir.Module],
+    name: str = '',
 ) -> ir.Module:
   """Modify dataflow.SuperSourceNode with dataflow nodes merged.
 
@@ -92,7 +110,7 @@ def merge(
           f'cannot merge: module {node} does not belong to {super_source}')
   # TODO: check that all nodes_to_merge are connected.
 
-  new_node = ir.Module()  # create the new merged module node
+  new_node = ir.Module(name)  # create the new merged module node
 
   # find and dedupe parents/children of the new node
   parents: Dict[int, ir.Module] = {}
