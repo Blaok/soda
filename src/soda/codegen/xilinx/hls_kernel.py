@@ -66,17 +66,21 @@ def _print_interface(
                   f' {get_port_name(name, bank)}'
                   for name, haoda_type, bank in outputs + inputs)
   elif interface == 'tapa::mmap':
-    params.extend(f'tapa::mmap<tapa::vec_t<{haoda_type.c_type},'
-                  f' {stencil.burst_width // haoda_type.width_in_bits}>>'
-                  f' {get_port_name(name, bank)}'
-                  for name, haoda_type, bank in outputs + inputs)
+    for name, haoda_type, bank in outputs + inputs:
+      vec_t = _vec_t(
+          haoda_type.c_type,
+          stencil.burst_width // haoda_type.width_in_bits,
+      )
+      params.append(f'tapa::mmap<{vec_t}> {get_port_name(name, bank)}')
     params.append('uint64_t coalesced_data_num')
   elif interface == 'tapa::stream':
-    params.extend(f'tapa::{io}stream<tapa::vec_t<{haoda_type.c_type},'
-                  f' {stencil.burst_width // haoda_type.width_in_bits}>>&'
-                  f' {get_port_name(name, bank)}'
-                  for tuples, io in ((outputs, 'o'), (inputs, 'i'))
-                  for name, haoda_type, bank in tuples)
+    for tuples, io in ((outputs, 'o'), (inputs, 'i')):
+      for name, haoda_type, bank in tuples:
+        vec_t = _vec_t(
+            haoda_type.c_type,
+            stencil.burst_width // haoda_type.width_in_bits,
+        )
+        params.append(f'tapa::{io}stream<{vec_t}>& {get_port_name(name, bank)}')
 
   printer.print_func(f'void {stencil.kernel_name}', params, align=0)
 
@@ -114,11 +118,13 @@ def _print_interface(
             f'#pragma HLS {pack} variable = {get_port_buf_name(name, bank)}',
         ) for name, haoda_type, bank in inputs + outputs))
   elif interface == 'tapa::mmap':
-    printer.printlns(f'tapa::stream<tapa::vec_t<{haoda_type.c_type},'
-                     f' {stencil.burst_width // haoda_type.width_in_bits}>, 32>'
-                     f' {get_port_buf_name(name, bank)}'
-                     f'("{get_port_buf_name(name, bank)}");'
-                     for name, haoda_type, bank in inputs + outputs)
+    for name, haoda_type, bank in inputs + outputs:
+      vec_t = _vec_t(
+          haoda_type.c_type,
+          stencil.burst_width // haoda_type.width_in_bits,
+      )
+      buf_name = get_port_buf_name(name, bank)
+      printer.println(f'tapa::stream<{vec_t}, 2> {buf_name}("{buf_name}");')
   printer.println()
 
   # internal fifos
@@ -152,9 +158,15 @@ def _print_interface(
                      f' {get_port_name(name, bank)}, coalesced_data_num);'
                      for name, _, bank in inputs)
   elif interface == 'tapa::mmap':
-    printer.printlns(f'.invoke<0>(BurstRead, {get_port_buf_name(name, bank)},'
-                     f' {get_port_name(name, bank)}, coalesced_data_num)'
-                     for name, _, bank in inputs)
+    for name, haoda_type, bank in inputs:
+      sanitized_vec_t = _sanitized_vec_t(
+          haoda_type, stencil.burst_width // haoda_type.width_in_bits)
+      printer.printlns(
+          f'.invoke(BurstRead{sanitized_vec_t},',
+          f'  {get_port_buf_name(name, bank)},',
+          f'  {get_port_name(name, bank)},',
+          '  coalesced_data_num)',
+      )
 
   # SODA modules
   for node in super_source.tpo_valid_node_gen():
@@ -167,9 +179,15 @@ def _print_interface(
                      f' {get_port_buf_name(name, bank)}, coalesced_data_num);'
                      for name, _, bank in outputs)
   elif interface == 'tapa::mmap':
-    printer.printlns(f'.invoke<0>(BurstWrite, {get_port_name(name, bank)},'
-                     f' {get_port_buf_name(name, bank)}, coalesced_data_num)'
-                     for name, _, bank in outputs)
+    for name, haoda_type, bank in outputs:
+      sanitized_vec_t = _sanitized_vec_t(
+          haoda_type, stencil.burst_width // haoda_type.width_in_bits)
+      printer.printlns(
+          f'.invoke(BurstWrite{sanitized_vec_t},',
+          f'  {get_port_name(name, bank)},',
+          f'  {get_port_buf_name(name, bank)},',
+          '  coalesced_data_num)',
+      )
 
   # end of dataflow region
   if interface.startswith('tapa::'):
@@ -242,9 +260,17 @@ store:
 ''')
 
 
-def _print_burst_read_tapa(printer: util.CppPrinter, c_type: str) -> None:
-  printer.printlns(f'void BurstRead(tapa::ostream<{c_type}>& dest, '
-                   f'tapa::mmap<{c_type}> src, uint64_t n)')
+def _print_burst_read_tapa(
+    printer: util.CppPrinter,
+    haoda_type: ir.Type,
+    length: int,
+) -> None:
+  printer.printlns(
+      f'void BurstRead{_sanitized_vec_t(haoda_type, length)}(',
+      f'  tapa::ostream<{_vec_t(haoda_type.c_type, length)}>& dest,',
+      f'  tapa::mmap<{_vec_t(haoda_type.c_type, length)}> src,',
+      '  uint64_t n)',
+  )
   printer.do_scope()
   printer.println('load:', 0)
   with printer.for_('uint64_t i = 0', 'i < n', '++i'):
@@ -254,9 +280,17 @@ def _print_burst_read_tapa(printer: util.CppPrinter, c_type: str) -> None:
   printer.println()
 
 
-def _print_burst_write_tapa(printer: util.CppPrinter, c_type: str) -> None:
-  printer.printlns(f'void BurstWrite(tapa::mmap<{c_type}> dest, '
-                   f'tapa::istream<{c_type}>& src, uint64_t n)')
+def _print_burst_write_tapa(
+    printer: util.CppPrinter,
+    haoda_type: ir.Type,
+    length: int,
+) -> None:
+  printer.printlns(
+      f'void BurstWrite{_sanitized_vec_t(haoda_type, length)}(',
+      f'  tapa::mmap<{_vec_t(haoda_type.c_type, length)}> dest,',
+      f'  tapa::istream<{_vec_t(haoda_type.c_type, length)}>& src,',
+      '  uint64_t n)',
+  )
   printer.do_scope()
   printer.println('store:', 0)
   with printer.for_('uint64_t i = 0', 'i < n', '++i'):
@@ -264,6 +298,14 @@ def _print_burst_write_tapa(printer: util.CppPrinter, c_type: str) -> None:
     printer.println('dest[i] = src.read();')
   printer.un_scope()
   printer.println()
+
+
+def _vec_t(elem_type: str, length: int) -> str:
+  return f'tapa::vec_t<{elem_type}, {length}>'
+
+
+def _sanitized_vec_t(elem_type: str, length: int) -> str:
+  return f'_{elem_type}x{length}'
 
 
 def print_code(
@@ -305,18 +347,18 @@ def print_code(
     _print_read_data_axis(printer)
     _print_write_data_axis(printer)
   elif interface == 'tapa::mmap':
-    for input_iface_c_type in {
-        f'tapa::vec_t<{stmt.c_type}, '
-        f'{stencil.burst_width // stmt.width_in_bits}>'
-        for stmt in stencil.input_stmts
+    for input_iface_haoda_type in {
+        stmt.haoda_type: None for stmt in stencil.input_stmts
     }:
-      _print_burst_read_tapa(printer, input_iface_c_type)
-    for output_iface_c_type in {
-        f'tapa::vec_t<{stmt.c_type}, '
-        f'{stencil.burst_width // stmt.width_in_bits}>'
-        for stmt in stencil.output_stmts
+      _print_burst_read_tapa(
+          printer, input_iface_haoda_type,
+          stencil.burst_width // input_iface_haoda_type.width_in_bits)
+    for output_iface_haoda_type in {
+        stmt.haoda_type: None for stmt in stencil.output_stmts
     }:
-      _print_burst_write_tapa(printer, output_iface_c_type)
+      _print_burst_write_tapa(
+          printer, output_iface_haoda_type,
+          stencil.burst_width // output_iface_haoda_type.width_in_bits)
 
   for module_trait_id, module_trait in enumerate(stencil.module_traits):
     print_module_definition(
@@ -366,7 +408,7 @@ def _print_module_func_call(printer: util.CppPrinter, node: ir.Module,
     printer.print_func(func_name, params, suffix=';', align=0)
   elif interface.startswith('tapa::'):
     printer.printlns(
-        f'.invoke<-1>({func_name},',
+        f'.invoke<tapa::detach>({func_name},',
         *(x + ',' for x in params[:-1]),
         params[-1] + ')',
     )
@@ -462,11 +504,11 @@ def _process_accesses(
         " {x.dram_fifo_name(bank)}'")
   elif interface.startswith('tapa::'):
     fifo_load_fmt = (
-        "f'tapa::istream<tapa::vec_t<{x.c_type},"
-        " {burst_width // x.width_in_bits}>>& {x.dram_fifo_name(bank)}'")
+        "f'tapa::istream<{_vec_t(x.c_type,"
+        " burst_width // x.width_in_bits)}>& {x.dram_fifo_name(bank)}'")
     fifo_store_fmt = (
-        "f'tapa::ostream<tapa::vec_t<{x.c_type},"
-        " {burst_width // x.width_in_bits}>>& {x.dram_fifo_name(bank)}'")
+        "f'tapa::ostream<{_vec_t(x.c_type,"
+        " burst_width // x.width_in_bits)}>& {x.dram_fifo_name(bank)}'")
 
   # dict mapping variable name to
   #   dict mapping bank tuple to
@@ -534,9 +576,11 @@ def _process_accesses(
       dram_reads = [next(iter(_.values())) for _ in dram_read_map[var].values()]
       all_dram_reads += dram_reads
       fifo_loads.extend(
-          eval(fifo_load_fmt, dict(burst_width=burst_width), locals())
-          for x in dram_reads
-          for bank in x.dram)
+          eval(
+              fifo_load_fmt,
+              dict(burst_width=burst_width, _vec_t=_vec_t),
+              locals(),
+          ) for x in dram_reads for bank in x.dram)
   elif dram_write_refs:  # this is a packing module
     for dram_ref in dram_write_refs:
       dram_map[dram_ref.var][dram_ref.dram].append(dram_ref)
@@ -573,9 +617,11 @@ def _process_accesses(
           next(iter(_.values())) for _ in dram_write_map[var].values()
       ]
       fifo_stores.extend(
-          eval(fifo_store_fmt, dict(burst_width=burst_width), locals())
-          for x in dram_writes
-          for bank in x.dram)
+          eval(
+              fifo_store_fmt,
+              dict(burst_width=burst_width, _vec_t=_vec_t),
+              locals(),
+          ) for x in dram_writes for bank in x.dram)
 
   return (
       fifo_loads,
@@ -669,7 +715,7 @@ def print_module_definition(
         for bank in dram.dram)
   elif interface.startswith('tapa::'):
     printer.printlns(
-        f'tapa::vec_t<{dram.c_type}, {burst_width // dram.width_in_bits}> '
+        f'{_vec_t(dram.c_type, burst_width//dram.width_in_bits)} '
         f'{dram.dram_buf_name(bank)};' for var, accesses in dram_rw_map.items()
         for dram in (next(iter(_.values())) for _ in accesses.values())
         for bank in dram.dram)
