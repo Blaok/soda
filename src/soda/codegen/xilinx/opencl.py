@@ -93,11 +93,11 @@ def add_arguments(parser):
       help='hardware object file for the Xilinx OpenCL flow',
   )
   parser.add_argument(
-      '--xocl-hw-xo-rpt',
+      '--xocl-hw-xo-work-dir',
       type=str,
-      dest='xo_rpt',
+      dest='xo_work_dir',
       metavar='file',
-      help='Xilinx HLS report for the Xilinx OpenCL hardware object',
+      help='work directory for the Xilinx OpenCL hardware object',
   )
   parser.add_argument(
       '--xocl-interface',
@@ -165,7 +165,7 @@ def print_code(
               part_num_name='xocl_part_num',
               clock_period_name='xocl_clock_period',
           ),
-          rpt_file=args.xo_rpt,
+          work_dir=args.xo_work_dir,
           interface=args.interface,
       )
       tmp_obj.seek(0)
