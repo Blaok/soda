@@ -268,14 +268,24 @@ def _print_burst_read_tapa(
   printer.printlns(
       f'void BurstRead{_sanitized_vec_t(haoda_type, length)}(',
       f'  tapa::ostream<{_vec_t(haoda_type.c_type, length)}>& dest,',
-      f'  tapa::mmap<{_vec_t(haoda_type.c_type, length)}> src,',
+      f'  tapa::async_mmap<{_vec_t(haoda_type.c_type, length)}> src,',
       '  uint64_t n)',
   )
   printer.do_scope()
   printer.println('load:', 0)
-  with printer.for_('uint64_t i = 0', 'i < n', '++i'):
+  with printer.for_('uint64_t i_req = 0, i_resp = 0', 'i_resp < n', ''):
     printer.println('#pragma HLS pipeline II = 1', 0)
-    printer.println('dest.write(src[i]);')
+    with printer.if_(' && '.join((
+        'i_req < n',
+        'i_req < i_resp + 64',
+        'src.read_addr.try_write(i_req)',
+    ))):
+      printer.println('++i_req;')
+    with printer.if_('!dest.full() && !src.read_data.empty()'):
+      printer.printlns(
+          'dest.try_write(src.read_data.read(nullptr));',
+          '++i_resp;',
+      )
   printer.un_scope()
   printer.println()
 
@@ -287,15 +297,31 @@ def _print_burst_write_tapa(
 ) -> None:
   printer.printlns(
       f'void BurstWrite{_sanitized_vec_t(haoda_type, length)}(',
-      f'  tapa::mmap<{_vec_t(haoda_type.c_type, length)}> dest,',
+      f'  tapa::async_mmap<{_vec_t(haoda_type.c_type, length)}> dest,',
       f'  tapa::istream<{_vec_t(haoda_type.c_type, length)}>& src,',
       '  uint64_t n)',
   )
   printer.do_scope()
   printer.println('store:', 0)
-  with printer.for_('uint64_t i = 0', 'i < n', '++i'):
+  with printer.for_('uint64_t i_req = 0, i_resp = 0', 'i_resp < n', ''):
     printer.println('#pragma HLS pipeline II = 1', 0)
-    printer.println('dest[i] = src.read();')
+    with printer.if_(' && '.join((
+        'i_req < n',
+        'i_req < i_resp + 64',
+        '!src.empty()',
+        '!dest.write_addr.full()',
+        '!dest.write_data.full()',
+    ))):
+      printer.printlns(
+          'dest.write_addr.try_write(i_req);',
+          'dest.write_data.try_write(src.read(nullptr));',
+          '++i_req;',
+      )
+    with printer.if_('!dest.write_resp.empty()'):
+      printer.printlns(
+          'ap_uint<9> resp = dest.write_resp.read(nullptr);',
+          'i_resp += ++resp;',
+      )
   printer.un_scope()
   printer.println()
 
