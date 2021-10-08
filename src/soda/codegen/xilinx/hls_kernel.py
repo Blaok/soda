@@ -953,3 +953,12 @@ void WriteData(hls::stream<ap_axiu<D, 0, 0, 0>>& to, const T& data, bool ctrl) {
   to.write(tmp);
 }
 ''')
+
+
+def print_connectivity(stencil: core.Stencil, output_file: IO[str]) -> None:
+  printer = util.Printer(output_file)
+  printer.println('[connectivity]')
+  for stmt in stencil.input_stmts + stencil.output_stmts:
+    for bank in stmt.dram:
+      port_name = util.get_port_name(stmt.name, bank)
+      printer.println(f'sp={stencil.kernel_name}_1.{port_name}:DDR[{bank}]')

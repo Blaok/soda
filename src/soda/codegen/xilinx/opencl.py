@@ -100,6 +100,13 @@ def add_arguments(parser):
       help='work directory for the Xilinx OpenCL hardware object',
   )
   parser.add_argument(
+      '--xocl-connectivity',
+      type=argparse.FileType('w'),
+      dest='connectivity',
+      metavar='file',
+      help='connectivity.ini file for the Xilinx OpenCL flow',
+  )
+  parser.add_argument(
       '--xocl-interface',
       type=str,
       dest='interface',
@@ -123,6 +130,11 @@ def print_code(
     parser: argparse.ArgumentParser,
 ) -> None:
   _logger.info('using %s', hls)
+
+  if args.connectivity is not None:
+    kernel.print_connectivity(stencil, args.connectivity)
+    args.connectivity.close()
+
   if args.kernel_file is not None:
     with tempfile.TemporaryFile(mode='w+') as tmp:
       kernel.print_code(stencil, tmp, interface=args.interface)
