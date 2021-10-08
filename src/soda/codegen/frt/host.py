@@ -325,6 +325,12 @@ def print_func(printer: util.CppPrinter, stencil: soda.core.Stencil):
        '<< instance.LoadThroughputGbps() << " GB/s" << endl;'),
       ('clog << "Compute latency: " << std::setprecision(3) '
        '<< instance.ComputeTimeSeconds() << " s" << endl;'),
+      *(f'clog << "Compute throughput ({stmt.name}): " '
+        '<< std::setprecision(3) << ' +
+        ' * '.join(f'{extent_fmt[stmt.name]}[{dim}]'
+                   for dim in range(stencil.dim)) +
+        ' / instance.ComputeTimeSeconds() * 1e-9 << " pixel/ns" << endl;'
+        for stmt in stencil.input_stmts + stencil.output_stmts),
       ('clog << "Store throughput: " << std::setprecision(3) '
        '<< instance.StoreThroughputGbps() <<" GB/s" << endl;'),
       '#endif  // SODA_CPP_BINDING',
