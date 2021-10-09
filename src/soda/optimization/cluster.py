@@ -124,44 +124,76 @@ def merge(
   # dict mapping an old ir.FIFO to a new ir.Node due to the topology change
   replacement: Dict[ir.FIFO, ir.Node] = {}
 
-  # dict mapping a new ir.Node back to a list of ir.FIFO
+  # dict mapping a new ir.Node back to a list of (ir.FIFO, ir.Node)
   # used to find FIFOs that contain packed types ("packed channel")
-  reverse_replacement: Dict[ir.Node, List[ir.FIFO]]
+  reverse_replacement: Dict[ir.Node, List[Tuple[ir.FIFO, ir.Node]]]
   reverse_replacement = collections.defaultdict(list)
 
-  def add_replacement(old_fifo: ir.FIFO, new_fifo: ir.Node) -> None:
-    replacement[old_fifo] = new_fifo
-    reverse_replacement[new_fifo].append(old_fifo)
+  def add_replacement(
+      old_fifo: ir.FIFO,
+      producer: ir.Node,
+      consumer: ir.Node,
+  ) -> None:
+    replacement[old_fifo] = consumer
+    reverse_replacement[consumer].append((old_fifo, producer))
 
   # initialize the new module node and figure out how to replace FIFOs
   for node in old_nodes.values():
-    new_node.lets.extend(node.lets)
+
+    def local_replace(obj: ir.Node, local_replacement: dict) -> ir.Node:
+      return local_replacement.get(obj, obj)
+
+    # copy existing lets to the new node
+    local_replacement = {}
+    for let in node.lets:
+      new_let = ir.Let(
+          name=f'let_{len(new_node.lets)}',
+          expr=let.expr,
+          haoda_type=let.haoda_type,
+      )
+      local_replacement[ir.make_var(let.name)] = ir.make_var(
+          new_let.name,
+          new_let.haoda_type,
+      )
+      # replace any seen local lets
+      new_node.lets.append(new_let.visit(local_replace, local_replacement))
 
     for fifo, expr in node.exprs.items():
+      # replace any local lets
+      expr = expr.visit(local_replace, local_replacement)
+
       if id(fifo.read_module) in old_nodes:
         # child module is merged
-        new_node.lets.append(
-            ir.Let(
-                name=fifo.c_expr,
-                expr=expr,
-                haoda_type=expr.haoda_type,
-            ))
+        new_let = ir.Let(
+            name=f'let_{len(new_node.lets)}',
+            expr=expr,
+            haoda_type=expr.haoda_type,
+        )
+        new_node.lets.append(new_let)
         # FIFO is internal to the merged nodes
         # replace with ir.Var referencing ir.Let
-        add_replacement(fifo, ir.make_var(fifo.c_expr, expr.haoda_type))
+        add_replacement(fifo, expr, ir.make_var(new_let.name, expr.haoda_type))
       else:
         # child module is kept
         # FIFO is written by the merged node and read externally
         # replace with new ir.FIFO with updated write_module
         new_node.exprs[fifo] = expr
-        add_replacement(fifo, _get_updated_fifo(fifo, write_module=new_node))
+        add_replacement(
+            fifo,
+            expr,
+            _get_updated_fifo(fifo, write_module=new_node),
+        )
 
   for node in new_node.parents:
     for fifo, expr in node.exprs.items():
       if id(fifo.read_module) in old_nodes:
         # FIFO is written externally and read by the merged node
         # replace with new ir.FIFO with updated read_module
-        add_replacement(fifo, _get_updated_fifo(fifo, read_module=new_node))
+        add_replacement(
+            fifo,
+            expr,
+            _get_updated_fifo(fifo, read_module=new_node),
+        )
 
   # handle packed channel
   producer_replacement: Dict[ir.FIFO, ir.Node] = {}
@@ -171,8 +203,8 @@ def merge(
       _logger.debug('packed channel: %s -> %s', repr(new_fifo.write_module),
                     repr(new_fifo.read_module))
 
-      pack = ir.Pack(exprs=[x.write_module.exprs[x] for x in old_fifos])
-      for idx, old_fifo in enumerate(old_fifos):
+      pack = ir.Pack(exprs=[x for _, x in old_fifos])
+      for idx, (old_fifo, _) in enumerate(old_fifos):
         # replace old FIFO with ir.Pack for producer
         producer_replacement[old_fifo] = pack
 
