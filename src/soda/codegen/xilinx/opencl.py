@@ -107,6 +107,13 @@ def add_arguments(parser):
       help='connectivity.ini file for the Xilinx OpenCL flow',
   )
   parser.add_argument(
+      '--xocl-constraint',
+      type=str,
+      dest='constraint',
+      metavar='file',
+      help='constraint.tcl file for the Xilinx OpenCL flow',
+  )
+  parser.add_argument(
       '--xocl-interface',
       type=str,
       dest='interface',
@@ -166,7 +173,12 @@ def print_code(
           shutil.copyfileobj(tmp, header_file)
 
   if args.xo_file is not None:
+    if args.constraint is not None and args.connectivity is None:
+      parser.error('constraint must be generated together with connectivity')
     with tempfile.TemporaryFile(mode='w+b') as tmp_obj:
+      connectivity_file = None
+      if args.connectivity is not None:
+        connectivity_file = args.connectivity.name
       rtl_kernel.print_code(
           stencil,
           tmp_obj,
@@ -178,6 +190,8 @@ def print_code(
               clock_period_name='xocl_clock_period',
           ),
           work_dir=args.xo_work_dir,
+          connectivity_file=connectivity_file,
+          constraint_file=args.constraint,
           interface=args.interface,
       )
       tmp_obj.seek(0)

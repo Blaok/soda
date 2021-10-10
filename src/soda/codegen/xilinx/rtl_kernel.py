@@ -20,6 +20,8 @@ def print_code(
     xo_file: IO[bytes],
     device_info: Dict[str, str],
     work_dir: Optional[str] = None,
+    connectivity_file: Optional[str] = None,
+    constraint_file: Optional[str] = None,
     interface: str = 'm_axi',
 ) -> None:
   """Generate hardware object file for the given Stencil.
@@ -102,6 +104,14 @@ def print_code(
       fifos[name]['depth'] = fifo.depth + 3
   with open(os.path.join(work_dir, 'program.json'), 'w') as program_fp:
     json.dump(program, program_fp, indent=2)
+
+  # create constraint file
+  if constraint_file is not None:
+    argv.extend((
+        f'--connectivity={connectivity_file}',
+        f'--constraint={constraint_file}',
+        '--enable-synth-util',
+    ))
 
   # pack xo
   tapac.main(argv + [
