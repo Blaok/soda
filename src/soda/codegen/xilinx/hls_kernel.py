@@ -124,7 +124,7 @@ def _print_interface(
           stencil.burst_width // haoda_type.width_in_bits,
       )
       buf_name = get_port_buf_name(name, bank)
-      printer.println(f'tapa::stream<{vec_t}, 2> {buf_name}("{buf_name}");')
+      printer.println(f'tapa::stream<{vec_t}, 32> {buf_name}("{buf_name}");')
   printer.println()
 
   # internal fifos
