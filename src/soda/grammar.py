@@ -64,7 +64,8 @@ class InputStmt(ir.Node):
     self.tile_size += (0,)
 
   def __str__(self):
-    result = 'input {}: {}'.format(self.haoda_type, self.name)
+    dram = ".".join(map(str, self.dram))
+    result = f'input dram {dram} {self.haoda_type}: {self.name}'
     if self.tile_size[:-1]:
       result += '({}, *)'.format(', '.join(map(str, self.tile_size[:-1])))
     return result
@@ -102,9 +103,8 @@ class LocalStmtOrOutputStmt(ir.Node):
       let = '\n  {}\n '.format('\n  '.join(map(str, self.let)))
     else:
       let = ''
-    return '{} {}:{} {} = {}'.format(type(self).__name__[:-4].lower(),
-                                     self.haoda_type, let, self.ref,
-                                     ir.unparenthesize(self.expr))
+    expr = ir.unparenthesize(self.expr)
+    return f'{self.haoda_type}:{let} {self.ref} = {expr}'
 
   @property
   def symbol_table(self) -> Dict[str, str]:
@@ -136,7 +136,8 @@ class LocalStmtOrOutputStmt(ir.Node):
     self.let = tuple(base.propagate_type(let, symbol_table) for let in self.let)
 
 class LocalStmt(LocalStmtOrOutputStmt):
-  pass
+  def __str__(self):
+    return f'local {super().__str__()}'
 
 class OutputStmt(LocalStmtOrOutputStmt):
   LINEAR_ATTRS = LocalStmtOrOutputStmt.LINEAR_ATTRS + ('dram',)
@@ -145,6 +146,9 @@ class OutputStmt(LocalStmtOrOutputStmt):
     # pylint: disable=access-member-before-definition
     if not self.dram:
       self.dram = (0,)
+
+  def __str__(self):
+    return f'output dram {".".join(map(str, self.dram))} {super().__str__()}'
 
 class ParamStmt(ir.Node):
   SCALAR_ATTRS = 'haoda_type', 'attr', 'name', 'size'

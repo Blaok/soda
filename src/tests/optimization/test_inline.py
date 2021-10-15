@@ -40,7 +40,7 @@ cluster: none
     self.assertEqual(len(stencil.local_stmts), 0)
     self.assertEqual(len(stencil.output_stmts), 1)
     self.assertEqual(str(stencil.output_stmts[0]),
-                     'output float: t2(4, 2) = t0(3, 6)')
+                     'output dram 0 float: t2(4, 2) = t0(3, 6)')
 
   def test_let_in_local(self):
     program = self.soda_mm.model_from_str(
@@ -61,7 +61,7 @@ cluster: none
     self.assertEqual(len(stencil.local_stmts), 0)
     self.assertEqual(len(stencil.output_stmts), 1)
     self.assertMultiLineEqual(str(stencil.output_stmts[0]),
-r'''output float:
+r'''output dram 0 float:
   float l = t0(3, 6)
   t2(4, 2) = l''')
 
@@ -84,7 +84,7 @@ cluster: none
     self.assertEqual(len(stencil.local_stmts), 0)
     self.assertEqual(len(stencil.output_stmts), 1)
     self.assertMultiLineEqual(str(stencil.output_stmts[0]),
-r'''output float:
+r'''output dram 0 float:
   float l = t0(3, 6)
   t2(4, 2) = l''')
 
@@ -107,8 +107,10 @@ cluster: none
     inline.inline(stencil)
     self.assertEqual(len(stencil.local_stmts), 2)
     self.assertEqual(len(stencil.output_stmts), 1)
-    self.assertEqual(str(stencil.output_stmts[0]),
-                     'output float: t3(4, 2) = t2(0, 0) + t1(0, 0) + t2(0, 1)')
+    self.assertEqual(
+        str(stencil.output_stmts[0]),
+        'output dram 0 float: t3(4, 2) = t2(0, 0) + t1(0, 0) + t2(0, 1)',
+    )
 
 if __name__ == '__main__':
   unittest.main()

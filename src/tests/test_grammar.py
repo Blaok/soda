@@ -32,8 +32,8 @@ cluster: none
 iterate: 2
 kernel: name
 unroll factor: 1
-input float: bbb
-input uint6: a(233, *)
+input dram 0 float: bbb
+input dram 1 uint6: a(233, *)
 param int8: p0
 param int9, dup 3: p1[23]
 param int10, partition complete: p2[23]
@@ -45,10 +45,10 @@ local int27:
   int32 l = int32(a(0, 0) ~1 + b(1, 0))
   int32 g = int32(a(0, 0) ~1 + p0 + p1[1][3])
   c(0, 0) ~3 = +-+-l * --+~l
-output double:
+output dram 2 double:
   float18_3 l = float18_3(c(0, 1) ~5) + a(1, 0)
   d(0, 0) = sqrt(float15(l <= (l / 2)))
-output double:
+output dram 3 double:
   float18_3 l = float18_3(c(0, 1) ~5) + a(1, 0)
   e(0, 0) = float15(l + (l / 2))
 '''.strip('\n')
@@ -66,19 +66,19 @@ output double:
             grammar.InputStmt(haoda_type=self.int8,
                               name='foo',
                               tile_size=[],
-                              dram=())), 'input int8: foo')
+                              dram=())), 'input dram 0 int8: foo')
     self.assertEqual(
         str(
             grammar.InputStmt(haoda_type=self.int8,
                               name='foo',
                               tile_size=[23],
-                              dram=())), 'input int8: foo(23, *)')
+                              dram=())), 'input dram 0 int8: foo(23, *)')
     self.assertEqual(
         str(
             grammar.InputStmt(haoda_type=self.int8,
                               name='foo',
                               tile_size=[23, 233],
-                              dram=())), 'input int8: foo(23, 233, *)')
+                              dram=())), 'input dram 0 int8: foo(23, 233, *)')
 
   def test_local(self):
     self.assertEqual(
@@ -116,7 +116,7 @@ output double:
                                ref=self.ref,
                                expr=self.expr,
                                dram=())),
-        'output int8: foo(0, 23) = bar(233, 42)')
+        'output dram 0 int8: foo(0, 23) = bar(233, 42)')
     self.assertEqual(
         str(
             grammar.OutputStmt(haoda_type=self.int8,
@@ -124,7 +124,7 @@ output double:
                                ref=self.ref,
                                expr=self.expr,
                                dram=())),
-        'output int8:\n  int8 foo_l = bar_l(42, 2333)\n'
+        'output dram 0 int8:\n  int8 foo_l = bar_l(42, 2333)\n'
         '  foo(0, 23) = bar(233, 42)')
     self.assertEqual(
         str(
@@ -133,7 +133,7 @@ output double:
                                ref=self.ref,
                                expr=self.expr,
                                dram=())),
-        'output int8:\n  int8 foo_l = bar_l(42, 2333)\n'
+        'output dram 0 int8:\n  int8 foo_l = bar_l(42, 2333)\n'
         '  int8 foo_l2 = bar_l2(0, 42)\n  foo(0, 23) = bar(233, 42)')
 
 
