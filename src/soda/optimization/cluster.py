@@ -1,11 +1,30 @@
 import collections
 import copy
+import json
 import logging
-from typing import Dict, Iterable, List, Optional, Tuple
+import os
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple
 
+from absl import flags
 from haoda import ir, util
+from haoda.backend import xilinx as backend
+from tapa import tapac
 
 from soda import dataflow
+from soda.codegen.xilinx import hls_kernel
+
+if TYPE_CHECKING:
+  from soda.core import Stencil
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_string(
+    'cluster-work-dir',
+    None,
+    'If given, use a persistent work directory for clustering.',
+)
+
+util.define_alias_flags(__name__)
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -29,12 +48,12 @@ class PrettyPrinter:
     return '\n  '.join(lines)
 
 
-def cluster(
-    super_source: dataflow.SuperSourceNode,
-    granularity: str = 'none',
-    unroll_factor: int = 0,
-) -> None:
+def cluster(stencil: 'Stencil') -> None:
   """Cluster a dataflow.SuperSourceNode with given granularity."""
+
+  super_source: dataflow.SuperSourceNode = stencil.dataflow_super_source
+  granularity: str = stencil.cluster
+  unroll_factor: int = stencil.unroll_factor
 
   if granularity == 'none':
     return
@@ -63,6 +82,104 @@ def cluster(
       elif isinstance(node, dataflow.ForwardNode):
         pe_id = unroll_factor - 1 - node.offset % unroll_factor
         nodes_to_merge[f'{node.tensor.name}_{pe_id}'].append(node)
+
+  elif granularity == 'autobridge':
+    with util.work_dir(
+        FLAGS.cluster_work_dir,
+        prefix='sodac-cluster-',
+    ) as work_dir:
+      _logger.info('starting AutoBridge-based clustering in %s', work_dir)
+
+      # arbitrarily specified
+      cached_soda_file = os.path.join(work_dir, 'cached.soda')
+      kernel_tapa_file = os.path.join(work_dir, 'kernel.cpp')
+
+      # must be consistent with TAPA
+      floorplan_json_file = os.path.join(work_dir, 'autobridge_floorplan.json')
+      program_json_file = os.path.join(work_dir, 'program.json')
+
+      # check if floorplan is up to date
+      is_floorplan_up_to_date = False
+      if (FLAGS.cluster_work_dir is not None and
+          os.path.exists(cached_soda_file)):
+        with open(cached_soda_file) as fp:
+          existing_stencil = fp.read()
+          if existing_stencil == str(stencil):
+            is_floorplan_up_to_date = True
+            _logger.info('floorplan cache is up to date; may reuse floorplan')
+          else:
+            _logger.info('floorplan cache is NOT up to date')
+
+      # generate up-to-date floorplan
+      if not is_floorplan_up_to_date or not os.path.exists(floorplan_json_file):
+        with open(kernel_tapa_file, 'w') as fp:
+          hls_kernel.print_code(stencil, fp, interface='tapa::mmap')
+        # parse device info here in SODA instead of passing them to TAPA
+        # this gives cleaner error messages
+        device_info = backend.parse_device_info_from_flags(
+            platform_name='xocl-platform',
+            part_num_name='xocl-part-num',
+            clock_period_name='xocl-clock-period',
+        )
+        argv = [
+            kernel_tapa_file,
+            f'--work-dir={work_dir}',
+            f'--top={stencil.kernel_name}',
+            f'--part-num={device_info["part_num"]}',
+            f'--clock-period={device_info["clock_period"]}',
+        ]
+        tapac.main(argv + [
+            '--run-tapacc',
+            '--extract-cpp',
+            '--run-hls',
+            '--extract-rtl',
+        ])
+        with open(program_json_file) as fp:
+          program = json.load(fp)
+        for fifo in program['tasks'][stencil.kernel_name]['fifos'].values():
+          fifo['depth'] = 1  # ignore FIFO area
+        with open(program_json_file, 'w') as fp:
+          json.dump(program, fp, indent=2)
+        # necessary to consider area consumed by DDR controller
+        with open(os.path.join(work_dir, 'connectivity.ini'), 'w') as fp:
+          hls_kernel.print_connectivity(stencil, fp)
+        tapac.main(argv + [
+            '--instrument-rtl',
+            '--enable-synth-util',
+            '--force-dag',
+            '--constraint=/dev/null',  # triggers floorplanning
+            f'--connectivity={work_dir}/connectivity.ini',
+        ])
+        if FLAGS.cluster_work_dir is None:
+          with open(cached_soda_file, 'w') as fp:
+            fp.write(str(stencil))
+          _logger.info('floorplan cached for future use')
+
+      # read floorplan
+      instance_name_to_region = {}
+      with open(floorplan_json_file) as fp:
+        for region, modules in json.load(fp).items():
+          for module in modules:
+            if isinstance(module, str):
+              instance_name_to_region[module] = region
+
+      # calculate which modules (nodes) should be merged
+      module_name_to_region = {}
+      seen_module_traits = collections.defaultdict(int)
+      for node in super_source.tpo_valid_node_gen():
+        node.__dict__.pop('_interfaces', None)
+        _logger.debug('old node before merging: %s', PrettyPrinter(node))
+        if isinstance(node, (dataflow.ForwardNode, dataflow.ComputeNode)):
+          _, module_trait_id = super_source.module_table[node]
+          instance_id = seen_module_traits[module_trait_id]
+          seen_module_traits[module_trait_id] += 1
+          func_name = util.get_func_name(module_trait_id)
+          instance_name = f'{func_name}_{instance_id}'
+          region = instance_name_to_region.get(instance_name)
+          if region is not None:
+            nodes_to_merge[region].append(node)
+            module_name_to_region[node.name] = region
+      _logger.info('done AutoBridge-based clustering in %s', work_dir)
 
   else:
     raise util.InputError(f'unknown cluster granularity: {granularity}')

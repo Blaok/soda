@@ -23,6 +23,7 @@ for file in "${base_dir}"/tests/src/*.soda; do
   "${base_dir}/src/sodac" "${file}" \
     --cluster="${granularity}" \
     --iocl-kernel="${iocl_kernel}" \
+    --xocl-platform "${XCL_PLATFORM}" \
     --xocl-kernel="${xhls_kernel}" &&
     pass || fail
 

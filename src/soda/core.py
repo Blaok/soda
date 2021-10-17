@@ -136,11 +136,7 @@ class Stencil():
     if 'inline' in self.optimizations:
       inline.inline(self)
     inline.rebalance(self)
-    cluster.cluster(
-        self.dataflow_super_source,
-        self.cluster,
-        self.unroll_factor,
-    )
+    cluster.cluster(self)
 
     for stmt in itertools.chain(self.local_stmts, self.output_stmts):
       stmt.propagate_type()
