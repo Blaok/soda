@@ -6,6 +6,8 @@ import sys
 import tempfile
 from typing import TYPE_CHECKING
 
+from absl import flags
+from haoda import util
 from haoda.backend import xilinx as backend
 
 from soda.codegen.xilinx import header
@@ -14,6 +16,26 @@ from soda.codegen.xilinx import host, rtl_kernel
 
 if TYPE_CHECKING:
   from soda.core import Stencil
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_string(
+    'xocl-platform',
+    None,
+    'Vitis shell platform name or directory for the Xilinx OpenCL flow',
+)
+flags.DEFINE_string(
+    'xocl-part-num',
+    None,
+    'part number used for Xilinx HLS',
+)
+flags.DEFINE_string(
+    'xocl-clock-period',
+    None,
+    'target clock period in nanoseconds, used for Xilinx HLS',
+)
+
+util.define_alias_flags(__name__)
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -66,27 +88,6 @@ def add_arguments(parser):
       metavar='file',
       help=('Xilinx HLS C++ kernel code for the Xilinx OpenCL flow; '
             'overrides --xocl'),
-  )
-  parser.add_argument(
-      '--xocl-platform',
-      type=str,
-      dest='xocl_platform',
-      metavar='dir',
-      help='Vitis shell platform name or directory for the Xilinx OpenCL flow',
-  )
-  parser.add_argument(
-      '--xocl-part-num',
-      type=str,
-      dest='xocl_part_num',
-      metavar='string',
-      help='part number used for Xilinx HLS',
-  )
-  parser.add_argument(
-      '--xocl-clock-period',
-      type=str,
-      dest='xocl_clock_period',
-      metavar='ns',
-      help='target clock period in nanoseconds, used for Xilinx HLS',
   )
   parser.add_argument(
       '--xocl-hw-xo',
@@ -185,12 +186,10 @@ def print_code(
       rtl_kernel.print_code(
           stencil,
           tmp_obj,
-          device_info=backend.parse_device_info(
-              parser,
-              args,
-              platform_name='xocl_platform',
-              part_num_name='xocl_part_num',
-              clock_period_name='xocl_clock_period',
+          device_info=backend.parse_device_info_from_flags(
+              platform_name='xocl-platform',
+              part_num_name='xocl-part-num',
+              clock_period_name='xocl-clock-period',
           ),
           work_dir=args.xo_work_dir,
           connectivity_file=connectivity_file,
