@@ -39,9 +39,9 @@ setup(
     install_requires=[
         'absl-py',
         'cached_property',
-        'haoda>=0.0.20210521.dev1',
+        'haoda>=0.0.20211016.dev1',
         'pulp',
-        'tapa>=0.0.20211001.dev1',
+        'tapa>=0.0.20211016.dev1',
         'textx',
         'toposort',
     ],
