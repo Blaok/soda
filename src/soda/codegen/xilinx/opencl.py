@@ -199,7 +199,7 @@ def print_code(
       )
       tmp_obj.seek(0)
       if args.xo_file == '-':
-        shutil.copyfileobj(tmp_obj, sys.stdout)   # type: ignore
+        shutil.copyfileobj(tmp_obj, sys.stdout)  # type: ignore
       else:
         with open(args.xo_file, 'wb') as xo_file:
           shutil.copyfileobj(tmp_obj, xo_file)
@@ -211,10 +211,9 @@ def print_code(
       dram_in = args.dram_in if args.dram_in else '_'
       dram_out = args.dram_out if args.dram_out else '_'
       kernel_file_name = os.path.join(
-          args.output_dir, '%s_kernel-tile%s-unroll%d-ddr%s.cpp' % (
-              stencil.app_name,
-              'x'.join('%d'%x for x in stencil.tile_size[:-1]),
-              stencil.unroll_factor, dram_in + '-' + dram_out))
+          args.output_dir, '%s_kernel-tile%s-unroll%d-ddr%s.cpp' %
+          (stencil.app_name, 'x'.join('%d' % x for x in stencil.tile_size[:-1]),
+           stencil.unroll_factor, dram_in + '-' + dram_out))
     else:
       kernel_file_name = args.kernel_file
     with tempfile.TemporaryFile(mode='w+') as tmp:
