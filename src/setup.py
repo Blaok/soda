@@ -41,7 +41,7 @@ setup(
         'cached_property',
         'haoda>=0.0.20211016.dev1',
         'pulp',
-        'tapa>=0.0.20211016.dev1',
+        'tapa>=0.0.20211016.1',
         'textx',
         'toposort',
     ],
