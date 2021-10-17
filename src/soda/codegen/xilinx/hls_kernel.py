@@ -277,7 +277,6 @@ def _print_burst_read_tapa(
     printer.println('#pragma HLS pipeline II = 1', 0)
     with printer.if_(' && '.join((
         'i_req < n',
-        'i_req < i_resp + 64',
         'src.read_addr.try_write(i_req)',
     ))):
       printer.println('++i_req;')
@@ -307,7 +306,6 @@ def _print_burst_write_tapa(
     printer.println('#pragma HLS pipeline II = 1', 0)
     with printer.if_(' && '.join((
         'i_req < n',
-        'i_req < i_resp + 64',
         '!src.empty()',
         '!dest.write_addr.full()',
         '!dest.write_data.full()',
