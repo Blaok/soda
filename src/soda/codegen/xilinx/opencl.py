@@ -4,13 +4,16 @@ import os
 import shutil
 import sys
 import tempfile
+from typing import TYPE_CHECKING
 
 from haoda.backend import xilinx as backend
 
-from soda import core
 from soda.codegen.xilinx import header
 from soda.codegen.xilinx import hls_kernel as kernel
 from soda.codegen.xilinx import host, rtl_kernel
+
+if TYPE_CHECKING:
+  from soda.core import Stencil
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -132,7 +135,7 @@ def add_arguments(parser):
 
 
 def print_code(
-    stencil: core.Stencil,
+    stencil: 'Stencil',
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
 ) -> None:

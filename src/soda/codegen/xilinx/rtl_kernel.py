@@ -3,20 +3,22 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import IO, Dict, Optional
+from typing import IO, TYPE_CHECKING, Dict, Optional
 
 from haoda import util
 from haoda.report.xilinx import hls as hls_report
 from tapa import tapac
 
-from soda import core
 from soda.codegen.xilinx import hls_kernel
+
+if TYPE_CHECKING:
+  from soda.core import Stencil
 
 _logger = logging.getLogger().getChild(__name__)
 
 
 def print_code(
-    stencil: core.Stencil,
+    stencil: 'Stencil',
     xo_file: IO[bytes],
     device_info: Dict[str, str],
     work_dir: Optional[str] = None,

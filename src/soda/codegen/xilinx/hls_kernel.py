@@ -1,13 +1,16 @@
 import collections
 import itertools
 import logging
-from typing import IO, Any, Dict, List, Tuple, Union
+from typing import IO, TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from haoda import ir, util
 from haoda.ir import visitor
 
-from soda import core, dataflow
+from soda import dataflow
 from soda.codegen.xilinx import opencl
+
+if TYPE_CHECKING:
+  from soda.core import Stencil
 
 _logger = logging.getLogger().getChild(__name__)
 
@@ -26,7 +29,7 @@ def _check_interface(interface: str) -> None:
 
 def _print_interface(
     printer: util.CppPrinter,
-    stencil: core.Stencil,
+    stencil: 'Stencil',
     inputs: List[Tuple[str, ir.Type, int]],
     outputs: List[Tuple[str, ir.Type, int]],
     super_source: dataflow.SuperSourceNode,
@@ -333,7 +336,7 @@ def _sanitized_vec_t(elem_type: str, length: int) -> str:
 
 
 def print_code(
-    stencil: core.Stencil,
+    stencil: 'Stencil',
     output_file: IO[str],
     interface: str = SUPPORTED_INTERFACES[0],
 ):
@@ -953,7 +956,7 @@ void WriteData(hls::stream<ap_axiu<D, 0, 0, 0>>& to, const T& data, bool ctrl) {
 ''')
 
 
-def print_connectivity(stencil: core.Stencil, output_file: IO[str]) -> None:
+def print_connectivity(stencil: 'Stencil', output_file: IO[str]) -> None:
   printer = util.Printer(output_file)
   printer.println('[connectivity]')
   for stmt in stencil.input_stmts + stencil.output_stmts:
