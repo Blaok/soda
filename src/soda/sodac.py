@@ -3,11 +3,12 @@ import argparse
 import logging
 import os
 import sys
-from typing import Optional, Iterable
+from typing import List, Optional
 
 import textx
-
+from absl import flags
 from haoda import util
+
 from soda import core, grammar
 from soda.codegen.frt import core as frt
 from soda.codegen.intel import opencl as iocl
@@ -20,7 +21,9 @@ logging.basicConfig(level=logging.WARNING,
 logger = logging.getLogger().getChild(os.path.basename(__file__))
 
 
-def main(argv: Optional[Iterable[str]] = None):
+def main(argv: Optional[List[str]] = None):
+  argv = flags.FLAGS(argv or sys.argv, known_only=True)[1:]
+
   parser = argparse.ArgumentParser(
     prog='sodac',
     description='Stencil with Optimized Dataflow Architecture '
