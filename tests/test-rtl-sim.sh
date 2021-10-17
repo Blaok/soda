@@ -6,6 +6,7 @@ for file in "${base_dir}/tests/src/"*.soda; do
   basename="$(basename "${file}")"
   xrtl_object="${tmp_dir}/${basename/%soda/hw.xo}"
   xrtl_bitstream="${tmp_dir}/${basename/%soda/hw_emu.xclbin}"
+  xrtl_connectivity="${tmp_dir}/${basename/%soda/connectivity.ini}"
   frt_host="${tmp_dir}/${basename/%soda/host.cpp}"
   frt_exe="${tmp_dir}/${basename/%soda/exe}"
 
@@ -13,6 +14,7 @@ for file in "${base_dir}/tests/src/"*.soda; do
   "${base_dir}/src/sodac" "${file}" \
     --frt-host "${frt_host}" \
     --xocl-platform "${XCL_PLATFORM}" \
+    --xocl-connectivity="${xrtl_connectivity}" \
     --xocl-hw-xo "${xrtl_object}" &&
     pass || fail
 
@@ -21,6 +23,7 @@ for file in "${base_dir}/tests/src/"*.soda; do
     --link \
     --target hw_emu \
     --platform "${XCL_PLATFORM}" \
+    --config="${xrtl_connectivity}" \
     >&2 && test "${xrtl_bitstream}" -nt "${xrtl_object}" &&
     pass || fail
 

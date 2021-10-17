@@ -1,7 +1,7 @@
 kernel: xcorr
 burst width: 64
 unroll factor: 4
-input int16: input(480, *)
+input dram 0 int16: input(480, *)
 local int16: tmp1(0, 9) =
   input(0,  0) + input(0,  1) + input(0,  2) + input(0,  3) + input(0,  4) +
   input(0,  5) + input(0,  6) + input(0,  7) + input(0,  8) + input(0,  9) +
@@ -12,7 +12,7 @@ local int16: tmp2(9, 0) =
   tmp1( 5, 0) + tmp1( 6, 0) + tmp1( 7, 0) + tmp1( 8, 0) + tmp1( 9, 0) +
   tmp1(10, 0) + tmp1(11, 0) + tmp1(12, 0) + tmp1(13, 0) + tmp1(14, 0) +
   tmp1(15, 0) + tmp1(16, 0) + tmp1(17, 0) + tmp1(18, 0)
-output int16: tmp3(0, 0) = (int32(tmp2(0, 0)) - input(0, 0)) * input(0, 0) / 256
+output dram 1 int16: tmp3(0, 0) = (int32(tmp2(0, 0)) - input(0, 0)) * input(0, 0) / 256
 iterate: 1
 border: ignore
 cluster: none

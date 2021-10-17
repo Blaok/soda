@@ -5,8 +5,8 @@ iterate: 1
 border: ignore
 cluster: none
 
-input float: f
-input float: u(32, *)
+input dram 0 float: f
+input dram 1 float: u(32, *)
 local float: diff_u(0, 0) = u(0, 0) - u( 0, -1)
 local float: diff_d(0, 0) = u(0, 0) - u( 0,  1)
 local float: diff_l(0, 0) = u(0, 0) - u(-1,  0)
@@ -20,7 +20,7 @@ local float: r0(0, 0) = u(0, 0) * f(0, 0) * 4.9f
 local float:
     r1(0, 0) = (r0(0, 0) * (2.5f + r0(0, 0) * (10.2f + r0(0, 0))))*
         (4.3f + r0(0, 0) * (5.4f + r0(0, 0) * ( 6.3f + r0(0, 0))))
-output float:
+output dram 2 float:
     output(0, 0) = (u(0, 0) + 7.7f *
         (u( 0,  1) * g( 0,  1) +
          u( 0, -1) * g( 0, -1) +

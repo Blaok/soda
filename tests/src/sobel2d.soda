@@ -1,7 +1,7 @@
 kernel: sobel2d
 burst width: 64
 unroll factor: 4
-input int16: img(32, *)
+input dram 0 int16: img(32, *)
 local int16: mag_x(0, 0) =
     (img(1, -1) - img(-1, -1)) +
     (img(1,  0) - img(-1,  0)) * 3 +
@@ -10,7 +10,7 @@ local uint16: mag_y(0, 0) =
     (img(-1, 1) - img(-1, -1)) +
     (img( 0, 1) - img( 0, -1)) * 3 +
     (img( 1, 1) - img( 1, -1))
-output uint16:
+output dram 1 uint16:
   mag(0, 0) = 65535 - (mag_x(0, 0) * mag_x(0, 0) + mag_y(0, 0) * mag_y(0, 0))
 iterate: 1
 border: ignore
