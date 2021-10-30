@@ -76,11 +76,14 @@ def print_code(
   # read HLS reports
   super_source = stencil.dataflow_super_source
   depths: Dict[int, int] = {}
+  total_resource = hls_report.HlsResources()
+  total_resource.name = top_name
   for module_id, nodes in enumerate(super_source.module_trait_table.values()):
     module_name = util.get_func_name(module_id)
     report_file = os.path.join(work_dir, 'report', module_name + '_csynth.xml')
     hls_resource = hls_report.resources(report_file)
     use_count = len(nodes)
+    total_resource += hls_resource * use_count
     try:
       perf = hls_report.performance(report_file)
       _logger.info('%s, usage: %5d times, II: %3d, Depth: %3d', hls_resource,
@@ -90,6 +93,7 @@ def print_code(
       _logger.warn('%s in %s report (%s)', e, module_name, report_file)
       _logger.info('%s, usage: %5d times', hls_resource, use_count)
       raise e
+  _logger.info('%s', total_resource)
 
   # update the module pipeline depths
   super_source.update_module_depths(depths)
