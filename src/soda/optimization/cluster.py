@@ -134,12 +134,6 @@ def cluster(stencil: 'Stencil') -> None:
             '--run-hls',
             '--extract-rtl',
         ])
-        with open(program_json_file) as fp:
-          program = json.load(fp)
-        for fifo in program['tasks'][stencil.kernel_name]['fifos'].values():
-          fifo['depth'] = 1  # ignore FIFO area
-        with open(program_json_file, 'w') as fp:
-          json.dump(program, fp, indent=2)
         # necessary to consider area consumed by DDR controller
         with open(os.path.join(work_dir, 'connectivity.ini'), 'w') as fp:
           hls_kernel.print_connectivity(stencil, fp)
