@@ -15,6 +15,9 @@ function prepare() {
     "${log_dir}/${script_name}.log"
 
   test -f "${config}" && . "${config}"
+
+  exec {stderr_fd}<&2
+  trap "cat ${log_dir}/${script_name}.log >&${stderr_fd}" ERR
 }
 
 function log() {
@@ -30,9 +33,12 @@ function pass() {
 function fail() {
   echo -e "\x1B[0;31mFAIL\x1B[0m"
   echo -e "FAIL\n" >&2
+  return 1
 }
 
 function cleanup() {
   popd >/dev/null
   rm -rf "${tmp_dir}"
 }
+
+set -e
