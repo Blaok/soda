@@ -8,7 +8,7 @@ for file in "${base_dir}/tests/src/"*.soda; do
   xhls_kernel="${tmp_dir}/${basename/%soda/cpp}"
 
   log "+ sodac <- ${basename} ... "
-  "${base_dir}/src/sodac" "${file}" \
+  python3 "${base_dir}/src/sodac" "${file}" \
     --iocl-kernel "${iocl_kernel}" \
     --xocl-kernel "${xhls_kernel}" &&
     pass || fail

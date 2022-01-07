@@ -11,7 +11,7 @@ for file in "${base_dir}/tests/src/"*.soda; do
   frt_exe="${tmp_dir}/${basename/%soda/exe}"
 
   log "+ sodac <- ${basename} ... "
-  "${base_dir}/src/sodac" "${file}" \
+  python3 "${base_dir}/src/sodac" "${file}" \
     --frt-host "${frt_host}" \
     --xocl-platform "${XCL_PLATFORM}" \
     --xocl-connectivity="${xrtl_connectivity}" \

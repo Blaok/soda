@@ -14,7 +14,7 @@ for file in "${base_dir}/tests/src/"*.soda; do
   xhls_bitstream="${tmp_dir}/${basename/%soda/xclbin}"
 
   log "+ sodac <- ${basename} ... "
-  "${base_dir}/src/sodac" "${file}" \
+  python3 "${base_dir}/src/sodac" "${file}" \
     --frt-host "${frt_host}" \
     --iocl-kernel "${iocl_kernel}" \
     --xocl-kernel "${xhls_kernel}" &&

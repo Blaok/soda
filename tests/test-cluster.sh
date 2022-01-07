@@ -14,13 +14,13 @@ for file in "${base_dir}"/tests/src/*.soda; do
   xhls_kernel="${tmp_dir}/${basename/%soda/cpp}"
 
   log "+ sodac --cluster=none <- ${basename} ... "
-  "${base_dir}/src/sodac" "${file}" \
+  python3 "${base_dir}/src/sodac" "${file}" \
     --cluster=none \
     --frt-host "${frt_host}" &&
     pass || fail
 
   log "+ sodac --cluster=${granularity} <- ${basename} ... "
-  "${base_dir}/src/sodac" "${file}" \
+  python3 "${base_dir}/src/sodac" "${file}" \
     --cluster="${granularity}" \
     --iocl-kernel="${iocl_kernel}" \
     --xocl-platform "${XCL_PLATFORM}" \
