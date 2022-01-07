@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  - push
+
+jobs:
+  unit-test:
+    name: Unit Test
+    runs-on: "ubuntu-latest"
+    strategy:
+      matrix:
+        python-version:
+          - "3.7"
+          - "3.8"
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Checkout myself
+        uses: actions/checkout@v2
+      - name: Install myself
+        run: python -m pip install .
+        working-directory: src
+      - name: Run unit tests
+        run: python -m unittest discover --start-directory src
+
+  integration-test:
+    name: Integration Test
+    runs-on:
+      - self-hosted
+      - Linux
+      - intel-tools
+      - xilinx-tools
+    strategy:
+      matrix:
+        aocl-version:
+          - "20.3"
+        xocl-version:
+          - "2020.2"
+        python-version:
+          - "3.8"
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Checkout myself
+        uses: actions/checkout@v2
+      - name: Install myself
+        run: python -m pip install .
+        working-directory: src
+      - name: Set up vendor tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xilinx-u250-xdma-dev \
+
+          curl https://raw.githubusercontent.com/Blaok/fpga-runtime/master/install.sh | bash
+          curl https://raw.githubusercontent.com/Blaok/tapa/master/install.sh | bash
+          sudo cp /opt/tools/intel/intelFPGA_pro/${{ matrix.aocl-version }}/hld/Altera.icd /etc/OpenCL/vendors/
+          cat >tests/env.sh <<'EOF'
+            source /opt/tools/intel/intelFPGA_pro/${{ matrix.aocl-version }}/hld/init_opencl.sh
+            # Cannot source Xilinx scripts here because they mess up many system libraries.
+            export XILINX_VIVADO="/opt/tools/xilinx/Vivado/${{ matrix.xocl-version }}"
+            export XILINX_VITIS="/opt/tools/xilinx/Vitis/${{ matrix.xocl-version }}"
+            export PATH="${XILINX_VITIS}/bin:${PATH}"
+            export XCL_PLATFORM=xilinx_u250_xdma_201830_2
+          EOF
+      - name: Run kernel compilation tests
+        run: tests/test-kernel-compilation.sh
