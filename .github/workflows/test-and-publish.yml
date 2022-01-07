@@ -1,10 +1,13 @@
 name: test-and-publish
 
 on:
-  [push, pull_request]
+  push:
+    tags:
+      - "*"
 
 jobs:
   test-and-publish:
+    if: github.repository == 'Blaok/soda'
 
     runs-on: ubuntu-latest
 
@@ -26,7 +29,6 @@ jobs:
         run: python setup.py sdist bdist_wheel
         working-directory: ./src
       - name: Publish to PyPI
-        if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@master
         with:
           user: __token__
