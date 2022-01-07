@@ -710,6 +710,12 @@ def print_module_definition(
   # print inter-iteration declarations
   printer.printlns({x.c_ptr_decl: None for x in delays})
   printer.printlns(x.c_buf_decl for x in delays)
+  printer.printlns(
+      '#ifdef __VITIS_HLS__',
+      *(f'#pragma HLS bind_storage variable = {delay.buf_name} '
+        'type = ram_s2p latency = 3' for delay in delays),
+      '#endif  // __VITIS_HLS__',
+  )
 
   # print loop
   printer.println(f'{func_lower_name}:', indent=0)
