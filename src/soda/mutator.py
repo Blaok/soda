@@ -78,7 +78,7 @@ def normalize(obj: Union[ir.Node, Iterable[ir.Node]],
     return normalize(tuple(obj))
   norm_idx = soda.visitor.get_normalize_index(obj, references)
   shifter = lambda x: shift(x, norm_idx) if any(norm_idx) else x
-  if isinstance(obj, collections.Iterable):
+  if isinstance(obj, collections.abc.Iterable):
     return type(obj)(map(shifter, obj))  # type: ignore
   if isinstance(obj, ir.Node):
     return shifter(obj)

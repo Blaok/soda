@@ -874,7 +874,7 @@ _overall_stencil_window_cache = {} \
 
 
 def get_overall_stencil_window(input_tensor, output_tensor):
-  if isinstance(input_tensor, collections.Iterable):
+  if isinstance(input_tensor, collections.abc.Iterable):
     all_points = tuple(
         sorted(
             set.union(*(set(get_overall_stencil_window(_, output_tensor))

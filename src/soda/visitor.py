@@ -102,7 +102,7 @@ def get_normalize_index(
   Raises:
     TypeError: If argument is not an ir.Node or an iterable of ir.Nodes.
   """
-  if not isinstance(obj, (collections.Iterable, ir.Node)):
+  if not isinstance(obj, (collections.abc.Iterable, ir.Node)):
     raise TypeError('argument is not an ir.Node or an iterable of ir.Nodes')
   if isinstance(obj, ir.Node):
     obj = (obj,)
