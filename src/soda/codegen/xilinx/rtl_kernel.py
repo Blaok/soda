@@ -68,9 +68,8 @@ def print_code(
   ]
   tapac.main(argv + [
       '--run-tapacc',
-      '--extract-cpp',
       '--run-hls',
-      '--extract-rtl',
+      '--generate-task-rtl',
   ])
 
   # read HLS reports
@@ -117,11 +116,13 @@ def print_code(
         f'--connectivity={connectivity_file}',
         f'--constraint={constraint_file}',
         '--enable-synth-util',
+        '--run-floorplanning',
     ))
 
   # pack xo
   tapac.main(argv + [
-      '--instrument-rtl',
+      '--generate-task-rtl',
+      '--generate-top-rtl',
       '--pack-xo',
   ])
   with open(xo_filename, mode='rb') as xo_fp:
