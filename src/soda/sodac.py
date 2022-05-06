@@ -16,6 +16,8 @@ from soda.codegen.xilinx import opencl as xocl
 from soda.model import xilinx as model
 from soda.optimization import args as opt_args
 
+# TODO: use `force=True` when we drop support for Python 3.7-
+[logging.root.removeHandler(handler) for handler in logging.root.handlers]
 logging.basicConfig(level=logging.WARNING,
                     format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
 logger = logging.getLogger().getChild(os.path.basename(__file__))
