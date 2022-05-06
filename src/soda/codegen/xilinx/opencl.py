@@ -39,7 +39,7 @@ util.define_alias_flags(__name__)
 
 _logger = logging.getLogger().getChild(__name__)
 
-hls = 'vivado_hls'
+hls = 'vitis_hls'
 
 
 class ArgParseActionForHls(argparse.Action):
