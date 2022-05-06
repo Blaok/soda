@@ -271,7 +271,7 @@ def _print_burst_read_tapa(
   printer.printlns(
       f'void BurstRead{_sanitized_vec_t(haoda_type, length)}(',
       f'  tapa::ostream<{_vec_t(haoda_type.c_type, length)}>& dest,',
-      f'  tapa::async_mmap<{_vec_t(haoda_type.c_type, length)}> src,',
+      f'  tapa::async_mmap<{_vec_t(haoda_type.c_type, length)}>& src,',
       '  uint64_t n)',
   )
   printer.do_scope()
@@ -299,7 +299,7 @@ def _print_burst_write_tapa(
 ) -> None:
   printer.printlns(
       f'void BurstWrite{_sanitized_vec_t(haoda_type, length)}(',
-      f'  tapa::async_mmap<{_vec_t(haoda_type.c_type, length)}> dest,',
+      f'  tapa::async_mmap<{_vec_t(haoda_type.c_type, length)}>& dest,',
       f'  tapa::istream<{_vec_t(haoda_type.c_type, length)}>& src,',
       '  uint64_t n)',
   )
