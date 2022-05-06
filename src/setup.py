@@ -15,7 +15,7 @@ with open('../README.md', encoding='utf-8') as f:
 
 setup(
     name='sodac',
-    version='0.0.20220505.dev1',
+    version='0.0.20220505.dev2',
     description='Stencil with optimized dataflow architecture',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -41,7 +41,7 @@ setup(
         'cached_property',
         'haoda>=0.0.20211016.dev1',
         'pulp',
-        'tapa>=0.0.20211016.1',
+        'tapa>=0.0.20220505.1',
         'textx',
         'toposort',
     ],
