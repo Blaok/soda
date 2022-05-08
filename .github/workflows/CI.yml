@@ -28,6 +28,7 @@ jobs:
         run: python -m unittest discover --start-directory src
 
   integration-test:
+    if: github.event_name == 'push' && github.repository == 'UCLA-VAST/soda'
     name: Integration Test
     runs-on:
       - self-hosted
