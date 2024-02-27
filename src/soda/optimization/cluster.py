@@ -68,7 +68,17 @@ def cluster(stencil: 'Stencil') -> None:
   elif granularity == 'coarse':
     for node in super_source.tpo_node_gen():
       _logger.debug('old node before merging: %s', PrettyPrinter(node))
-      if isinstance(node, (dataflow.ForwardNode, dataflow.ComputeNode)):
+      if isinstance(node, dataflow.ForwardNode):
+        if len(node.tensor.children) == 1:
+          # This node is a forwarding node for a tensor with  exactly 1 child;
+          # group with that child.
+          name = next(iter(node.tensor.children))
+        else:
+          # This node is a forwarding node for a tensor with >1 children;
+          # group with that tensor.
+          name = node.tensor.name
+        nodes_to_merge[name].append(node)
+      if isinstance(node, dataflow.ComputeNode):
         nodes_to_merge[node.tensor.name].append(node)
 
   elif granularity == 'fine':
