@@ -96,18 +96,18 @@ def print_code(
 
   # update the module pipeline depths
   super_source.update_module_depths(depths)
-  with open(os.path.join(work_dir, 'program.json')) as program_fp:
+  with open(os.path.join(work_dir, 'graph.json')) as program_fp:
     program = json.load(program_fp)
   fifos = program['tasks'][top_name]['fifos']
   for module in super_source.tpo_valid_node_gen():
     for fifo in module.fifos:
-      name = fifo.c_expr
+      name = f'{fifo.c_expr}_{top_name}'
       # fifo.depth is the "extra" capacity of a FIFO; the base depth is 3, 1 for
       # registering the input, 1 for keeping II=1 when FIFO is (almost) full, 1
       # for keeping II=1 when FIFO is relaxed from back pressure (necessary
       # because the optimal FIFO depths may require back pressure)
       fifos[name]['depth'] = fifo.depth + 3
-  with open(os.path.join(work_dir, 'program.json'), 'w') as program_fp:
+  with open(os.path.join(work_dir, 'graph.json'), 'w') as program_fp:
     json.dump(program, program_fp, indent=2)
 
   # create constraint file
